@@ -26,7 +26,8 @@ server/
   db.ts                  # Pool PostgreSQL (pg)
   lib/
     email.ts             # Fonction sendEmail (Brevo fetch direct)
-    email-templates.ts   # Template HTML email de validation (branding FEVES)
+    email-templates.ts   # Templates HTML emails (validation, relation acceptée, intervention, feedback, admin)
+    feedback-reminder.ts # Relance automatique feedback > 3 jours (setInterval 6h)
   vite.ts                # Configuration Vite middleware (dev)
   static.ts              # Serving fichiers statiques (prod)
 shared/
@@ -43,7 +44,8 @@ client/
       validation-success.tsx    # Compte validé avec succès
       validation-error.tsx      # Token expiré/invalide + renvoi de lien
       home.tsx           # Mon espace (Dashboard 4 onglets : Tableau de bord, Rencontres, Demandes, Profil)
-      admin.tsx          # Dashboard Admin (4 onglets : Utilisateurs, Relations, Cadrage, Paiements)
+      admin.tsx          # Dashboard Admin (7 onglets : Utilisateurs, Relations, Rencontres, Cadrage, Paiements, Mon compte, Créer admin)
+      notifications.tsx  # Page notifications complète (toutes, marquer lu, tout marquer lu)
       relation-detail.tsx # Détail relation + interventions + feedback étoiles
       not-found.tsx      # Page 404
     components/
@@ -76,7 +78,8 @@ client/
 3. **Cadrage**: 1ère intervention créée par Admin uniquement → Relation passe ACTIVE après DONE
 4. **Autonomie**: Senior propose intervention → Junior accepte/refuse
 5. **Feedback Obligatoire**: DONE → COMPLETED_PENDING_FEEDBACK → les deux notent → COMPLETED
-6. **Relance**: >3 jours sans feedback → email de rappel (déclenché au login)
+6. **Relance**: >3 jours sans feedback → email de rappel automatique (cron 6h) + in-app au login
+7. **Emails transactionnels**: relation acceptée, intervention proposée/confirmée, feedback requis (Brevo, fail silencieux)
 
 ## Comptes de Test (Seed)
 - admin@feves.fr / password (ADMIN, ACTIVE)
@@ -102,6 +105,7 @@ client/
 - `GET /api/categories` — liste catégories
 - `GET /api/notifications[/count]` — notifications
 - `PATCH /api/notifications/:id/read` — marquer lue
+- `PATCH /api/notifications/read-all` — marquer toutes lues
 - `GET /api/matching/suggestions` — suggestions matching (même ville + intérêts + boost admin)
 - `GET /api/relations` — relations du user
 - `GET /api/relations/:id` — détail relation + interventions
@@ -153,4 +157,4 @@ client/
 3. ✅ **Sprint 3**: Logique Backend (Matching, Relations, Interventions, Feedback, Admin Recommendations)
 4. ✅ **Sprint 4**: Interfaces Utilisateurs (Landing, Dashboard 4 onglets, Détail Relation, Feedback étoiles, Notifications)
 5. ✅ **Sprint 5**: Dashboard Admin (Gestion utilisateurs, Relations, Rencontres avec fiche profil, Cadrage 1ère rencontre, Paiements)
-6. 🔲 **Sprint 6**: Notifications + Emails + PWA
+6. ✅ **Sprint 6**: Notifications enrichies + Emails transactionnels + Relance feedback auto + PWA installable

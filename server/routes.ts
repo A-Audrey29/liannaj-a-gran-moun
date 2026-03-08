@@ -6,12 +6,24 @@ import crypto from "crypto";
 import { requireAuth, requireAdmin } from "./auth";
 import { storage } from "./storage";
 import { sendEmail } from "./lib/email";
-import { getValidationEmailHtml } from "./lib/email-templates";
+import {
+  getValidationEmailHtml,
+  getRelationAcceptedEmailHtml,
+  getInterventionProposedEmailHtml,
+  getInterventionConfirmedEmailHtml,
+  getFeedbackReminderEmailHtml,
+} from "./lib/email-templates";
 import { insertUserSchema, createRelationSchema, insertInterventionSchema, feedbackSchema, createPaymentSchema, changePasswordSchema, createAdminSchema } from "../shared/schema";
 
 function sanitizeUser(user: any) {
   const { password, validationToken, validationExpiry, ...safe } = user;
   return safe;
+}
+
+function getBaseUrl(req: any): string {
+  const proto = req.headers["x-forwarded-proto"] || req.protocol || "https";
+  const host = req.headers["x-forwarded-host"] || req.headers.host || "localhost:5000";
+  return `${proto}://${host}`;
 }
 
 export async function registerRoutes(
@@ -214,6 +226,15 @@ export async function registerRoutes(
     }
   });
 
+  app.patch("/api/notifications/read-all", requireAuth, async (req, res) => {
+    try {
+      await storage.markAllNotificationsRead(req.user!.id);
+      res.json({ message: "Toutes les notifications ont été marquées comme lues" });
+    } catch (err) {
+      res.status(500).json({ message: "Erreur" });
+    }
+  });
+
   app.patch("/api/notifications/:id/read", requireAuth, async (req, res) => {
     try {
       const notifications = await storage.getNotifications(req.user!.id);
@@ -392,6 +413,17 @@ export async function registerRoutes(
         link: `/relations/${relation.id}`,
       });
 
+      const senior = await storage.getUser(relation.seniorId);
+      if (senior?.email) {
+        const seniorName = `${senior.firstName} ${senior.lastName}`;
+        const juniorName = `${req.user!.firstName} ${req.user!.lastName}`;
+        sendEmail({
+          to: senior.email,
+          subject: `FEVES - Votre demande de relation a été acceptée`,
+          htmlContent: getRelationAcceptedEmailHtml(seniorName, juniorName, `${getBaseUrl(req)}/relations/${relation.id}`),
+        }).catch(console.error);
+      }
+
       res.json(updated);
     } catch (err) {
       console.error("[ACCEPT_RELATION] Error:", err);
@@ -510,6 +542,18 @@ export async function registerRoutes(
         link: `/relations/${relation.id}`,
       });
 
+      const junior = await storage.getUser(relation.juniorId);
+      if (junior?.email) {
+        const juniorName = `${junior.firstName} ${junior.lastName}`;
+        const dateStr = new Date(parsed.data.scheduledDate).toLocaleDateString("fr-FR");
+        const locationStr = parsed.data.location || "Non précisé";
+        sendEmail({
+          to: junior.email,
+          subject: `FEVES - Nouvelle intervention proposée pour le ${dateStr}`,
+          htmlContent: getInterventionProposedEmailHtml(juniorName, dateStr, locationStr, `${getBaseUrl(req)}/relations/${relation.id}`),
+        }).catch(console.error);
+      }
+
       res.status(201).json(intervention);
     } catch (err) {
       console.error("[CREATE_INTERVENTION] Error:", err);
@@ -539,6 +583,17 @@ export async function registerRoutes(
         message: `${req.user!.firstName} ${req.user!.lastName} a confirmé l'intervention du ${intervention.scheduledDate.toLocaleDateString("fr-FR")}.`,
         link: `/relations/${intervention.relationId}`,
       });
+
+      const senior = await storage.getUser(intervention.relation.seniorId);
+      if (senior?.email) {
+        const seniorName = `${senior.firstName} ${senior.lastName}`;
+        const dateStr = intervention.scheduledDate.toLocaleDateString("fr-FR");
+        sendEmail({
+          to: senior.email,
+          subject: `FEVES - Intervention confirmée pour le ${dateStr}`,
+          htmlContent: getInterventionConfirmedEmailHtml(seniorName, dateStr, `${getBaseUrl(req)}/relations/${intervention.relationId}`),
+        }).catch(console.error);
+      }
 
       res.json(updated);
     } catch (err) {
@@ -581,6 +636,24 @@ export async function registerRoutes(
         message: "L'intervention a été validée. Merci de laisser votre feedback.",
         link: `/relations/${intervention.relationId}`,
       });
+
+      const dateStr = intervention.scheduledDate.toLocaleDateString("fr-FR");
+      const seniorUser = await storage.getUser(seniorId);
+      if (seniorUser?.email) {
+        sendEmail({
+          to: seniorUser.email,
+          subject: `FEVES - Donnez votre avis sur l'intervention du ${dateStr}`,
+          htmlContent: getFeedbackReminderEmailHtml(`${seniorUser.firstName} ${seniorUser.lastName}`, dateStr, `${getBaseUrl(req)}/relations/${intervention.relationId}`),
+        }).catch(console.error);
+      }
+      const juniorUser = await storage.getUser(juniorId);
+      if (juniorUser?.email) {
+        sendEmail({
+          to: juniorUser.email,
+          subject: `FEVES - Donnez votre avis sur l'intervention du ${dateStr}`,
+          htmlContent: getFeedbackReminderEmailHtml(`${juniorUser.firstName} ${juniorUser.lastName}`, dateStr, `${getBaseUrl(req)}/relations/${intervention.relationId}`),
+        }).catch(console.error);
+      }
 
       res.json(updated);
     } catch (err) {

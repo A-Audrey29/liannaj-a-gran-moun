@@ -1,0 +1,29 @@
+{
+  "name": "FEVES - liannaj a gran moun",
+  "short_name": "FEVES",
+  "description": "Plateforme de mise en relation entre seniors et jeunes. Rencontres encadrées et sécurisées.",
+  "start_url": "/",
+  "display": "standalone",
+  "theme_color": "#dc4256",
+  "background_color": "#fbfbfb",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/favicon.png",
+      "sizes": "64x64",
+      "type": "image/png"
+    },
+    {
+      "src": "/icons/icon-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icons/icon-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

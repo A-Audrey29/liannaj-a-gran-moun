@@ -28,6 +28,8 @@ export interface IStorage {
   createIntervention(data: { relationId: string; scheduledDate: Date; durationMinutes: number; location?: string; tasks?: string[] }): Promise<Intervention>;
   updateIntervention(id: string, data: Prisma.InterventionUpdateInput): Promise<Intervention>;
   getPendingFeedbackInterventions(userId: string): Promise<(Intervention & { relation: Relation })[]>;
+  getPendingFeedbackForReminder(): Promise<(Intervention & { relation: Relation & { senior: User; junior: User } })[]>;
+  updateInterventionFeedbackReminderSent(id: string): Promise<Intervention>;
 
   createAdminRecommendation(seniorId: string, juniorId: string, note?: string): Promise<AdminRecommendation>;
   getAdminRecommendations(seniorId: string): Promise<(AdminRecommendation & { junior: User })[]>;
@@ -38,6 +40,7 @@ export interface IStorage {
   getNotifications(userId: string): Promise<Notification[]>;
   createNotification(data: Prisma.NotificationCreateInput): Promise<Notification>;
   markNotificationRead(id: string): Promise<Notification>;
+  markAllNotificationsRead(userId: string): Promise<void>;
 
   getAllUsers(): Promise<User[]>;
   deleteUser(id: string): Promise<void>;
@@ -186,6 +189,26 @@ class DatabaseStorage implements IStorage {
     });
   }
 
+  async getPendingFeedbackForReminder(): Promise<(Intervention & { relation: Relation & { senior: User; junior: User } })[]> {
+    const threeDaysAgo = new Date();
+    threeDaysAgo.setDate(threeDaysAgo.getDate() - 3);
+    return prisma.intervention.findMany({
+      where: {
+        status: "COMPLETED_PENDING_FEEDBACK",
+        feedbackReminderSentAt: null,
+        scheduledDate: { lte: threeDaysAgo },
+      },
+      include: { relation: { include: { senior: true, junior: true } } },
+    });
+  }
+
+  async updateInterventionFeedbackReminderSent(id: string): Promise<Intervention> {
+    return prisma.intervention.update({
+      where: { id },
+      data: { feedbackReminderSentAt: new Date() },
+    });
+  }
+
   async createAdminRecommendation(seniorId: string, juniorId: string, note?: string): Promise<AdminRecommendation> {
     return prisma.adminRecommendation.create({
       data: { seniorId, juniorId, note: note || null },
@@ -286,6 +309,13 @@ class DatabaseStorage implements IStorage {
   async markNotificationRead(id: string): Promise<Notification> {
     return prisma.notification.update({
       where: { id },
+      data: { isRead: true },
+    });
+  }
+
+  async markAllNotificationsRead(userId: string): Promise<void> {
+    await prisma.notification.updateMany({
+      where: { userId, isRead: false },
       data: { isRead: true },
     });
   }

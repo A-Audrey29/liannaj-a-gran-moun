@@ -71,7 +71,7 @@ function NotificationBell() {
                 className={`w-full text-left px-3 py-3 border-b last:border-0 transition-colors hover:bg-muted/50 ${!n.isRead ? "bg-secondary/30" : ""}`}
                 onClick={() => {
                   if (!n.isRead) markReadMutation.mutate(n.id);
-                  if ((n as any).link) setLocation((n as any).link);
+                  if (n.link) setLocation(n.link);
                 }}
                 data-testid={`notification-${n.id}`}
               >
@@ -87,6 +87,11 @@ function NotificationBell() {
             ))
           )}
         </ScrollArea>
+        <div className="p-2 border-t">
+          <Link href="/notifications" className="block text-center text-sm text-[#dc4256] font-medium hover:underline" data-testid="link-voir-tout-notifications">
+            Voir toutes les notifications
+          </Link>
+        </div>
       </PopoverContent>
     </Popover>
   );

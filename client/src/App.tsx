@@ -14,6 +14,7 @@ import RegistrationPending from "@/pages/registration-pending";
 import ValidationSuccess from "@/pages/validation-success";
 import ValidationError from "@/pages/validation-error";
 import RelationDetail from "@/pages/relation-detail";
+import Notifications from "@/pages/notifications";
 import NotFound from "@/pages/not-found";
 import { useAuth } from "@/hooks/use-auth";
 
@@ -39,6 +40,9 @@ function Router() {
         <Route path="/registration-pending" component={RegistrationPending} />
         <Route path="/validation-success" component={ValidationSuccess} />
         <Route path="/validation-error" component={ValidationError} />
+        <Route path="/notifications">
+          <AuthGuard><Notifications /></AuthGuard>
+        </Route>
         <Route path="/relations/:id">
           <AuthGuard><RelationDetail /></AuthGuard>
         </Route>
