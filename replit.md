@@ -20,8 +20,8 @@ generated/
 server/
   index.ts               # Point d'entrée Express
   auth.ts                # Configuration Passport.js + sessions
-  routes.ts              # Routes API (/api/auth/*, /api/validate, /api/categories, /api/notifications/*)
-  storage.ts             # Interface IStorage + DatabaseStorage (Prisma)
+  routes.ts              # Routes API complètes (auth, matching, relations, interventions, feedback, admin)
+  storage.ts             # Interface IStorage + DatabaseStorage (CRUD complet: users, categories, relations, interventions, recommendations, notifications, matching)
   prisma.ts              # Instance PrismaClient singleton
   db.ts                  # Pool PostgreSQL (pg)
   lib/
@@ -86,10 +86,45 @@ client/
 - BREVO_SENDER_EMAIL (à configurer, default: noreply@feves.fr)
 - BREVO_SENDER_NAME (à configurer, default: FEVES)
 
+## Routes API (Sprint 3)
+- `POST /api/auth/register` — inscription (validation Zod + anti-auto-validation + anti-freemail Junior)
+- `POST /api/auth/login` — connexion (retourne hasPendingFeedback)
+- `POST /api/auth/logout` — déconnexion
+- `GET /api/auth/me` — utilisateur courant
+- `POST /api/auth/resend-validation` — renvoi lien validation
+- `GET /api/validate` — validation token → ACTIVE
+- `GET /api/categories` — liste catégories
+- `GET /api/notifications[/count]` — notifications
+- `PATCH /api/notifications/:id/read` — marquer lue
+- `GET /api/matching/suggestions` — suggestions matching (même ville + intérêts + boost admin)
+- `GET /api/relations` — relations du user
+- `GET /api/relations/:id` — détail relation + interventions
+- `POST /api/relations` — créer relation (Senior only, body: { juniorId })
+- `PATCH /api/relations/:id/accept` — Junior accepte → PENDING_FIRST_MEETING
+- `PATCH /api/relations/:id/reject` — Junior refuse → CLOSED
+- `PATCH /api/relations/:id/close` — fermer relation
+- `POST /api/relations/:relationId/interventions` — créer intervention (Admin si 1ère, Senior si ACTIVE)
+- `PATCH /api/interventions/:id/confirm` — Junior confirme
+- `PATCH /api/interventions/:id/done` — Admin valide → COMPLETED_PENDING_FEEDBACK (+ACTIVE si 1ère)
+- `PATCH /api/interventions/:id/cancel` — annuler (Senior/Admin)
+- `GET /api/interventions/pending-feedback` — feedbacks en attente
+- `POST /api/interventions/:id/feedback` — soumettre feedback (rating 1-5 + comment)
+- `POST /api/admin/recommendations` — recommandation admin
+- `DELETE /api/admin/recommendations/:id` — supprimer recommandation
+
+## Règles Métier Clés
+1. **Seuls les Seniors initient** les relations (Junior 403)
+2. **Anti-auto-validation** : email validateur ≠ email utilisateur
+3. **Anti-freemail** : validateur Junior ne peut pas être @gmail, @yahoo, etc. (prod seulement)
+4. **Cadrage** : 1ère intervention créée par Admin uniquement → Relation ACTIVE après DONE
+5. **Autonomie** : Senior propose interventions suivantes → Junior confirme
+6. **Feedback obligatoire** : DONE → COMPLETED_PENDING_FEEDBACK → les deux notent → COMPLETED
+7. **Login feedback check** : hasPendingFeedback retourné au login
+
 ## Sprints Prévus
 1. ✅ **Sprint 1**: Fondations (Prisma, Auth, Seed, Thème, Brevo)
-2. ✅ **Sprint 2**: Inscription + Validation Comptes (formulaires, token UUID 24h, emails Brevo au validateur, renvoi de lien)
-3. 🔲 **Sprint 3**: Logique Backend (Matching, Relations, Interventions)
+2. ✅ **Sprint 2**: Inscription + Validation Comptes (formulaires, token UUID, emails Brevo, renvoi de lien)
+3. ✅ **Sprint 3**: Logique Backend (Matching, Relations, Interventions, Feedback, Admin Recommendations)
 4. 🔲 **Sprint 4**: Interfaces Utilisateurs (Senior, Junior)
 5. 🔲 **Sprint 5**: Dashboard Admin (Gestion, Supervision)
 6. 🔲 **Sprint 6**: Notifications + Emails + PWA

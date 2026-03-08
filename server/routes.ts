@@ -7,7 +7,12 @@ import { requireAuth, requireAdmin } from "./auth";
 import { storage } from "./storage";
 import { sendEmail } from "./lib/email";
 import { getValidationEmailHtml } from "./lib/email-templates";
-import { insertUserSchema } from "../shared/schema";
+import { insertUserSchema, createRelationSchema, insertInterventionSchema, feedbackSchema } from "../shared/schema";
+
+function sanitizeUser(user: any) {
+  const { password, validationToken, validationExpiry, ...safe } = user;
+  return safe;
+}
 
 export async function registerRoutes(
   httpServer: Server,
@@ -76,18 +81,28 @@ export async function registerRoutes(
   });
 
   app.post("/api/auth/login", (req, res, next) => {
-    passport.authenticate("local", (err: any, user: Express.User | false, info: { message: string }) => {
+    passport.authenticate("local", async (err: any, user: Express.User | false, info: { message: string }) => {
       if (err) {
         return res.status(500).json({ message: "Erreur interne" });
       }
       if (!user) {
         return res.status(401).json({ message: info?.message || "Identifiants incorrects" });
       }
-      req.logIn(user, (loginErr) => {
+      req.logIn(user, async (loginErr) => {
         if (loginErr) {
           return res.status(500).json({ message: "Erreur de session" });
         }
-        return res.json({ user });
+        let hasPendingFeedback = false;
+        try {
+          const pending = await storage.getPendingFeedbackInterventions(user.id);
+          hasPendingFeedback = pending.some((intervention) => {
+            const isSenior = intervention.relation.seniorId === user.id;
+            if (isSenior && intervention.seniorRating !== null) return false;
+            if (!isSenior && intervention.juniorRating !== null) return false;
+            return true;
+          });
+        } catch (_e) {}
+        return res.json({ user, hasPendingFeedback });
       });
     })(req, res, next);
   });
@@ -207,6 +222,480 @@ export async function registerRoutes(
     } catch (err) {
       console.error("[resend-validation] Erreur:", err);
       return res.status(200).json({ message: "Si un compte en attente existe avec cet email, un nouveau lien de validation a été envoyé." });
+    }
+  });
+
+  // ==================== MATCHING ====================
+
+  app.get("/api/matching/suggestions", requireAuth, async (req, res) => {
+    try {
+      const user = req.user!;
+      if (user.role === "ADMIN") {
+        return res.status(400).json({ message: "Les administrateurs n'ont pas de suggestions de matching" });
+      }
+      const suggestions = await storage.getMatchingSuggestions(user.id);
+      const sanitized = suggestions.map((s) => ({
+        user: sanitizeUser(s.user),
+        commonCategories: s.commonCategories,
+        isRecommended: s.isRecommended,
+      }));
+      res.json(sanitized);
+    } catch (err) {
+      console.error("[MATCHING] Error:", err);
+      res.status(500).json({ message: "Erreur lors du chargement des suggestions" });
+    }
+  });
+
+  // ==================== RELATIONS ====================
+
+  app.get("/api/relations", requireAuth, async (req, res) => {
+    try {
+      const relations = await storage.getRelationsByUser(req.user!.id);
+      const sanitized = relations.map((r) => ({
+        ...r,
+        senior: sanitizeUser(r.senior),
+        junior: sanitizeUser(r.junior),
+      }));
+      res.json(sanitized);
+    } catch (err) {
+      console.error("[RELATIONS] Error:", err);
+      res.status(500).json({ message: "Erreur lors du chargement des relations" });
+    }
+  });
+
+  app.get("/api/relations/:id", requireAuth, async (req, res) => {
+    try {
+      const relation = await storage.getRelationWithUsers(req.params.id);
+      if (!relation) {
+        return res.status(404).json({ message: "Relation non trouvée" });
+      }
+      const userId = req.user!.id;
+      if (relation.seniorId !== userId && relation.juniorId !== userId && req.user!.role !== "ADMIN") {
+        return res.status(403).json({ message: "Accès refusé" });
+      }
+      res.json({
+        ...relation,
+        senior: sanitizeUser(relation.senior),
+        junior: sanitizeUser(relation.junior),
+      });
+    } catch (err) {
+      console.error("[RELATION_DETAIL] Error:", err);
+      res.status(500).json({ message: "Erreur" });
+    }
+  });
+
+  app.post("/api/relations", requireAuth, async (req, res) => {
+    try {
+      const user = req.user!;
+      if (user.role !== "SENIOR") {
+        return res.status(403).json({ message: "Seuls les Seniors peuvent initier une demande de relation" });
+      }
+
+      const parsed = createRelationSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({
+          message: "Données invalides",
+          errors: parsed.error.flatten().fieldErrors,
+        });
+      }
+
+      const { juniorId } = parsed.data;
+
+      const junior = await storage.getUser(juniorId);
+      if (!junior || junior.role !== "JUNIOR" || junior.status !== "ACTIVE") {
+        return res.status(400).json({ message: "Junior introuvable ou inactif" });
+      }
+
+      const existing = await storage.getRelationBySeniorAndJunior(user.id, juniorId);
+      if (existing) {
+        return res.status(409).json({ message: "Une relation existe déjà avec ce Junior" });
+      }
+
+      const relation = await storage.createRelation(user.id, juniorId);
+
+      await storage.createNotification({
+        user: { connect: { id: juniorId } },
+        type: "RELATION_REQUEST",
+        title: "Nouvelle demande de relation",
+        message: `${user.firstName} ${user.lastName} souhaite démarrer une relation avec vous.`,
+        link: `/relations/${relation.id}`,
+      });
+
+      res.status(201).json(relation);
+    } catch (err) {
+      console.error("[CREATE_RELATION] Error:", err);
+      res.status(500).json({ message: "Erreur lors de la création de la relation" });
+    }
+  });
+
+  app.patch("/api/relations/:id/accept", requireAuth, async (req, res) => {
+    try {
+      const relation = await storage.getRelation(req.params.id);
+      if (!relation) {
+        return res.status(404).json({ message: "Relation non trouvée" });
+      }
+      if (relation.juniorId !== req.user!.id) {
+        return res.status(403).json({ message: "Seul le Junior peut accepter la demande" });
+      }
+      if (relation.status !== "PENDING") {
+        return res.status(400).json({ message: "Cette demande ne peut plus être acceptée" });
+      }
+
+      const updated = await storage.updateRelationStatus(relation.id, "PENDING_FIRST_MEETING");
+
+      await storage.createNotification({
+        user: { connect: { id: relation.seniorId } },
+        type: "RELATION_REQUEST",
+        title: "Demande acceptée",
+        message: `${req.user!.firstName} ${req.user!.lastName} a accepté votre demande de relation. Un administrateur va organiser la première rencontre.`,
+        link: `/relations/${relation.id}`,
+      });
+
+      res.json(updated);
+    } catch (err) {
+      console.error("[ACCEPT_RELATION] Error:", err);
+      res.status(500).json({ message: "Erreur" });
+    }
+  });
+
+  app.patch("/api/relations/:id/reject", requireAuth, async (req, res) => {
+    try {
+      const relation = await storage.getRelation(req.params.id);
+      if (!relation) {
+        return res.status(404).json({ message: "Relation non trouvée" });
+      }
+      if (relation.juniorId !== req.user!.id) {
+        return res.status(403).json({ message: "Seul le Junior peut refuser la demande" });
+      }
+      if (relation.status !== "PENDING") {
+        return res.status(400).json({ message: "Cette demande ne peut plus être refusée" });
+      }
+
+      const updated = await storage.updateRelationStatus(relation.id, "CLOSED");
+
+      await storage.createNotification({
+        user: { connect: { id: relation.seniorId } },
+        type: "RELATION_REQUEST",
+        title: "Demande refusée",
+        message: `${req.user!.firstName} ${req.user!.lastName} a décliné votre demande de relation.`,
+        link: `/relations/${relation.id}`,
+      });
+
+      res.json(updated);
+    } catch (err) {
+      console.error("[REJECT_RELATION] Error:", err);
+      res.status(500).json({ message: "Erreur" });
+    }
+  });
+
+  app.patch("/api/relations/:id/close", requireAuth, async (req, res) => {
+    try {
+      const relation = await storage.getRelation(req.params.id);
+      if (!relation) {
+        return res.status(404).json({ message: "Relation non trouvée" });
+      }
+      const userId = req.user!.id;
+      if (relation.seniorId !== userId && relation.juniorId !== userId && req.user!.role !== "ADMIN") {
+        return res.status(403).json({ message: "Accès refusé" });
+      }
+      if (relation.status === "CLOSED") {
+        return res.status(400).json({ message: "Cette relation est déjà fermée" });
+      }
+
+      const updated = await storage.updateRelationStatus(relation.id, "CLOSED");
+
+      const otherId = relation.seniorId === userId ? relation.juniorId : relation.seniorId;
+      await storage.createNotification({
+        user: { connect: { id: otherId } },
+        type: "SYSTEM",
+        title: "Relation fermée",
+        message: `${req.user!.firstName} ${req.user!.lastName} a mis fin à la relation.`,
+        link: `/relations/${relation.id}`,
+      });
+
+      res.json(updated);
+    } catch (err) {
+      console.error("[CLOSE_RELATION] Error:", err);
+      res.status(500).json({ message: "Erreur" });
+    }
+  });
+
+  // ==================== INTERVENTIONS ====================
+
+  app.post("/api/relations/:relationId/interventions", requireAuth, async (req, res) => {
+    try {
+      const relation = await storage.getRelationWithUsers(req.params.relationId);
+      if (!relation) {
+        return res.status(404).json({ message: "Relation non trouvée" });
+      }
+
+      const user = req.user!;
+      if (relation.status === "PENDING_FIRST_MEETING") {
+        if (user.role !== "ADMIN") {
+          return res.status(403).json({ message: "Seul un administrateur peut organiser la première rencontre" });
+        }
+      } else if (relation.status === "ACTIVE") {
+        if (relation.seniorId !== user.id && user.role !== "ADMIN") {
+          return res.status(403).json({ message: "Seul le Senior peut proposer une intervention" });
+        }
+      } else {
+        return res.status(400).json({ message: "La relation n'est pas dans un état permettant de créer une intervention" });
+      }
+
+      const parsed = insertInterventionSchema.safeParse({
+        ...req.body,
+        relationId: req.params.relationId,
+      });
+      if (!parsed.success) {
+        return res.status(400).json({
+          message: "Données invalides",
+          errors: parsed.error.flatten().fieldErrors,
+        });
+      }
+
+      const intervention = await storage.createIntervention({
+        relationId: parsed.data.relationId,
+        scheduledDate: new Date(parsed.data.scheduledDate),
+        durationMinutes: parsed.data.durationMinutes,
+        location: parsed.data.location,
+        tasks: parsed.data.tasks,
+      });
+
+      await storage.createNotification({
+        user: { connect: { id: relation.juniorId } },
+        type: "INTERVENTION_PROPOSED",
+        title: "Nouvelle intervention proposée",
+        message: `Une intervention a été proposée pour le ${new Date(parsed.data.scheduledDate).toLocaleDateString("fr-FR")}.`,
+        link: `/relations/${relation.id}`,
+      });
+
+      res.status(201).json(intervention);
+    } catch (err) {
+      console.error("[CREATE_INTERVENTION] Error:", err);
+      res.status(500).json({ message: "Erreur lors de la création de l'intervention" });
+    }
+  });
+
+  app.patch("/api/interventions/:id/confirm", requireAuth, async (req, res) => {
+    try {
+      const intervention = await storage.getInterventionWithRelation(req.params.id);
+      if (!intervention) {
+        return res.status(404).json({ message: "Intervention non trouvée" });
+      }
+      if (intervention.relation.juniorId !== req.user!.id) {
+        return res.status(403).json({ message: "Seul le Junior peut confirmer l'intervention" });
+      }
+      if (intervention.status !== "PROPOSED") {
+        return res.status(400).json({ message: "Cette intervention ne peut plus être confirmée" });
+      }
+
+      const updated = await storage.updateIntervention(intervention.id, { status: "CONFIRMED" });
+
+      await storage.createNotification({
+        user: { connect: { id: intervention.relation.seniorId } },
+        type: "INTERVENTION_CONFIRMED",
+        title: "Intervention confirmée",
+        message: `${req.user!.firstName} ${req.user!.lastName} a confirmé l'intervention du ${intervention.scheduledDate.toLocaleDateString("fr-FR")}.`,
+        link: `/relations/${intervention.relationId}`,
+      });
+
+      res.json(updated);
+    } catch (err) {
+      console.error("[CONFIRM_INTERVENTION] Error:", err);
+      res.status(500).json({ message: "Erreur" });
+    }
+  });
+
+  app.patch("/api/interventions/:id/done", requireAdmin, async (req, res) => {
+    try {
+      const intervention = await storage.getInterventionWithRelation(req.params.id);
+      if (!intervention) {
+        return res.status(404).json({ message: "Intervention non trouvée" });
+      }
+      if (intervention.status !== "CONFIRMED") {
+        return res.status(400).json({ message: "L'intervention doit être confirmée avant d'être marquée comme réalisée" });
+      }
+
+      const updated = await storage.updateIntervention(intervention.id, { status: "COMPLETED_PENDING_FEEDBACK" });
+
+      if (intervention.relation.status === "PENDING_FIRST_MEETING") {
+        await storage.updateRelationStatus(intervention.relationId, "ACTIVE");
+      }
+
+      const seniorId = intervention.relation.seniorId;
+      const juniorId = intervention.relation.juniorId;
+
+      await storage.createNotification({
+        user: { connect: { id: seniorId } },
+        type: "FEEDBACK_REMINDER",
+        title: "Feedback requis",
+        message: "L'intervention a été validée. Merci de laisser votre feedback.",
+        link: `/relations/${intervention.relationId}`,
+      });
+
+      await storage.createNotification({
+        user: { connect: { id: juniorId } },
+        type: "FEEDBACK_REMINDER",
+        title: "Feedback requis",
+        message: "L'intervention a été validée. Merci de laisser votre feedback.",
+        link: `/relations/${intervention.relationId}`,
+      });
+
+      res.json(updated);
+    } catch (err) {
+      console.error("[DONE_INTERVENTION] Error:", err);
+      res.status(500).json({ message: "Erreur" });
+    }
+  });
+
+  app.patch("/api/interventions/:id/cancel", requireAuth, async (req, res) => {
+    try {
+      const intervention = await storage.getInterventionWithRelation(req.params.id);
+      if (!intervention) {
+        return res.status(404).json({ message: "Intervention non trouvée" });
+      }
+
+      const user = req.user!;
+      if (intervention.relation.seniorId !== user.id && user.role !== "ADMIN") {
+        return res.status(403).json({ message: "Seul le Senior ou un administrateur peut annuler l'intervention" });
+      }
+      if (intervention.status === "CANCELLED" || intervention.status === "COMPLETED" || intervention.status === "COMPLETED_PENDING_FEEDBACK") {
+        return res.status(400).json({ message: "Cette intervention ne peut plus être annulée" });
+      }
+
+      const updated = await storage.updateIntervention(intervention.id, { status: "CANCELLED" });
+
+      const otherId = intervention.relation.seniorId === user.id
+        ? intervention.relation.juniorId
+        : intervention.relation.seniorId;
+
+      await storage.createNotification({
+        user: { connect: { id: otherId } },
+        type: "SYSTEM",
+        title: "Intervention annulée",
+        message: `L'intervention du ${intervention.scheduledDate.toLocaleDateString("fr-FR")} a été annulée.`,
+        link: `/relations/${intervention.relationId}`,
+      });
+
+      res.json(updated);
+    } catch (err) {
+      console.error("[CANCEL_INTERVENTION] Error:", err);
+      res.status(500).json({ message: "Erreur" });
+    }
+  });
+
+  // ==================== FEEDBACK ====================
+
+  app.get("/api/interventions/pending-feedback", requireAuth, async (req, res) => {
+    try {
+      const interventions = await storage.getPendingFeedbackInterventions(req.user!.id);
+      const needsFeedback = interventions.filter((intervention) => {
+        const isSenior = intervention.relation.seniorId === req.user!.id;
+        if (isSenior && intervention.seniorRating !== null) return false;
+        if (!isSenior && intervention.juniorRating !== null) return false;
+        return true;
+      });
+      res.json(needsFeedback);
+    } catch (err) {
+      console.error("[PENDING_FEEDBACK] Error:", err);
+      res.status(500).json({ message: "Erreur" });
+    }
+  });
+
+  app.post("/api/interventions/:id/feedback", requireAuth, async (req, res) => {
+    try {
+      const intervention = await storage.getInterventionWithRelation(req.params.id);
+      if (!intervention) {
+        return res.status(404).json({ message: "Intervention non trouvée" });
+      }
+      if (intervention.status !== "COMPLETED_PENDING_FEEDBACK") {
+        return res.status(400).json({ message: "Le feedback n'est pas encore attendu pour cette intervention" });
+      }
+
+      const userId = req.user!.id;
+      const isSenior = intervention.relation.seniorId === userId;
+      const isJunior = intervention.relation.juniorId === userId;
+
+      if (!isSenior && !isJunior) {
+        return res.status(403).json({ message: "Accès refusé" });
+      }
+
+      if (isSenior && intervention.seniorRating !== null) {
+        return res.status(400).json({ message: "Vous avez déjà donné votre feedback" });
+      }
+      if (isJunior && intervention.juniorRating !== null) {
+        return res.status(400).json({ message: "Vous avez déjà donné votre feedback" });
+      }
+
+      const parsed = feedbackSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({
+          message: "Données invalides",
+          errors: parsed.error.flatten().fieldErrors,
+        });
+      }
+
+      const updateData: any = {};
+      if (isSenior) {
+        updateData.seniorRating = parsed.data.rating;
+        updateData.seniorComment = parsed.data.comment || null;
+      } else {
+        updateData.juniorRating = parsed.data.rating;
+        updateData.juniorComment = parsed.data.comment || null;
+      }
+
+      const currentIntervention = await storage.getIntervention(intervention.id);
+      const seniorDone = isSenior ? true : currentIntervention!.seniorRating !== null;
+      const juniorDone = isJunior ? true : currentIntervention!.juniorRating !== null;
+
+      if (seniorDone && juniorDone) {
+        updateData.status = "COMPLETED";
+      }
+
+      const updated = await storage.updateIntervention(intervention.id, updateData);
+
+      const otherId = isSenior ? intervention.relation.juniorId : intervention.relation.seniorId;
+      await storage.createNotification({
+        user: { connect: { id: otherId } },
+        type: "SYSTEM",
+        title: "Feedback reçu",
+        message: `${req.user!.firstName} ${req.user!.lastName} a laissé un feedback sur l'intervention.`,
+        link: `/relations/${intervention.relationId}`,
+      });
+
+      res.json(updated);
+    } catch (err) {
+      console.error("[FEEDBACK] Error:", err);
+      res.status(500).json({ message: "Erreur lors de l'enregistrement du feedback" });
+    }
+  });
+
+  // ==================== ADMIN RECOMMENDATIONS ====================
+
+  app.post("/api/admin/recommendations", requireAdmin, async (req, res) => {
+    try {
+      const { seniorId, juniorId, note } = req.body;
+      if (!seniorId || !juniorId) {
+        return res.status(400).json({ message: "seniorId et juniorId requis" });
+      }
+      const recommendation = await storage.createAdminRecommendation(seniorId, juniorId, note);
+      res.status(201).json(recommendation);
+    } catch (err: any) {
+      if (err.code === "P2002") {
+        return res.status(409).json({ message: "Cette recommandation existe déjà" });
+      }
+      console.error("[ADMIN_RECOMMENDATION] Error:", err);
+      res.status(500).json({ message: "Erreur" });
+    }
+  });
+
+  app.delete("/api/admin/recommendations/:id", requireAdmin, async (req, res) => {
+    try {
+      await storage.deleteAdminRecommendation(req.params.id);
+      res.json({ message: "Recommandation supprimée" });
+    } catch (err) {
+      console.error("[DELETE_RECOMMENDATION] Error:", err);
+      res.status(500).json({ message: "Erreur" });
     }
   });
 

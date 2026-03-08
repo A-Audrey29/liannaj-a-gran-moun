@@ -3,8 +3,8 @@ import { z } from "zod";
 export type Role = "ADMIN" | "SENIOR" | "JUNIOR";
 export type UserStatus = "PENDING_VALIDATION" | "ACTIVE" | "SUSPENDED" | "BANNED";
 export type RelationStatus = "PENDING" | "PENDING_FIRST_MEETING" | "ACTIVE" | "PAUSED" | "CLOSED";
-export type InterventionStatus = "PENDING" | "CONFIRMED" | "DONE" | "COMPLETED_PENDING_FEEDBACK" | "COMPLETED" | "CANCELLED";
-export type NotificationType = "RELATION_REQUEST" | "INTERVENTION_PROPOSED" | "INTERVENTION_CONFIRMED" | "FEEDBACK_REQUIRED" | "ACCOUNT_VALIDATED" | "GENERAL";
+export type InterventionStatus = "PROPOSED" | "CONFIRMED" | "CANCELLED" | "DONE" | "COMPLETED_PENDING_FEEDBACK" | "COMPLETED";
+export type NotificationType = "RELATION_REQUEST" | "INTERVENTION_PROPOSED" | "INTERVENTION_CONFIRMED" | "FEEDBACK_REMINDER" | "SYSTEM";
 
 export interface User {
   id: string;
@@ -54,7 +54,6 @@ export interface Relation {
   juniorId: string;
   status: RelationStatus;
   createdAt: Date;
-  updatedAt: Date;
 }
 
 export interface Intervention {
@@ -69,8 +68,8 @@ export interface Intervention {
   seniorComment: string | null;
   juniorRating: number | null;
   juniorComment: string | null;
+  feedbackReminderSentAt: Date | null;
   createdAt: Date;
-  updatedAt: Date;
 }
 
 export interface Notification {
@@ -161,7 +160,12 @@ export const feedbackSchema = z.object({
   comment: z.string().max(1000).optional(),
 });
 
+export const createRelationSchema = z.object({
+  juniorId: z.string().min(1, "ID du Junior requis"),
+});
+
 export type LoginInput = z.infer<typeof loginSchema>;
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type InsertIntervention = z.infer<typeof insertInterventionSchema>;
 export type FeedbackInput = z.infer<typeof feedbackSchema>;
+export type CreateRelationInput = z.infer<typeof createRelationSchema>;
