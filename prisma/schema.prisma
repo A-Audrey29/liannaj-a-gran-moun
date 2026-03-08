@@ -1,0 +1,219 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Role {
+  ADMIN
+  SENIOR
+  JUNIOR
+}
+
+enum UserStatus {
+  PENDING_VALIDATION
+  ACTIVE
+  SUSPENDED
+  BANNED
+}
+
+enum RelationStatus {
+  PENDING
+  PENDING_FIRST_MEETING
+  ACTIVE
+  PAUSED
+  CLOSED
+}
+
+enum InterventionStatus {
+  PROPOSED
+  CONFIRMED
+  CANCELLED
+  DONE
+  COMPLETED_PENDING_FEEDBACK
+  COMPLETED
+}
+
+enum NotificationType {
+  RELATION_REQUEST
+  INTERVENTION_PROPOSED
+  INTERVENTION_CONFIRMED
+  FEEDBACK_REMINDER
+  SYSTEM
+}
+
+model User {
+  id                  String     @id @default(cuid())
+  email               String     @unique
+  password            String
+  firstName           String
+  lastName            String
+  role                Role
+  status              UserStatus @default(PENDING_VALIDATION)
+
+  birthDate           DateTime?
+  phone               String?
+  address             String?
+  city                String?
+  postalCode          String?
+  bio                 String?
+  desiredActivity     String?
+
+  schoolName          String?
+  referentTitle       String?
+  referentFirstName   String?
+  referentLastName    String?
+  referentEmail       String?
+
+  trustedPersonName   String?
+  trustedPersonEmail  String?
+
+  validatorEmail      String?
+  validationToken     String?    @unique
+  validationExpiry    DateTime?
+
+  subscriptionActive  Boolean    @default(false)
+
+  categories          UserCategory[]
+
+  seniorRelations     Relation[] @relation("SeniorRelations")
+  juniorRelations     Relation[] @relation("JuniorRelations")
+
+  receivedRecommendations AdminRecommendation[] @relation("ReceivedRecommendations")
+  isRecommendedFor        AdminRecommendation[] @relation("IsRecommendedFor")
+
+  payments            PaymentRecord[]
+
+  reportsFiled        Report[] @relation("Reporter")
+  reportsReceived     Report[] @relation("Target")
+
+  notifications       Notification[]
+
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@index([role, status])
+  @@index([city])
+}
+
+model Category {
+  id        String         @id @default(cuid())
+  name      String         @unique
+  users     UserCategory[]
+  createdAt DateTime       @default(now())
+}
+
+model UserCategory {
+  id         String   @id @default(cuid())
+  userId     String
+  categoryId String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  category   Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, categoryId])
+  @@index([userId])
+  @@index([categoryId])
+}
+
+model Relation {
+  id        String         @id @default(cuid())
+  seniorId  String
+  juniorId  String
+  status    RelationStatus @default(PENDING)
+
+  senior    User           @relation("SeniorRelations", fields: [seniorId], references: [id], onDelete: Cascade)
+  junior    User           @relation("JuniorRelations", fields: [juniorId], references: [id], onDelete: Cascade)
+
+  interventions Intervention[]
+  reports       Report[]
+
+  createdAt DateTime @default(now())
+
+  @@unique([seniorId, juniorId])
+  @@index([seniorId, status])
+  @@index([juniorId, status])
+}
+
+model Intervention {
+  id              String             @id @default(cuid())
+  relationId      String
+  relation        Relation           @relation(fields: [relationId], references: [id], onDelete: Cascade)
+
+  scheduledDate   DateTime
+  durationMinutes Int                @default(120)
+  location        String?
+  status          InterventionStatus @default(PROPOSED)
+  tasks           String[]           @default([])
+
+  seniorRating    Int?               @db.SmallInt
+  seniorComment   String?
+  juniorRating    Int?               @db.SmallInt
+  juniorComment   String?
+  feedbackReminderSentAt DateTime?
+
+  createdAt       DateTime           @default(now())
+
+  @@index([relationId, status])
+  @@index([status, scheduledDate])
+}
+
+model AdminRecommendation {
+  id        String   @id @default(cuid())
+  seniorId  String
+  juniorId  String
+  note      String?
+
+  senior    User     @relation("ReceivedRecommendations", fields: [seniorId], references: [id])
+  junior    User     @relation("IsRecommendedFor", fields: [juniorId], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@unique([seniorId, juniorId])
+}
+
+model PaymentRecord {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  amount    Float
+  label     String
+  date      DateTime @default(now())
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+model Report {
+  id         String    @id @default(cuid())
+  reporterId String
+  targetId   String
+  relationId String?
+
+  reporter   User      @relation("Reporter", fields: [reporterId], references: [id])
+  target     User      @relation("Target", fields: [targetId], references: [id])
+  relation   Relation? @relation(fields: [relationId], references: [id])
+
+  message    String
+  status     String    @default("OPEN")
+  createdAt  DateTime  @default(now())
+
+  @@index([status])
+}
+
+model Notification {
+  id        String           @id @default(cuid())
+  userId    String
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      NotificationType
+  title     String
+  message   String
+  link      String?
+  isRead    Boolean          @default(false)
+  createdAt DateTime         @default(now())
+
+  @@index([userId, isRead])
+  @@index([createdAt])
+}
