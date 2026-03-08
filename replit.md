@@ -20,23 +20,36 @@ generated/
 server/
   index.ts               # Point d'entrée Express
   auth.ts                # Configuration Passport.js + sessions
-  routes.ts              # Routes API (/api/auth/*, /api/categories, /api/notifications/*)
+  routes.ts              # Routes API (/api/auth/*, /api/validate, /api/categories, /api/notifications/*)
   storage.ts             # Interface IStorage + DatabaseStorage (Prisma)
   prisma.ts              # Instance PrismaClient singleton
   db.ts                  # Pool PostgreSQL (pg)
   lib/
     email.ts             # Fonction sendEmail (Brevo fetch direct)
+    email-templates.ts   # Template HTML email de validation (branding FEVES)
   vite.ts                # Configuration Vite middleware (dev)
   static.ts              # Serving fichiers statiques (prod)
 shared/
-  schema.ts              # Types Prisma réexportés + Schémas Zod de validation
+  schema.ts              # Types manuels (pas d'import Prisma côté client) + Schémas Zod de validation
 client/
   src/
     App.tsx              # Routeur principal (wouter)
     index.css            # Thème rose/violet FEVES
-    pages/               # Pages de l'application
-    components/ui/       # Composants Shadcn/UI
-    hooks/               # Hooks React personnalisés
+    pages/
+      login.tsx          # Page de connexion
+      register.tsx       # Formulaire d'inscription complet (Senior/Junior)
+      registration-pending.tsx  # Confirmation post-inscription
+      validation-success.tsx    # Compte validé avec succès
+      validation-error.tsx      # Token expiré/invalide + renvoi de lien
+      home.tsx           # Accueil utilisateur connecté
+      not-found.tsx      # Page 404
+    components/
+      auth-guard.tsx     # Protection des routes authentifiées
+      ui/                # Composants Shadcn/UI
+    hooks/
+      use-auth.ts        # Hook d'authentification (useQuery /api/auth/me)
+      use-mobile.tsx     # Détection mobile
+      use-toast.ts       # Hook toast notifications
     lib/                 # Utilitaires (queryClient)
 ```
 
@@ -75,7 +88,7 @@ client/
 
 ## Sprints Prévus
 1. ✅ **Sprint 1**: Fondations (Prisma, Auth, Seed, Thème, Brevo)
-2. 🔲 **Sprint 2**: Inscription + Validation Comptes (formulaires, Magic Link, emails)
+2. ✅ **Sprint 2**: Inscription + Validation Comptes (formulaires, token UUID 24h, emails Brevo au validateur, renvoi de lien)
 3. 🔲 **Sprint 3**: Logique Backend (Matching, Relations, Interventions)
 4. 🔲 **Sprint 4**: Interfaces Utilisateurs (Senior, Junior)
 5. 🔲 **Sprint 5**: Dashboard Admin (Gestion, Supervision)

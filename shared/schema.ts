@@ -1,24 +1,87 @@
 import { z } from "zod";
 
-export type {
-  User,
-  Category,
-  UserCategory,
-  Relation,
-  Intervention,
-  AdminRecommendation,
-  PaymentRecord,
-  Report,
-  Notification,
-} from "../generated/prisma/client.ts";
+export type Role = "ADMIN" | "SENIOR" | "JUNIOR";
+export type UserStatus = "PENDING_VALIDATION" | "ACTIVE" | "SUSPENDED" | "BANNED";
+export type RelationStatus = "PENDING" | "PENDING_FIRST_MEETING" | "ACTIVE" | "PAUSED" | "CLOSED";
+export type InterventionStatus = "PENDING" | "CONFIRMED" | "DONE" | "COMPLETED_PENDING_FEEDBACK" | "COMPLETED" | "CANCELLED";
+export type NotificationType = "RELATION_REQUEST" | "INTERVENTION_PROPOSED" | "INTERVENTION_CONFIRMED" | "FEEDBACK_REQUIRED" | "ACCOUNT_VALIDATED" | "GENERAL";
 
-export {
-  Role,
-  UserStatus,
-  RelationStatus,
-  InterventionStatus,
-  NotificationType,
-} from "../generated/prisma/client.ts";
+export interface User {
+  id: string;
+  email: string;
+  password: string;
+  firstName: string;
+  lastName: string;
+  role: Role;
+  status: UserStatus;
+  birthDate: string | null;
+  phone: string | null;
+  address: string | null;
+  city: string | null;
+  postalCode: string | null;
+  bio: string | null;
+  desiredActivity: string | null;
+  schoolName: string | null;
+  referentTitle: string | null;
+  referentFirstName: string | null;
+  referentLastName: string | null;
+  referentEmail: string | null;
+  trustedPersonName: string | null;
+  trustedPersonEmail: string | null;
+  validatorEmail: string | null;
+  validationToken: string | null;
+  validationExpiry: Date | null;
+  subscriptionActive: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface Category {
+  id: string;
+  name: string;
+  createdAt: Date;
+}
+
+export interface UserCategory {
+  id: string;
+  userId: string;
+  categoryId: string;
+}
+
+export interface Relation {
+  id: string;
+  seniorId: string;
+  juniorId: string;
+  status: RelationStatus;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface Intervention {
+  id: string;
+  relationId: string;
+  scheduledDate: Date;
+  durationMinutes: number;
+  location: string | null;
+  tasks: string[];
+  status: InterventionStatus;
+  seniorRating: number | null;
+  seniorComment: string | null;
+  juniorRating: number | null;
+  juniorComment: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface Notification {
+  id: string;
+  userId: string;
+  type: NotificationType;
+  title: string;
+  message: string;
+  isRead: boolean;
+  createdAt: Date;
+}
 
 export const loginSchema = z.object({
   email: z.string().email("Email invalide"),
