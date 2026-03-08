@@ -51,10 +51,12 @@ import type { User, Relation, Intervention, PaymentRecord } from "@shared/schema
 type SafeUser = Omit<User, "password" | "validationToken" | "validationExpiry">;
 type RelationWithUsers = Relation & { senior: SafeUser; junior: SafeUser };
 type PaymentWithUser = PaymentRecord & { user: SafeUser };
+type InterventionWithRelation = Intervention & { relation: Relation & { senior: SafeUser; junior: SafeUser } };
 
 const ADMIN_TABS = [
   { id: "utilisateurs", label: "Utilisateurs", icon: Users },
   { id: "relations", label: "Relations", icon: Link2 },
+  { id: "rencontres", label: "Rencontres", icon: Calendar },
   { id: "cadrage", label: "Cadrage", icon: Shield },
   { id: "paiements", label: "Paiements", icon: CreditCard },
 ] as const;
@@ -68,6 +70,12 @@ const STATUS_COLORS: Record<string, string> = {
   PENDING_FIRST_MEETING: "bg-blue-100 text-blue-800",
   CLOSED: "bg-gray-100 text-gray-800",
   PAUSED: "bg-orange-100 text-orange-800",
+  PROPOSED: "bg-amber-100 text-amber-800",
+  CONFIRMED: "bg-blue-100 text-blue-800",
+  CANCELLED: "bg-gray-100 text-gray-600",
+  COMPLETED_PENDING_FEEDBACK: "bg-orange-100 text-orange-800",
+  COMPLETED: "bg-green-100 text-green-800",
+  DONE: "bg-green-100 text-green-800",
 };
 
 const STATUS_LABELS: Record<string, string> = {
@@ -79,6 +87,12 @@ const STATUS_LABELS: Record<string, string> = {
   PENDING_FIRST_MEETING: "1ère rencontre",
   CLOSED: "Fermée",
   PAUSED: "En pause",
+  PROPOSED: "Proposée",
+  CONFIRMED: "Confirmée",
+  CANCELLED: "Annulée",
+  COMPLETED_PENDING_FEEDBACK: "Feedback attendu",
+  COMPLETED: "Terminée",
+  DONE: "Réalisée",
 };
 
 const ROLE_COLORS: Record<string, string> = {
@@ -514,6 +528,168 @@ function CadrageTab() {
   );
 }
 
+// ==================== FICHE PROFIL DIALOG ====================
+
+function ProfileDialog({ user, open, onOpenChange }: { user: SafeUser | null; open: boolean; onOpenChange: (v: boolean) => void }) {
+  if (!user) return null;
+
+  const fields: { label: string; value: string | null | undefined; show?: boolean }[] = [
+    { label: "Email", value: user.email },
+    { label: "Rôle", value: user.role },
+    { label: "Statut", value: STATUS_LABELS[user.status] || user.status },
+    { label: "Téléphone", value: user.phone },
+    { label: "Adresse", value: user.address },
+    { label: "Ville", value: user.city },
+    { label: "Code postal", value: user.postalCode },
+    { label: "Date de naissance", value: user.birthDate ? formatDate(user.birthDate) : null },
+    { label: "Bio", value: user.bio },
+    { label: "Activité souhaitée", value: user.desiredActivity },
+    { label: "École", value: user.schoolName, show: user.role === "JUNIOR" },
+    { label: "Référent", value: user.referentTitle && user.referentFirstName && user.referentLastName ? `${user.referentTitle} ${user.referentFirstName} ${user.referentLastName}` : null, show: user.role === "JUNIOR" },
+    { label: "Email référent", value: user.referentEmail, show: user.role === "JUNIOR" },
+    { label: "Personne de confiance", value: user.trustedPersonName },
+    { label: "Email personne de confiance", value: user.trustedPersonEmail },
+    { label: "Abonnement", value: user.subscriptionActive ? "Actif" : "Inactif" },
+    { label: "Inscrit le", value: formatDate(user.createdAt) },
+  ];
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-lg max-h-[80vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>{user.firstName} {user.lastName}</DialogTitle>
+        </DialogHeader>
+        <div className="flex gap-2 mb-4">
+          <Badge className={ROLE_COLORS[user.role] || ""}>{user.role}</Badge>
+          <Badge className={STATUS_COLORS[user.status] || ""}>{STATUS_LABELS[user.status] || user.status}</Badge>
+        </div>
+        <div className="space-y-3">
+          {fields.filter((f) => f.show !== false && f.value).map((f) => (
+            <div key={f.label} className="flex flex-col" data-testid={`profile-field-${f.label}`}>
+              <span className="text-xs text-muted-foreground">{f.label}</span>
+              <span className="text-sm font-medium">{f.value}</span>
+            </div>
+          ))}
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ==================== RENCONTRES ====================
+
+function RencontresTab() {
+  const [filter, setFilter] = useState("all");
+  const [selectedUser, setSelectedUser] = useState<SafeUser | null>(null);
+  const [profileOpen, setProfileOpen] = useState(false);
+
+  const { data: interventions = [], isLoading } = useQuery<InterventionWithRelation[]>({
+    queryKey: ["/api/admin/interventions"],
+  });
+
+  const filtered = filter === "all" ? interventions : interventions.filter((i) => i.status === filter);
+
+  const filters = [
+    { id: "all", label: "Toutes" },
+    { id: "PROPOSED", label: "Proposées" },
+    { id: "CONFIRMED", label: "Confirmées" },
+    { id: "COMPLETED_PENDING_FEEDBACK", label: "Feedback attendu" },
+    { id: "COMPLETED", label: "Terminées" },
+    { id: "CANCELLED", label: "Annulées" },
+  ];
+
+  function openProfile(user: SafeUser) {
+    setSelectedUser(user);
+    setProfileOpen(true);
+  }
+
+  if (isLoading) {
+    return <div className="flex justify-center py-12"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>;
+  }
+
+  return (
+    <div>
+      <div className="flex gap-2 mb-4 flex-wrap">
+        {filters.map((f) => (
+          <button
+            key={f.id}
+            onClick={() => setFilter(f.id)}
+            className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
+              filter === f.id ? "bg-[#dc4256] text-white" : "bg-white text-muted-foreground hover:bg-muted border"
+            }`}
+            data-testid={`filter-rencontres-${f.id}`}
+          >
+            {f.label}
+          </button>
+        ))}
+      </div>
+
+      {filtered.length === 0 ? (
+        <div className="text-center py-12 text-muted-foreground">
+          <Calendar className="w-10 h-10 mx-auto mb-3 opacity-40" />
+          Aucune rencontre trouvée
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {filtered.map((i) => (
+            <div key={i.id} className="bg-white rounded-lg border p-4" data-testid={`card-intervention-${i.id}`}>
+              <div className="flex flex-col sm:flex-row sm:items-start gap-3">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-1 flex-wrap mb-2">
+                    <button
+                      onClick={() => openProfile(i.relation.senior)}
+                      className="font-medium text-[#dc4256] hover:underline cursor-pointer"
+                      data-testid={`link-senior-${i.id}`}
+                    >
+                      {i.relation.senior.firstName} {i.relation.senior.lastName}
+                    </button>
+                    <span className="text-muted-foreground">↔</span>
+                    <button
+                      onClick={() => openProfile(i.relation.junior)}
+                      className="font-medium text-[#dc4256] hover:underline cursor-pointer"
+                      data-testid={`link-junior-${i.id}`}
+                    >
+                      {i.relation.junior.firstName} {i.relation.junior.lastName}
+                    </button>
+                  </div>
+                  <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
+                    <span className="flex items-center gap-1">
+                      <Calendar className="w-3.5 h-3.5" />
+                      {new Date(i.scheduledDate).toLocaleDateString("fr-FR", { weekday: "short", day: "2-digit", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" })}
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <Clock className="w-3.5 h-3.5" />
+                      {i.durationMinutes} min
+                    </span>
+                    {i.location && (
+                      <span className="flex items-center gap-1">
+                        <MapPin className="w-3.5 h-3.5" />
+                        {i.location}
+                      </span>
+                    )}
+                  </div>
+                  {i.tasks && i.tasks.length > 0 && (
+                    <div className="mt-2 flex flex-wrap gap-1">
+                      {i.tasks.map((t, idx) => (
+                        <span key={idx} className="bg-[#f3eaff] text-[#7c3aed] text-xs px-2 py-0.5 rounded-full">{t}</span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <Badge className={`flex-shrink-0 ${STATUS_COLORS[i.status] || ""}`}>
+                  {STATUS_LABELS[i.status] || i.status}
+                </Badge>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <ProfileDialog user={selectedUser} open={profileOpen} onOpenChange={setProfileOpen} />
+    </div>
+  );
+}
+
 // ==================== PAIEMENTS ====================
 
 function PaiementsTab() {
@@ -727,6 +903,7 @@ export default function Admin() {
 
       {activeTab === "utilisateurs" && <UsersTab />}
       {activeTab === "relations" && <RelationsTab />}
+      {activeTab === "rencontres" && <RencontresTab />}
       {activeTab === "cadrage" && <CadrageTab />}
       {activeTab === "paiements" && <PaiementsTab />}
     </div>

@@ -123,6 +123,7 @@ client/
 - `DELETE /api/admin/users/:id` — supprimer un utilisateur
 - `GET /api/admin/relations` — toutes les relations
 - `GET /api/admin/relations/pending-meeting` — relations en attente de 1ère rencontre
+- `GET /api/admin/interventions` — toutes les interventions avec participants
 - `GET /api/admin/payments` — tous les paiements
 - `POST /api/admin/payments` — enregistrer un paiement (active subscriptionActive)
 
@@ -149,5 +150,5 @@ client/
 2. ✅ **Sprint 2**: Inscription + Validation Comptes (formulaires, token UUID, emails Brevo, renvoi de lien)
 3. ✅ **Sprint 3**: Logique Backend (Matching, Relations, Interventions, Feedback, Admin Recommendations)
 4. ✅ **Sprint 4**: Interfaces Utilisateurs (Landing, Dashboard 4 onglets, Détail Relation, Feedback étoiles, Notifications)
-5. ✅ **Sprint 5**: Dashboard Admin (Gestion utilisateurs, Relations, Cadrage 1ère rencontre, Paiements)
+5. ✅ **Sprint 5**: Dashboard Admin (Gestion utilisateurs, Relations, Rencontres avec fiche profil, Cadrage 1ère rencontre, Paiements)
 6. 🔲 **Sprint 6**: Notifications + Emails + PWA

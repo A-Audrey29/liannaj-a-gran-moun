@@ -45,6 +45,7 @@ export interface IStorage {
   getAllRelationsByStatus(status: string): Promise<(Relation & { senior: User; junior: User })[]>;
   createPayment(data: { userId: string; amount: number; label: string; date?: Date }): Promise<PaymentRecord>;
   getPayments(): Promise<(PaymentRecord & { user: User })[]>;
+  getAllInterventions(): Promise<(Intervention & { relation: Relation & { senior: User; junior: User } })[]>;
 }
 
 class DatabaseStorage implements IStorage {
@@ -336,6 +337,13 @@ class DatabaseStorage implements IStorage {
     return prisma.paymentRecord.findMany({
       include: { user: true },
       orderBy: { date: "desc" },
+    });
+  }
+
+  async getAllInterventions(): Promise<(Intervention & { relation: Relation & { senior: User; junior: User } })[]> {
+    return prisma.intervention.findMany({
+      include: { relation: { include: { senior: true, junior: true } } },
+      orderBy: { scheduledDate: "desc" },
     });
   }
 }

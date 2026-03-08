@@ -798,6 +798,23 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/admin/interventions", requireAdmin, async (_req, res) => {
+    try {
+      const interventions = await storage.getAllInterventions();
+      res.json(interventions.map((i) => ({
+        ...i,
+        relation: {
+          ...i.relation,
+          senior: sanitizeUser(i.relation.senior),
+          junior: sanitizeUser(i.relation.junior),
+        },
+      })));
+    } catch (err) {
+      console.error("[ADMIN_INTERVENTIONS] Error:", err);
+      res.status(500).json({ message: "Erreur" });
+    }
+  });
+
   app.get("/api/admin/payments", requireAdmin, async (_req, res) => {
     try {
       const payments = await storage.getPayments();
