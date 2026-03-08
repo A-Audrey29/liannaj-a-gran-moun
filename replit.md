@@ -34,17 +34,22 @@ shared/
 client/
   src/
     App.tsx              # Routeur principal (wouter)
-    index.css            # Thème rose/violet FEVES
+    index.css            # Thème rouge #dc4256 / lavande #f3eaff
     pages/
+      landing.tsx        # Page d'accueil publique (non connecté)
       login.tsx          # Page de connexion
       register.tsx       # Formulaire d'inscription complet (Senior/Junior)
       registration-pending.tsx  # Confirmation post-inscription
       validation-success.tsx    # Compte validé avec succès
       validation-error.tsx      # Token expiré/invalide + renvoi de lien
-      home.tsx           # Accueil utilisateur connecté
+      home.tsx           # Mon espace (Dashboard 4 onglets : Tableau de bord, Rencontres, Demandes, Profil)
+      relation-detail.tsx # Détail relation + interventions + feedback étoiles
       not-found.tsx      # Page 404
     components/
+      app-layout.tsx     # Layout partagé (header brand + footer + notifications cloche)
       auth-guard.tsx     # Protection des routes authentifiées
+      star-rating.tsx    # Composant étoiles cliquables (1-5) / lecture seule
+      status-badge.tsx   # Badge coloré selon statut (relation/intervention/rôle)
       ui/                # Composants Shadcn/UI
     hooks/
       use-auth.ts        # Hook d'authentification (useQuery /api/auth/me)
@@ -121,10 +126,19 @@ client/
 6. **Feedback obligatoire** : DONE → COMPLETED_PENDING_FEEDBACK → les deux notent → COMPLETED
 7. **Login feedback check** : hasPendingFeedback retourné au login
 
+## Design System
+- **Nom plateforme** : "liannaj a gran moun" (font Architects Daughter, couleur #dc4256)
+- **Fond** : #fbfbfb (zones contenu), #f3eaff / #e8d7fe (zones lavande)
+- **Titres** : #dc4256 (rouge)
+- **Cartes** : fond blanc, rounded-2xl, ombres douces
+- **Boutons** : #dc4256 rouge, rounded-full
+- **Badges** : #e8d7fe violet clair
+- **Images assets** : seniorF, jeuneF, mainsConfiance, seniorJeuneHRire (import @assets/...)
+
 ## Sprints Prévus
 1. ✅ **Sprint 1**: Fondations (Prisma, Auth, Seed, Thème, Brevo)
 2. ✅ **Sprint 2**: Inscription + Validation Comptes (formulaires, token UUID, emails Brevo, renvoi de lien)
 3. ✅ **Sprint 3**: Logique Backend (Matching, Relations, Interventions, Feedback, Admin Recommendations)
-4. 🔲 **Sprint 4**: Interfaces Utilisateurs (Senior, Junior)
+4. ✅ **Sprint 4**: Interfaces Utilisateurs (Landing, Dashboard 4 onglets, Détail Relation, Feedback étoiles, Notifications)
 5. 🔲 **Sprint 5**: Dashboard Admin (Gestion, Supervision)
 6. 🔲 **Sprint 6**: Notifications + Emails + PWA
