@@ -24,7 +24,7 @@ import type { Relation, User as UserType, Intervention } from "@shared/schema";
 type RelationWithUsers = Relation & { senior: UserType; junior: UserType; interventions?: Intervention[] };
 type MatchSuggestion = { user: UserType; commonCategories: string[]; isRecommended: boolean };
 
-const TABS = [
+const ALL_TABS = [
   { id: "dashboard", label: "Tableau de bord", icon: LayoutGrid },
   { id: "rencontres", label: "Rencontres", icon: Calendar },
   { id: "demandes", label: "Demandes", icon: MessageCircle },
@@ -34,6 +34,7 @@ const TABS = [
 export default function Home() {
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useState<string>("dashboard");
+  const tabs = user?.role === "ADMIN" ? ALL_TABS.filter((t) => t.id !== "profil") : ALL_TABS;
   const { toast } = useToast();
 
   const { data: relations, isLoading: relLoading } = useQuery<RelationWithUsers[]>({ queryKey: ["/api/relations"] });
@@ -49,7 +50,7 @@ export default function Home() {
       <h1 className="text-2xl md:text-3xl font-bold mb-6" data-testid="text-mon-espace">Mon espace</h1>
 
       <div className="flex gap-1 mb-8 overflow-x-auto pb-2">
-        {TABS.map((tab) => {
+        {tabs.map((tab) => {
           const isActive = activeTab === tab.id;
           const Icon = tab.icon;
           const count = tab.id === "demandes" ? pendingDemandes.length : 0;
