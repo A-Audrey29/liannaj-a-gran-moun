@@ -1,7 +1,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Link } from "wouter";
-import { Clock, Mail } from "lucide-react";
+import { Mail } from "lucide-react";
 
 export default function RegistrationPending() {
   return (
@@ -19,10 +19,6 @@ export default function RegistrationPending() {
           <p className="text-muted-foreground" data-testid="text-pending-message">
             Votre inscription a bien été enregistrée. Un email a été envoyé à votre référent pour valider votre compte.
           </p>
-          <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
-            <Clock className="h-4 w-4" />
-            <span data-testid="text-pending-expiry">Le lien de validation expire dans 24 heures.</span>
-          </div>
           <div className="pt-4">
             <Link href="/login">
               <Button variant="outline" data-testid="link-go-to-login">

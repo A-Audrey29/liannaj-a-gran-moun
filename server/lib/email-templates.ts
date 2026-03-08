@@ -55,9 +55,6 @@ export function getValidationEmailHtml(
               <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 18px;border-top:1px solid #e5e7eb;">
                 <tr><td style="height:18px;"></td></tr>
               </table>
-              <p style="margin:0;color:#ef4444;font-size:13px;line-height:1.5;font-weight:600;">
-                Ce lien est valable 24 heures. Pass&eacute; ce d&eacute;lai, l'utilisateur devra demander un nouveau lien de validation.
-              </p>
             </td>
           </tr>
           <tr>

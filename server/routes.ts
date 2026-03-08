@@ -33,7 +33,6 @@ export async function registerRoutes(
 
       const hashedPassword = await bcrypt.hash(data.password, 10);
       const validationToken = crypto.randomUUID();
-      const validationExpiry = new Date(Date.now() + 24 * 60 * 60 * 1000);
 
       const { categoryIds, birthDate, ...userData } = data;
 
@@ -45,7 +44,6 @@ export async function registerRoutes(
         status: "PENDING_VALIDATION",
         role: userData.role,
         validationToken,
-        validationExpiry,
       });
 
       if (categoryIds && categoryIds.length > 0) {
@@ -145,14 +143,9 @@ export async function registerRoutes(
         return res.redirect("/validation-error?reason=invalid");
       }
 
-      if (user.validationExpiry && new Date(user.validationExpiry) < new Date()) {
-        return res.redirect(`/validation-error?reason=expired&email=${encodeURIComponent(user.email)}`);
-      }
-
       await storage.updateUser(user.id, {
         status: "ACTIVE",
         validationToken: null,
-        validationExpiry: null,
       });
 
       return res.redirect("/validation-success");
@@ -186,11 +179,9 @@ export async function registerRoutes(
 
       if (user && user.status === "PENDING_VALIDATION" && user.validatorEmail) {
         const newToken = crypto.randomUUID();
-        const newExpiry = new Date(Date.now() + 24 * 60 * 60 * 1000);
 
         await storage.updateUser(user.id, {
           validationToken: newToken,
-          validationExpiry: newExpiry,
         });
 
         const baseUrl = process.env.BASE_URL || `${req.protocol}://${req.get("host")}`;
