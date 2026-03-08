@@ -53,7 +53,7 @@ export async function registerRoutes(
       }
 
       const baseUrl = process.env.BASE_URL || `${req.protocol}://${req.get("host")}`;
-      const validationUrl = `${baseUrl}/validate?token=${validationToken}`;
+      const validationUrl = `${baseUrl}/api/validate?token=${validationToken}`;
       const userName = `${user.firstName} ${user.lastName}`;
 
       if (process.env.NODE_ENV !== "production") {
@@ -189,7 +189,7 @@ export async function registerRoutes(
         });
 
         const baseUrl = process.env.BASE_URL || `${req.protocol}://${req.get("host")}`;
-        const validationUrl = `${baseUrl}/validate?token=${newToken}`;
+        const validationUrl = `${baseUrl}/api/validate?token=${newToken}`;
 
         if (process.env.NODE_ENV !== "production") {
           console.log(`[DEV] Lien de validation renvoyé pour ${user.email} : ${validationUrl}`);
