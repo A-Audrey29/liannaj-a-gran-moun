@@ -200,6 +200,18 @@ export const createPaymentSchema = z.object({
   date: z.string().optional(),
 });
 
+export const changePasswordSchema = z.object({
+  currentPassword: z.string().min(6, "Mot de passe actuel requis"),
+  newPassword: z.string().min(6, "Le nouveau mot de passe doit faire au moins 6 caractères"),
+});
+
+export const createAdminSchema = z.object({
+  email: z.string().email("Email invalide"),
+  password: z.string().min(6, "Le mot de passe doit faire au moins 6 caractères"),
+  firstName: z.string().min(1, "Prénom requis"),
+  lastName: z.string().min(1, "Nom requis"),
+});
+
 export type LoginInput = z.infer<typeof loginSchema>;
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type InsertIntervention = z.infer<typeof insertInterventionSchema>;
@@ -207,3 +219,5 @@ export type FeedbackInput = z.infer<typeof feedbackSchema>;
 export type CreateRelationInput = z.infer<typeof createRelationSchema>;
 export type UpdateProfileInput = z.infer<typeof updateProfileSchema>;
 export type CreatePaymentInput = z.infer<typeof createPaymentSchema>;
+export type ChangePasswordInput = z.infer<typeof changePasswordSchema>;
+export type CreateAdminInput = z.infer<typeof createAdminSchema>;

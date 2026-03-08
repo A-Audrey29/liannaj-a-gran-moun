@@ -35,9 +35,9 @@ export default function LoginPage() {
       const res = await apiRequest("POST", "/api/auth/login", data);
       return await res.json();
     },
-    onSuccess: () => {
+    onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
-      setLocation("/mon-espace");
+      setLocation(data?.user?.role === "ADMIN" ? "/admin" : "/mon-espace");
     },
     onError: (error: Error) => {
       const message = error.message || "";

@@ -45,7 +45,10 @@ import {
   MapPin,
   Clock,
   Loader2,
+  UserCog,
+  UserPlus,
 } from "lucide-react";
+import { useAuth } from "@/hooks/use-auth";
 import type { User, Relation, Intervention, PaymentRecord } from "@shared/schema";
 
 type SafeUser = Omit<User, "password" | "validationToken" | "validationExpiry">;
@@ -59,6 +62,8 @@ const ADMIN_TABS = [
   { id: "rencontres", label: "Rencontres", icon: Calendar },
   { id: "cadrage", label: "Cadrage", icon: Shield },
   { id: "paiements", label: "Paiements", icon: CreditCard },
+  { id: "mon-compte", label: "Mon compte", icon: UserCog },
+  { id: "creer-admin", label: "Créer un admin", icon: UserPlus },
 ] as const;
 
 const STATUS_COLORS: Record<string, string> = {
@@ -879,6 +884,246 @@ function PaiementsTab() {
   );
 }
 
+// ==================== MON COMPTE ====================
+
+function MonCompteTab() {
+  const { toast } = useToast();
+  const { user } = useAuth();
+  const [profileData, setProfileData] = useState({
+    firstName: user?.firstName || "",
+    lastName: user?.lastName || "",
+    email: user?.email || "",
+  });
+  const [passwordData, setPasswordData] = useState({
+    currentPassword: "",
+    newPassword: "",
+    confirmPassword: "",
+  });
+
+  const profileMut = useMutation({
+    mutationFn: (data: { firstName?: string; lastName?: string; email?: string }) =>
+      apiRequest("PATCH", "/api/auth/me", data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
+      toast({ title: "Profil mis à jour" });
+    },
+    onError: () => toast({ title: "Erreur", description: "Impossible de mettre à jour le profil", variant: "destructive" }),
+  });
+
+  const passwordMut = useMutation({
+    mutationFn: (data: { currentPassword: string; newPassword: string }) =>
+      apiRequest("PATCH", "/api/auth/me/password", data),
+    onSuccess: () => {
+      setPasswordData({ currentPassword: "", newPassword: "", confirmPassword: "" });
+      toast({ title: "Mot de passe modifié" });
+    },
+    onError: async (err: any) => {
+      const msg = err.message?.includes("400") ? "Mot de passe actuel incorrect" : "Erreur lors du changement de mot de passe";
+      toast({ title: "Erreur", description: msg, variant: "destructive" });
+    },
+  });
+
+  function handleProfileSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!profileData.firstName || !profileData.lastName || !profileData.email) return;
+    profileMut.mutate(profileData);
+  }
+
+  function handlePasswordSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (passwordData.newPassword !== passwordData.confirmPassword) {
+      toast({ title: "Erreur", description: "Les mots de passe ne correspondent pas", variant: "destructive" });
+      return;
+    }
+    if (passwordData.newPassword.length < 6) {
+      toast({ title: "Erreur", description: "Le nouveau mot de passe doit faire au moins 6 caractères", variant: "destructive" });
+      return;
+    }
+    passwordMut.mutate({
+      currentPassword: passwordData.currentPassword,
+      newPassword: passwordData.newPassword,
+    });
+  }
+
+  return (
+    <div className="space-y-8 max-w-md">
+      <div>
+        <h3 className="text-lg font-semibold mb-4">Informations personnelles</h3>
+        <form onSubmit={handleProfileSubmit} className="space-y-4">
+          <div>
+            <Label htmlFor="account-firstname">Prénom</Label>
+            <Input
+              id="account-firstname"
+              value={profileData.firstName}
+              onChange={(e) => setProfileData({ ...profileData, firstName: e.target.value })}
+              required
+              data-testid="input-account-firstname"
+            />
+          </div>
+          <div>
+            <Label htmlFor="account-lastname">Nom</Label>
+            <Input
+              id="account-lastname"
+              value={profileData.lastName}
+              onChange={(e) => setProfileData({ ...profileData, lastName: e.target.value })}
+              required
+              data-testid="input-account-lastname"
+            />
+          </div>
+          <div>
+            <Label htmlFor="account-email">Email</Label>
+            <Input
+              id="account-email"
+              type="email"
+              value={profileData.email}
+              onChange={(e) => setProfileData({ ...profileData, email: e.target.value })}
+              required
+              data-testid="input-account-email"
+            />
+          </div>
+          <Button type="submit" className="bg-[#dc4256] hover:bg-[#c53a4d]" disabled={profileMut.isPending} data-testid="btn-save-profile">
+            {profileMut.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : null}
+            Enregistrer
+          </Button>
+        </form>
+      </div>
+
+      <div className="border-t pt-6">
+        <h3 className="text-lg font-semibold mb-4">Changer le mot de passe</h3>
+        <form onSubmit={handlePasswordSubmit} className="space-y-4">
+          <div>
+            <Label htmlFor="current-password">Mot de passe actuel</Label>
+            <Input
+              id="current-password"
+              type="password"
+              value={passwordData.currentPassword}
+              onChange={(e) => setPasswordData({ ...passwordData, currentPassword: e.target.value })}
+              required
+              data-testid="input-current-password"
+            />
+          </div>
+          <div>
+            <Label htmlFor="new-password">Nouveau mot de passe</Label>
+            <Input
+              id="new-password"
+              type="password"
+              value={passwordData.newPassword}
+              onChange={(e) => setPasswordData({ ...passwordData, newPassword: e.target.value })}
+              required
+              data-testid="input-new-password"
+            />
+          </div>
+          <div>
+            <Label htmlFor="confirm-password">Confirmer le nouveau mot de passe</Label>
+            <Input
+              id="confirm-password"
+              type="password"
+              value={passwordData.confirmPassword}
+              onChange={(e) => setPasswordData({ ...passwordData, confirmPassword: e.target.value })}
+              required
+              data-testid="input-confirm-password"
+            />
+          </div>
+          <Button type="submit" className="bg-[#dc4256] hover:bg-[#c53a4d]" disabled={passwordMut.isPending} data-testid="btn-change-password">
+            {passwordMut.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : null}
+            Modifier le mot de passe
+          </Button>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+// ==================== CREER UN ADMIN ====================
+
+function CreerAdminTab() {
+  const { toast } = useToast();
+  const [formData, setFormData] = useState({
+    email: "",
+    password: "",
+    firstName: "",
+    lastName: "",
+  });
+
+  const createMut = useMutation({
+    mutationFn: (data: { email: string; password: string; firstName: string; lastName: string }) =>
+      apiRequest("POST", "/api/admin/create-admin", data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
+      setFormData({ email: "", password: "", firstName: "", lastName: "" });
+      toast({ title: "Compte admin créé avec succès" });
+    },
+    onError: async (err: any) => {
+      const msg = err.message?.includes("409") ? "Cet email est déjà utilisé" : "Erreur lors de la création";
+      toast({ title: "Erreur", description: msg, variant: "destructive" });
+    },
+  });
+
+  function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!formData.email || !formData.password || !formData.firstName || !formData.lastName) return;
+    if (formData.password.length < 6) {
+      toast({ title: "Erreur", description: "Le mot de passe doit faire au moins 6 caractères", variant: "destructive" });
+      return;
+    }
+    createMut.mutate(formData);
+  }
+
+  return (
+    <div className="max-w-md">
+      <h3 className="text-lg font-semibold mb-4">Créer un compte administrateur</h3>
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <div>
+          <Label htmlFor="admin-firstname">Prénom</Label>
+          <Input
+            id="admin-firstname"
+            value={formData.firstName}
+            onChange={(e) => setFormData({ ...formData, firstName: e.target.value })}
+            required
+            data-testid="input-admin-firstname"
+          />
+        </div>
+        <div>
+          <Label htmlFor="admin-lastname">Nom</Label>
+          <Input
+            id="admin-lastname"
+            value={formData.lastName}
+            onChange={(e) => setFormData({ ...formData, lastName: e.target.value })}
+            required
+            data-testid="input-admin-lastname"
+          />
+        </div>
+        <div>
+          <Label htmlFor="admin-email">Email</Label>
+          <Input
+            id="admin-email"
+            type="email"
+            value={formData.email}
+            onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+            required
+            data-testid="input-admin-email"
+          />
+        </div>
+        <div>
+          <Label htmlFor="admin-password">Mot de passe</Label>
+          <Input
+            id="admin-password"
+            type="password"
+            value={formData.password}
+            onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+            required
+            data-testid="input-admin-password"
+          />
+        </div>
+        <Button type="submit" className="bg-[#dc4256] hover:bg-[#c53a4d]" disabled={createMut.isPending} data-testid="btn-create-admin">
+          {createMut.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : null}
+          Créer le compte admin
+        </Button>
+      </form>
+    </div>
+  );
+}
+
 // ==================== MAIN ADMIN PAGE ====================
 
 export default function Admin() {
@@ -931,6 +1176,8 @@ export default function Admin() {
       {activeTab === "rencontres" && <RencontresTab />}
       {activeTab === "cadrage" && <CadrageTab />}
       {activeTab === "paiements" && <PaiementsTab />}
+      {activeTab === "mon-compte" && <MonCompteTab />}
+      {activeTab === "creer-admin" && <CreerAdminTab />}
     </div>
   );
 }

@@ -7,7 +7,7 @@ import { requireAuth, requireAdmin } from "./auth";
 import { storage } from "./storage";
 import { sendEmail } from "./lib/email";
 import { getValidationEmailHtml } from "./lib/email-templates";
-import { insertUserSchema, createRelationSchema, insertInterventionSchema, feedbackSchema, createPaymentSchema } from "../shared/schema";
+import { insertUserSchema, createRelationSchema, insertInterventionSchema, feedbackSchema, createPaymentSchema, changePasswordSchema, createAdminSchema } from "../shared/schema";
 
 function sanitizeUser(user: any) {
   const { password, validationToken, validationExpiry, ...safe } = user;
@@ -138,6 +138,29 @@ export async function registerRoutes(
       });
     } catch (err) {
       res.status(500).json({ message: "Erreur lors de la mise à jour du profil" });
+    }
+  });
+
+  app.patch("/api/auth/me/password", requireAuth, async (req, res) => {
+    try {
+      const parsed = changePasswordSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: "Données invalides", errors: parsed.error.flatten() });
+      }
+      const user = await storage.getUser(req.user!.id);
+      if (!user) return res.status(404).json({ message: "Utilisateur non trouvé" });
+
+      const valid = await bcrypt.compare(parsed.data.currentPassword, user.password);
+      if (!valid) {
+        return res.status(400).json({ message: "Mot de passe actuel incorrect" });
+      }
+
+      const hashed = await bcrypt.hash(parsed.data.newPassword, 10);
+      await storage.updateUser(user.id, { password: hashed });
+      res.json({ message: "Mot de passe modifié" });
+    } catch (err) {
+      console.error("[CHANGE_PASSWORD] Error:", err);
+      res.status(500).json({ message: "Erreur lors du changement de mot de passe" });
     }
   });
 
@@ -825,6 +848,35 @@ export async function registerRoutes(
     } catch (err) {
       console.error("[ADMIN_PAYMENTS] Error:", err);
       res.status(500).json({ message: "Erreur" });
+    }
+  });
+
+  app.post("/api/admin/create-admin", requireAdmin, async (req, res) => {
+    try {
+      const parsed = createAdminSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: "Données invalides", errors: parsed.error.flatten() });
+      }
+
+      const existing = await storage.getUserByEmail(parsed.data.email.toLowerCase().trim());
+      if (existing) {
+        return res.status(409).json({ message: "Cet email est déjà utilisé" });
+      }
+
+      const hashedPassword = await bcrypt.hash(parsed.data.password, 10);
+      const user = await storage.createUser({
+        email: parsed.data.email.toLowerCase().trim(),
+        password: hashedPassword,
+        firstName: parsed.data.firstName,
+        lastName: parsed.data.lastName,
+        role: "ADMIN",
+        status: "ACTIVE",
+      });
+
+      res.status(201).json(sanitizeUser(user));
+    } catch (err) {
+      console.error("[CREATE_ADMIN] Error:", err);
+      res.status(500).json({ message: "Erreur lors de la création du compte admin" });
     }
   });
 

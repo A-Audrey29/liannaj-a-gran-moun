@@ -124,8 +124,10 @@ client/
 - `GET /api/admin/relations` — toutes les relations
 - `GET /api/admin/relations/pending-meeting` — relations en attente de 1ère rencontre
 - `GET /api/admin/interventions` — toutes les interventions avec participants
+- `PATCH /api/auth/me/password` — changer le mot de passe (requireAuth)
 - `GET /api/admin/payments` — tous les paiements
 - `POST /api/admin/payments` — enregistrer un paiement (active subscriptionActive)
+- `POST /api/admin/create-admin` — créer un compte administrateur (requireAdmin)
 
 ## Règles Métier Clés
 1. **Seuls les Seniors initient** les relations (Junior 403)
