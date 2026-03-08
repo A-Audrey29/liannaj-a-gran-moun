@@ -18,8 +18,47 @@ declare global {
       lastName: string;
       role: string;
       status: string;
+      birthDate: Date | null;
+      phone: string | null;
+      address: string | null;
+      city: string | null;
+      postalCode: string | null;
+      bio: string | null;
+      desiredActivity: string | null;
+      schoolName: string | null;
+      referentTitle: string | null;
+      referentFirstName: string | null;
+      referentLastName: string | null;
+      referentEmail: string | null;
+      trustedPersonName: string | null;
+      trustedPersonEmail: string | null;
     }
   }
+}
+
+function mapUserToSession(user: any): Express.User {
+  return {
+    id: user.id,
+    email: user.email,
+    firstName: user.firstName,
+    lastName: user.lastName,
+    role: user.role,
+    status: user.status,
+    birthDate: user.birthDate,
+    phone: user.phone,
+    address: user.address,
+    city: user.city,
+    postalCode: user.postalCode,
+    bio: user.bio,
+    desiredActivity: user.desiredActivity,
+    schoolName: user.schoolName,
+    referentTitle: user.referentTitle,
+    referentFirstName: user.referentFirstName,
+    referentLastName: user.referentLastName,
+    referentEmail: user.referentEmail,
+    trustedPersonName: user.trustedPersonName,
+    trustedPersonEmail: user.trustedPersonEmail,
+  };
 }
 
 export function setupAuth(app: Express) {
@@ -72,14 +111,7 @@ export function setupAuth(app: Express) {
             });
           }
 
-          return done(null, {
-            id: user.id,
-            email: user.email,
-            firstName: user.firstName,
-            lastName: user.lastName,
-            role: user.role,
-            status: user.status,
-          });
+          return done(null, mapUserToSession(user));
         } catch (err) {
           return done(err);
         }
@@ -97,14 +129,7 @@ export function setupAuth(app: Express) {
       if (!user) {
         return done(null, false);
       }
-      done(null, {
-        id: user.id,
-        email: user.email,
-        firstName: user.firstName,
-        lastName: user.lastName,
-        role: user.role,
-        status: user.status,
-      });
+      done(null, mapUserToSession(user));
     } catch (err) {
       done(err);
     }

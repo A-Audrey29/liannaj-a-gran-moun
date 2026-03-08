@@ -131,7 +131,11 @@ export async function registerRoutes(
         return res.status(400).json({ message: "Données invalides", errors: parsed.error.flatten() });
       }
       const updated = await storage.updateUser(req.user!.id, parsed.data);
-      res.json({ user: updated });
+      const { password, validationToken, validationExpiry, ...safeUser } = updated as any;
+      req.login(safeUser, (err) => {
+        if (err) return res.status(500).json({ message: "Erreur session" });
+        res.json({ user: safeUser });
+      });
     } catch (err) {
       res.status(500).json({ message: "Erreur lors de la mise à jour du profil" });
     }
