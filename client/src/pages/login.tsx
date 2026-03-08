@@ -37,7 +37,7 @@ export default function LoginPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
-      setLocation("/");
+      setLocation("/mon-espace");
     },
     onError: (error: Error) => {
       const message = error.message || "";

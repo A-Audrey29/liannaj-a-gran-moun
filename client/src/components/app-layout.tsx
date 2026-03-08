@@ -111,7 +111,8 @@ function NavLinks({ authenticated, role, onClick }: { authenticated: boolean; ro
 
   return (
     <>
-      <Link href="/" onClick={onClick} className={`text-sm font-medium hover:text-[#dc4256] transition-colors ${location === "/" ? "text-[#dc4256]" : ""}`} data-testid="link-mon-espace">Mon espace</Link>
+      <Link href="/" onClick={onClick} className={`text-sm font-medium hover:text-[#dc4256] transition-colors ${location === "/" ? "text-[#dc4256]" : ""}`} data-testid="link-accueil">ACCUEIL</Link>
+      <Link href="/mon-espace" onClick={onClick} className={`text-sm font-medium hover:text-[#dc4256] transition-colors ${location === "/mon-espace" ? "text-[#dc4256]" : ""}`} data-testid="link-mon-espace">MON ESPACE</Link>
       {role === "ADMIN" && (
         <Link href="/admin" onClick={onClick} className="text-sm font-medium hover:text-[#dc4256] transition-colors" data-testid="link-admin">Admin</Link>
       )}
