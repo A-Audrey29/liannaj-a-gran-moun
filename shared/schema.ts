@@ -98,7 +98,18 @@ const optionalEmail = z.preprocess(
   z.string().email().optional()
 );
 
-export const insertUserSchema = z.object({
+const FREEMAIL_DOMAINS = [
+  "gmail.com", "yahoo.fr", "yahoo.com", "hotmail.com", "hotmail.fr",
+  "outlook.com", "outlook.fr", "orange.fr", "wanadoo.fr", "free.fr",
+  "sfr.fr", "laposte.net", "live.com", "live.fr", "icloud.com",
+  "protonmail.com", "gmx.com", "gmx.fr", "aol.com", "mail.com",
+];
+
+const isDev = typeof process !== "undefined"
+  ? process.env.NODE_ENV !== "production"
+  : true;
+
+export const insertUserBaseSchema = z.object({
   email: z.string().email("Email invalide"),
   password: z.string().min(6, "Le mot de passe doit faire au moins 6 caractères"),
   firstName: z.string().min(1, "Prénom requis"),
@@ -124,6 +135,18 @@ export const insertUserSchema = z.object({
   validatorEmail: z.string().email("Email du validateur requis"),
   categoryIds: z.array(z.string()).optional(),
 });
+
+export const insertUserSchema = insertUserBaseSchema.refine(
+  (data) => data.email.toLowerCase().trim() !== data.validatorEmail.toLowerCase().trim(),
+  { message: "Le validateur ne peut pas être vous-même", path: ["validatorEmail"] }
+).refine(
+  (data) => {
+    if (data.role !== "JUNIOR" || isDev) return true;
+    const domain = data.validatorEmail.split("@")[1]?.toLowerCase();
+    return !FREEMAIL_DOMAINS.includes(domain);
+  },
+  { message: "Le validateur Junior doit utiliser un email professionnel ou institutionnel", path: ["validatorEmail"] }
+);
 
 export const insertInterventionSchema = z.object({
   relationId: z.string().min(1),

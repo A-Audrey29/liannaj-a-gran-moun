@@ -2,7 +2,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation } from "wouter";
-import { insertUserSchema, type InsertUser, type Category } from "@shared/schema";
+import { insertUserBaseSchema, type InsertUser, type Category } from "@shared/schema";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { z } from "zod";
@@ -22,12 +22,15 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { User, GraduationCap, Loader2 } from "lucide-react";
 
-const registerSchema = insertUserSchema.extend({
+const registerSchema = insertUserBaseSchema.extend({
   confirmPassword: z.string().min(6, "Confirmation requise"),
-}).refine((data) => data.password === data.confirmPassword, {
-  message: "Les mots de passe ne correspondent pas",
-  path: ["confirmPassword"],
-});
+}).refine(
+  (data) => data.password === data.confirmPassword,
+  { message: "Les mots de passe ne correspondent pas", path: ["confirmPassword"] }
+).refine(
+  (data) => data.email.toLowerCase().trim() !== data.validatorEmail.toLowerCase().trim(),
+  { message: "Le validateur ne peut pas être vous-même", path: ["validatorEmail"] }
+);
 
 type RegisterForm = z.infer<typeof registerSchema>;
 
