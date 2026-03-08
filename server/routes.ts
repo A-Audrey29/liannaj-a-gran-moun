@@ -35,12 +35,13 @@ export async function registerRoutes(
       const validationToken = crypto.randomUUID();
       const validationExpiry = new Date(Date.now() + 24 * 60 * 60 * 1000);
 
-      const { categoryIds, ...userData } = data;
+      const { categoryIds, birthDate, ...userData } = data;
 
       const user = await storage.createUser({
         ...userData,
         email: userData.email.toLowerCase().trim(),
         password: hashedPassword,
+        birthDate: birthDate ? new Date(birthDate) : null,
         status: "PENDING_VALIDATION",
         role: userData.role,
         validationToken,
