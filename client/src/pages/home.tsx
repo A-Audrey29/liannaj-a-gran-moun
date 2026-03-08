@@ -1,19 +1,24 @@
-import { useAuth } from "@/hooks/use-auth";
+import { useAuth, type AuthUser } from "@/hooks/use-auth";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useLocation } from "wouter";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
+import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import StatusBadge from "@/components/status-badge";
-import { Calendar, MessageCircle, User, LayoutGrid, ChevronRight, Plus, Check, X } from "lucide-react";
+import { Calendar, MessageCircle, User, LayoutGrid, ChevronRight, Plus, Check, X, Pencil } from "lucide-react";
 import { useState } from "react";
+import { updateProfileSchema, type UpdateProfileInput } from "@shared/schema";
 import type { Relation, User as UserType, Intervention } from "@shared/schema";
 
 type RelationWithUsers = Relation & { senior: UserType; junior: UserType; interventions?: Intervention[] };
@@ -362,10 +367,25 @@ function DemandesTab({ relations, isLoading, user }: { relations?: RelationWithU
   );
 }
 
-function ProfilTab({ user }: { user: any }) {
-  const { data: categories } = useQuery<any[]>({ queryKey: ["/api/auth/me"] });
+function ProfileField({ label, value }: { label: string; value: string | null | undefined }) {
+  return (
+    <div className="flex justify-between py-2 border-b border-border/50">
+      <span className="text-muted-foreground">{label}</span>
+      <span className={`font-medium text-right max-w-[60%] ${!value ? "text-muted-foreground/50 italic" : ""}`}>
+        {value || "Non renseigne"}
+      </span>
+    </div>
+  );
+}
+
+function SectionTitle({ children }: { children: React.ReactNode }) {
+  return <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">{children}</h4>;
+}
+
+function ProfilTab({ user }: { user: AuthUser | null }) {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
+  const [editOpen, setEditOpen] = useState(false);
 
   const handleLogout = async () => {
     try {
@@ -383,28 +403,83 @@ function ProfilTab({ user }: { user: any }) {
     <div className="space-y-4">
       <Card className="rounded-2xl border-0 shadow-sm">
         <CardContent className="py-6">
-          <div className="flex items-center gap-4 mb-6">
+          <SectionTitle>Identite</SectionTitle>
+          <div className="flex items-center gap-4 mb-4">
             <div className="w-16 h-16 rounded-full bg-[#e8d7fe] flex items-center justify-center text-xl font-bold text-[#8b5cf6]">
               {user.firstName[0]}{user.lastName[0]}
             </div>
             <div>
-              <h3 className="text-lg font-bold">{user.firstName} {user.lastName}</h3>
-              <StatusBadge status={user.role} />
-            </div>
-          </div>
-
-          <div className="space-y-3 text-sm">
-            <div className="flex justify-between py-2 border-b border-border/50">
-              <span className="text-muted-foreground">Email</span>
-              <span className="font-medium">{user.email}</span>
-            </div>
-            <div className="flex justify-between py-2 border-b border-border/50">
-              <span className="text-muted-foreground">Statut</span>
-              <StatusBadge status={user.status} />
+              <h3 className="text-lg font-bold" data-testid="text-profile-name">{user.firstName} {user.lastName}</h3>
+              <div className="flex items-center gap-2 mt-1">
+                <StatusBadge status={user.role} />
+                <StatusBadge status={user.status} />
+              </div>
             </div>
           </div>
         </CardContent>
       </Card>
+
+      <Card className="rounded-2xl border-0 shadow-sm">
+        <CardContent className="py-6">
+          <SectionTitle>Contact</SectionTitle>
+          <div className="space-y-1 text-sm">
+            <ProfileField label="Email" value={user.email} />
+            <ProfileField label="Telephone" value={user.phone} />
+            <ProfileField label="Adresse" value={user.address} />
+            <ProfileField label="Ville" value={user.city} />
+            <ProfileField label="Code postal" value={user.postalCode} />
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card className="rounded-2xl border-0 shadow-sm">
+        <CardContent className="py-6">
+          <SectionTitle>Profil</SectionTitle>
+          <div className="space-y-1 text-sm">
+            <ProfileField label="Bio" value={user.bio} />
+            <ProfileField label="Activite souhaitee" value={user.desiredActivity} />
+          </div>
+        </CardContent>
+      </Card>
+
+      {(user.role === "SENIOR" || user.role === "JUNIOR") && (
+        <Card className="rounded-2xl border-0 shadow-sm bg-[#f3eaff]">
+          <CardContent className="py-6">
+            {user.role === "SENIOR" ? (
+              <>
+                <SectionTitle>Personne de confiance</SectionTitle>
+                <div className="space-y-1 text-sm">
+                  <ProfileField label="Nom" value={user.trustedPersonName} />
+                  <ProfileField label="Email" value={user.trustedPersonEmail} />
+                </div>
+              </>
+            ) : (
+              <>
+                <SectionTitle>Referent & Ecole</SectionTitle>
+                <div className="space-y-1 text-sm">
+                  <ProfileField label="Titre" value={user.referentTitle} />
+                  <ProfileField label="Prenom" value={user.referentFirstName} />
+                  <ProfileField label="Nom" value={user.referentLastName} />
+                  <ProfileField label="Email" value={user.referentEmail} />
+                  <Separator className="my-3" />
+                  <ProfileField label="Ecole" value={user.schoolName} />
+                </div>
+              </>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      <EditProfileDialog user={user} open={editOpen} onOpenChange={setEditOpen} />
+
+      <Button
+        onClick={() => setEditOpen(true)}
+        variant="outline"
+        className="w-full rounded-full border-[#dc4256] text-[#dc4256] hover:bg-[#dc4256] hover:text-white"
+        data-testid="button-edit-profile"
+      >
+        <Pencil className="w-4 h-4 mr-2" /> Modifier mon profil
+      </Button>
 
       <Button
         onClick={handleLogout}
@@ -414,5 +489,222 @@ function ProfilTab({ user }: { user: any }) {
         Deconnexion
       </Button>
     </div>
+  );
+}
+
+function EditProfileDialog({ user, open, onOpenChange }: { user: AuthUser; open: boolean; onOpenChange: (v: boolean) => void }) {
+  const { toast } = useToast();
+
+  const form = useForm<UpdateProfileInput>({
+    resolver: zodResolver(updateProfileSchema),
+    defaultValues: {
+      firstName: user.firstName || "",
+      lastName: user.lastName || "",
+      phone: user.phone || "",
+      address: user.address || "",
+      city: user.city || "",
+      postalCode: user.postalCode || "",
+      bio: user.bio || "",
+      desiredActivity: user.desiredActivity || "",
+      trustedPersonName: user.trustedPersonName || "",
+      trustedPersonEmail: user.trustedPersonEmail || "",
+      schoolName: user.schoolName || "",
+      referentTitle: user.referentTitle || "",
+      referentFirstName: user.referentFirstName || "",
+      referentLastName: user.referentLastName || "",
+    },
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: async (data: UpdateProfileInput) => {
+      const res = await apiRequest("PATCH", "/api/auth/me", data);
+      return await res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
+      toast({ title: "Profil mis a jour !" });
+      onOpenChange(false);
+    },
+    onError: () => {
+      toast({ title: "Erreur", description: "Impossible de mettre a jour le profil.", variant: "destructive" });
+    },
+  });
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Modifier mon profil</DialogTitle>
+        </DialogHeader>
+        <Form {...form}>
+          <form onSubmit={form.handleSubmit((data) => updateMutation.mutate(data))} className="space-y-6">
+            <div>
+              <SectionTitle>Identite</SectionTitle>
+              <div className="grid grid-cols-2 gap-3">
+                <FormField control={form.control} name="firstName" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Prenom</FormLabel>
+                    <FormControl><Input {...field} data-testid="input-edit-firstName" /></FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+                <FormField control={form.control} name="lastName" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Nom</FormLabel>
+                    <FormControl><Input {...field} data-testid="input-edit-lastName" /></FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+              </div>
+            </div>
+
+            <Separator />
+
+            <div>
+              <SectionTitle>Contact</SectionTitle>
+              <div className="space-y-3">
+                <div>
+                  <Label className="text-muted-foreground text-xs">Email (non modifiable)</Label>
+                  <Input value={user.email} disabled className="mt-1 bg-muted/30" />
+                </div>
+                <FormField control={form.control} name="phone" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Telephone</FormLabel>
+                    <FormControl><Input {...field} data-testid="input-edit-phone" /></FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+                <FormField control={form.control} name="address" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Adresse</FormLabel>
+                    <FormControl><Input {...field} data-testid="input-edit-address" /></FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+                <div className="grid grid-cols-2 gap-3">
+                  <FormField control={form.control} name="city" render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Ville</FormLabel>
+                      <FormControl><Input {...field} data-testid="input-edit-city" /></FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )} />
+                  <FormField control={form.control} name="postalCode" render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Code postal</FormLabel>
+                      <FormControl><Input {...field} data-testid="input-edit-postalCode" /></FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )} />
+                </div>
+              </div>
+            </div>
+
+            <Separator />
+
+            <div>
+              <SectionTitle>Profil</SectionTitle>
+              <div className="space-y-3">
+                <FormField control={form.control} name="bio" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Bio</FormLabel>
+                    <FormControl><Textarea {...field} rows={3} placeholder="Parlez de vous..." data-testid="input-edit-bio" /></FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+                <FormField control={form.control} name="desiredActivity" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Activite souhaitee</FormLabel>
+                    <FormControl><Input {...field} placeholder="Ex: Jardinage, Lecture..." data-testid="input-edit-desiredActivity" /></FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+              </div>
+            </div>
+
+            {user.role === "SENIOR" && (
+              <>
+                <Separator />
+                <div className="bg-[#f3eaff] rounded-xl p-4 -mx-2">
+                  <SectionTitle>Personne de confiance</SectionTitle>
+                  <div className="space-y-3">
+                    <FormField control={form.control} name="trustedPersonName" render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Nom</FormLabel>
+                        <FormControl><Input {...field} data-testid="input-edit-trustedPersonName" /></FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )} />
+                    <FormField control={form.control} name="trustedPersonEmail" render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Email</FormLabel>
+                        <FormControl><Input {...field} type="email" data-testid="input-edit-trustedPersonEmail" /></FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )} />
+                  </div>
+                </div>
+              </>
+            )}
+
+            {user.role === "JUNIOR" && (
+              <>
+                <Separator />
+                <div className="bg-[#f3eaff] rounded-xl p-4 -mx-2">
+                  <SectionTitle>Referent & Ecole</SectionTitle>
+                  <div className="space-y-3">
+                    <FormField control={form.control} name="referentTitle" render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Titre</FormLabel>
+                        <FormControl><Input {...field} placeholder="Ex: Professeur, Directeur..." data-testid="input-edit-referentTitle" /></FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )} />
+                    <div className="grid grid-cols-2 gap-3">
+                      <FormField control={form.control} name="referentFirstName" render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Prenom</FormLabel>
+                          <FormControl><Input {...field} data-testid="input-edit-referentFirstName" /></FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )} />
+                      <FormField control={form.control} name="referentLastName" render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Nom</FormLabel>
+                          <FormControl><Input {...field} data-testid="input-edit-referentLastName" /></FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )} />
+                    </div>
+                    <Separator className="my-2" />
+                    <FormField control={form.control} name="schoolName" render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Ecole</FormLabel>
+                        <FormControl><Input {...field} data-testid="input-edit-schoolName" /></FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )} />
+                  </div>
+                </div>
+              </>
+            )}
+
+            <DialogFooter className="gap-2">
+              <Button type="button" variant="outline" onClick={() => onOpenChange(false)} className="rounded-full">
+                Annuler
+              </Button>
+              <Button
+                type="submit"
+                disabled={updateMutation.isPending}
+                className="rounded-full bg-[#dc4256] hover:bg-[#c73848] text-white"
+                data-testid="button-save-profile"
+              >
+                {updateMutation.isPending ? "Enregistrement..." : "Enregistrer"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </Form>
+      </DialogContent>
+    </Dialog>
   );
 }

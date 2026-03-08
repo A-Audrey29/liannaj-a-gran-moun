@@ -164,8 +164,29 @@ export const createRelationSchema = z.object({
   juniorId: z.string().min(1, "ID du Junior requis"),
 });
 
+export const updateProfileSchema = z.object({
+  firstName: z.string().min(1, "Prénom requis").optional(),
+  lastName: z.string().min(1, "Nom requis").optional(),
+  phone: optionalString,
+  address: optionalString,
+  city: optionalString,
+  postalCode: optionalString,
+  bio: z.preprocess(
+    (val) => (val === "" ? undefined : val),
+    z.string().max(500).optional()
+  ),
+  desiredActivity: optionalString,
+  trustedPersonName: optionalString,
+  trustedPersonEmail: optionalEmail,
+  schoolName: optionalString,
+  referentTitle: optionalString,
+  referentFirstName: optionalString,
+  referentLastName: optionalString,
+});
+
 export type LoginInput = z.infer<typeof loginSchema>;
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type InsertIntervention = z.infer<typeof insertInterventionSchema>;
 export type FeedbackInput = z.infer<typeof feedbackSchema>;
 export type CreateRelationInput = z.infer<typeof createRelationSchema>;
+export type UpdateProfileInput = z.infer<typeof updateProfileSchema>;

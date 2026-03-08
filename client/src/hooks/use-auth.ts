@@ -1,13 +1,27 @@
 import { useQuery } from "@tanstack/react-query";
 import { getQueryFn } from "@/lib/queryClient";
 
-interface AuthUser {
+export interface AuthUser {
   id: string;
   email: string;
   firstName: string;
   lastName: string;
   role: string;
   status: string;
+  birthDate: string | null;
+  phone: string | null;
+  address: string | null;
+  city: string | null;
+  postalCode: string | null;
+  bio: string | null;
+  desiredActivity: string | null;
+  schoolName: string | null;
+  referentTitle: string | null;
+  referentFirstName: string | null;
+  referentLastName: string | null;
+  referentEmail: string | null;
+  trustedPersonName: string | null;
+  trustedPersonEmail: string | null;
 }
 
 export function useAuth() {

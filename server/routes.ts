@@ -123,6 +123,20 @@ export async function registerRoutes(
     res.json({ user: req.user });
   });
 
+  app.patch("/api/auth/me", requireAuth, async (req, res) => {
+    try {
+      const { updateProfileSchema } = await import("@shared/schema");
+      const parsed = updateProfileSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: "Données invalides", errors: parsed.error.flatten() });
+      }
+      const updated = await storage.updateUser(req.user!.id, parsed.data);
+      res.json({ user: updated });
+    } catch (err) {
+      res.status(500).json({ message: "Erreur lors de la mise à jour du profil" });
+    }
+  });
+
   app.get("/api/categories", async (_req, res) => {
     try {
       const categories = await storage.getCategories();
