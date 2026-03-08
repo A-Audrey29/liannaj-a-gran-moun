@@ -1,0 +1,232 @@
+Tu es un Expert Développeur Fullstack Senior (Next.js 14 / Prisma / PostgreSQL / Shadcn/UI).
+
+CONTEXTE DU PROJET :
+Nous développons "FEVES V1.3", une PWA de mise en relation Seniors/Jeunes fermée et encadrée.
+Ce document contient l'intégralité du Schéma de Base de Données et de la Logique Métier à implémenter.
+
+1. ARCHITECTURE & STACK
+Framework : Next.js 14 (App Router).
+Langage : TypeScript (Strict).
+Base de Données : PostgreSQL + Prisma ORM.
+Styling : Tailwind CSS + Shadcn/UI (Reconstruction depuis Screenshots, pas de code Lovable).
+Auth : NextAuth.js (Credentials).
+Validation : Zod.
+Email : Brevo SDK.
+2. SCHÉMA DE DONNÉES (À COPIER DANS prisma/schema.prisma)
+Remplace tout le contenu du fichier prisma/schema.prisma par ceci. C'est la vérité unique.
+
+prisma
+
+  @@unique([seniorId, juniorId]) // Empêche doublons
+  @@index([seniorId, status])
+  @@index([juniorId, status])
+}
+
+model Intervention {
+  id              String              @id @default(cuid())
+  relationId      String
+  relation        Relation            @relation(fields: [relationId], references: [id], onDelete: Cascade)
+  
+  scheduledDate   DateTime
+  durationMinutes Int                 @default(120)
+  status          InterventionStatus  @default(PROPOSED)
+  tasks           String[]            @default([])
+
+  seniorRating    Int?                @db.SmallInt
+  seniorComment   String?
+  juniorRating    Int?                @db.SmallInt
+  juniorComment   String?
+  feedbackReminderSentAt DateTime?    // Tracking relance
+
+  createdAt       DateTime            @default(now())
+  
+  @@index([relationId, status])
+  @@index([status, scheduledDate])
+}
+
+model AdminRecommendation {
+  id        String   @id @default(cuid())
+  seniorId  String
+  juniorId  String
+  note      String?
+  
+  senior    User     @relation("ReceivedRecommendations", fields: [seniorId], references: [id])
+  junior    User     @relation("IsRecommendedFor", fields: [juniorId], references: [id])
+  
+  createdAt DateTime @default(now())
+
+  @@unique([seniorId, juniorId])
+}
+
+model PaymentRecord {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  amount    Float
+  label     String
+  date      DateTime @default(now())
+  createdAt DateTime @default(now())
+  @@index([userId])
+}
+
+model Report {
+  id         String    @id @default(cuid())
+  reporterId String
+  targetId   String
+  relationId String?
+  
+  reporter   User      @relation("Reporter", fields: [reporterId], references: [id])
+  target     User      @relation("Target", fields: [targetId], references: [id])
+  relation   Relation? @relation(fields: [relationId], references: [id])
+  
+  message    String
+  status     String    @default("OPEN")
+  createdAt  DateTime  @default(now())
+  @@index([status])
+}
+
+model Notification {
+  id        String           @id @default(cuid())
+  userId    String
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      NotificationType
+  title     String
+  message   String
+  link      String?
+  isRead    Boolean          @default(false)
+  createdAt DateTime         @default(now())
+  @@index([userId, isRead])
+  @@index([createdAt])
+}
+3. LOGIQUE MÉTIER CLÉ (À IMPLÉMENTER DANS lib/actions.ts)
+Voici les algorithmes critiques. Tu dois les recoder en TypeScript Server Actions.
+
+A. Transition Fin de Rencontre (Le Cœur du système)
+Cette fonction gère le passage à DONE, la transition de la Relation vers ACTIVE (si c'est la 1ère), et l'activation du mode Feedback.
+
+typescript
+
+import { prisma } from '@/lib/prisma';
+
+export async function markInterventionDone(interventionId: string) {
+  return await prisma.$transaction(async (tx) => {
+    // 1. Mettre à jour l'intervention
+    const intervention = await tx.intervention.update({
+      where: { id: interventionId },
+      data: { status: 'DONE' },
+      include: { relation: true }
+    });
+    
+    // 2. Logique de "Cadrage" : Si la relation était en attente de 1er RDV
+    if (intervention.relation.status === 'PENDING_FIRST_MEETING') {
+      await tx.relation.update({
+        where: { id: intervention.relationId },
+        data: { status: 'ACTIVE' }
+      });
+      
+      // Notifier les deux que c'est débloqué
+      // (Code de notification à ajouter ici)
+    }
+    
+    // 3. Passer en attente de feedback (Gatekeeping)
+    const updated = await tx.intervention.update({
+      where: { id: interventionId },
+      data: { status: 'COMPLETED_PENDING_FEEDBACK' }
+    });
+
+    return updated;
+  });
+}
+B. Soumission de Feedback
+Cette fonction vérifie que les deux ont noté avant de clôturer.
+
+typescript
+
+export async function submitFeedback(
+  interventionId: string, 
+  userId: string, 
+  rating: number, 
+  comment?: string
+) {
+  const intervention = await prisma.intervention.findUnique({
+    where: { id: interventionId },
+    include: { relation: true }
+  });
+  
+  if (!intervention || intervention.status !== 'COMPLETED_PENDING_FEEDBACK') {
+    throw new Error('Feedback non autorisé ou déjà complété');
+  }
+  
+  const isSenior = intervention.relation.seniorId === userId;
+  
+  // Mise à jour du feedback concerné
+  const updated = await prisma.intervention.update({
+    where: { id: interventionId },
+    data: isSenior 
+      ? { seniorRating: rating, seniorComment: comment }
+      : { juniorRating: rating, juniorComment: comment }
+  });
+  
+  // Vérification : Si les deux ont noté -> Clôturer
+  if (updated.seniorRating !== null && updated.juniorRating !== null) {
+    await prisma.intervention.update({
+      where: { id: interventionId },
+      data: { status: 'COMPLETED' }
+    });
+  }
+  
+  return updated;
+}
+C. Bypass Admin (Urgence)
+Fonction réservée à l'Admin pour débloquer une situation bloquée.
+
+typescript
+
+export async function adminForceComplete(interventionId: string) {
+  return await prisma.intervention.update({
+    where: { id: interventionId },
+    data: { status: 'COMPLETED' } // Force la fin même sans feedback
+  });
+}
+D. Relances Feedback (Optimisé Replit)
+Au lieu d'un Cron Job complexe, on déclenche la vérification quand un User se connecte.
+
+typescript
+
+export async function checkAndSendFeedbackReminders(userId: string) {
+  // Chercher les interventions DONE depuis plus de 3 jours sans rappel envoyé
+  const threeDaysAgo = new Date();
+  threeDaysAgo.setDate(threeDaysAgo.getDate() - 3);
+
+  const pending = await prisma.intervention.findMany({
+    where: {
+      status: 'COMPLETED_PENDING_FEEDBACK',
+      feedbackReminderSentAt: null,
+      createdAt: { lte: threeDaysAgo },
+      relation: {
+        OR: [
+          { seniorId: userId },
+          { juniorId: userId }
+        ]
+      }
+    }
+  });
+
+  // Pour chaque intervention trouvée, envoyer email Brevo et marquer le rappel envoyé
+  pending.forEach(async (intervention) => {
+    // TODO: Appeler fonction Brevo sendEmail(...)
+    await prisma.intervention.update({
+      where: { id: intervention.id },
+      data: { feedbackReminderSentAt: new Date() }
+    });
+  });
+}
+4. SÉCURITÉ
+Utilise zod pour valider toutes les entrées.
+Pour la validation du token d'inscription, utilise une comparaison sécurisée (timingSafeEqual du module crypto de Node) pour éviter les timing attacks.
+Utilise un Middleware Next.js pour protéger les routes /dashboard et /admin.
+5. PROCHAINES ÉTAPES
+Initialise le projet avec la stack demandée.
+Applique le schéma Prisma ci-dessus (npx prisma db push).
+Crée le fichier lib/actions.ts et implémente les fonctions fournies.
+Commence par l'authentification et le dashboard Admin.

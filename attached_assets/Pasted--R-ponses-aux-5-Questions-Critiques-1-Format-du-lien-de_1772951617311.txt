@@ -1,0 +1,40 @@
+📋 Réponses aux 5 Questions Critiques
+1. Format du lien de validation
+
+Réponse : Option A (Lien URL).
+Précision : Quand je dis "Bouton dans le mail", c'est techniquement un lien hypertexte stylisé en bouton (<a href="...">). Il n'y a pas d'appel API complexe via JavaScript dans l'email. Le clic redirige simplement vers https://monsite.fr/api/validate?token=xyz.
+Pourquoi c'est pro : Compatible avec tous les clients mail (Outlook, Gmail, etc.).
+2. Intervention de Cadrage (Admin)
+
+Réponse : L'Admin fixe tout (Date, Heure, Lieu, Tâches).
+Pourquoi : Le but du "Cadrage" est que la première rencontre soit structurée. L'Admin peut suggérer les tâches (ex: "Tour du jardin, discussion sur les besoins"). Cela donne de la matière à la rencontre.
+3. Expiration Token (>24h)
+
+Réponse : Mécanisme de "Renvoi".
+Si le token est expiré, l'utilisateur (Senior/Junior) ne se réinscrit pas.
+Il voit une page "Lien expiré" avec un bouton "Renvoyer le lien de validation".
+Cela regénère un nouveau token et renvoie l'email au validatorEmail.
+Secours : L'Admin peut aussi forcer la validation manuellement dans son back-office si besoin.
+4. Login avant validation
+
+Réponse : BLOQUÉ.
+Technique : Si user.status !== 'ACTIVE', le Middleware refuse l'accès au Dashboard et renvoie vers la page Login avec un message : "Votre compte est en attente de validation par votre référent."
+5. Affichage Matching
+
+Réponse : Grille de profils avec Badge.
+Design : Une liste de cartes (Shadcn Cards). Si AdminRecommendation existe pour ce profil, afficher un badge "Recommandé par FEVES" avec une étoile ⭐ en haut de la carte.
+✅ Verdict Final
+C'est OK.
+Replit a bien compris la logique.
+
+Le point sur le "Bouton vs Lien" était une confusion sémantique de sa part (un bouton HTML est un lien).
+Le reste des interrogations (Expiration, Login) sont des points de vigilance validés par nos réponses.
+Instruction pour Replit :
+
+"Tes analyses sont pertinentes. Pour lever les derniers doutes :
+
+Lien Validation : C'est un simple lien URL (/api/validate?token=...) stylisé en bouton dans l'email.
+Cadrage : L'Admin remplit tous les champs (Date, Lieu, Tâches).
+Expiration : Afficher une page 'Lien expiré' avec bouton 'Renvoyer'. Pas de réinscription.
+Login : Bloqué si status n'est pas ACTIVE.
+Matching : Grille de cartes + Badge 'Recommandé'.

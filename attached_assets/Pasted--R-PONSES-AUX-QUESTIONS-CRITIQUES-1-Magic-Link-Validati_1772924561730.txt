@@ -1,0 +1,35 @@
+📝 RÉPONSES AUX QUESTIONS CRITIQUES
+1. Magic Link : Validation vs Connexion
+Réponse : Le Magic Link (Token) sert uniquement à la validation initiale du compte (PENDING_VALIDATION -> ACTIVE).
+Mécanisme :
+Inscription -> User créé (status: PENDING).
+Email envoyé au validatorEmail avec le lien Magic Token.
+Clic sur le lien -> Token vérifié -> User passe ACTIVE.
+Connexion : Ensuite, l'utilisateur se connecte classiquement avec son Email + Mot de passe (NextAuth Credentials).
+Pourquoi ? C'est sécurisé et standard. Le Magic Link n'est pas un moyen de connexion récurrent.
+2. Rôle de l'Aidant (User vs Référence)
+Réponse : L'Aidant est une référence textuelle externe (un email stocké dans validatorEmail), PAS un User connectable en V1.
+Logique :
+Il n'y a pas de table de liaison Aidant <-> Senior.
+L'Aidant n'a pas de mot de passe, pas de dashboard, pas de login.
+Il n'est qu'un "acteur externe" qui reçoit un email de validation et doit cliquer sur un lien.
+Simplification : Si l'email de l'aidant correspond par hasard à un User existant (ex: le prof qui a déjà un compte), le système s'en fiche. On valide juste le token.
+3. Logique de Matching
+Réponse : C'est un hybride.
+Algorithme Automatique (Base) : Le Senior voit une liste de Jeunes compatible (Même Ville + Catégories communes + Pas de relation en cours).
+Priorisation Admin (AdminRecommendation) : L'Admin peut "booster" un profil spécifique pour un Senior spécifique. Ce profil apparaîtra en haut de la liste avec un badge "Recommandé".
+Ce n'est PAS du 100% manuel. L'algorithme fournit la base de données, l'Admin affine la pertinence.
+4. Workflow de Création d'Intervention
+Réponse : Dépend du statut de la Relation.
+Si Relation = PENDING_FIRST_MEETING (Cadrage) :
+Qui propose ? ADMIN UNIQUEMENT.
+Validation : L'Admin fixe la date/lieu. Les utilisateurs la subissent (ou contactent l'admin par mail en cas de problème).
+Si Relation = ACTIVE (Autonomie) :
+Qui propose ? SENIOR.
+Qui valide ? JUNIOR.
+Flow : Senior crée (Status PROPOSED) -> Junior voit la notification -> Junior clique "Accepter" (Status CONFIRMED) ou "Refuser" (Status CANCELLED).
+5. Gestion des Tâches (tasks)
+Réponse : Liste libre (Texte).
+Technique : Ce sont des string[] (Tableau de chaînes de caractères).
+UI : Le Senior tape ses besoins dans un champ texte (ex: "Tondre la pelouse, Désherber"). Le système stocke cela tel quel.
+Pas de catalogue de tâches prédéfinies en V1.
