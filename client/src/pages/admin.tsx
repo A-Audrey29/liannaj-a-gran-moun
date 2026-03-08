@@ -110,6 +110,7 @@ function formatDate(d: string | Date) {
 function UsersTab() {
   const { toast } = useToast();
   const [filter, setFilter] = useState("all");
+  const [roleFilter, setRoleFilter] = useState("all");
 
   const { data: users = [], isLoading } = useQuery<SafeUser[]>({ queryKey: ["/api/admin/users"] });
 
@@ -142,13 +143,23 @@ function UsersTab() {
 
   const pendingCount = users.filter((u) => u.status === "PENDING_VALIDATION").length;
 
-  const filtered = filter === "all" ? users : users.filter((u) => u.status === filter);
+  const filtered = users.filter((u) => {
+    if (filter !== "all" && u.status !== filter) return false;
+    if (roleFilter !== "all" && u.role !== roleFilter) return false;
+    return true;
+  });
 
   const filters = [
     { id: "all", label: "Tous" },
     { id: "PENDING_VALIDATION", label: "En attente" },
     { id: "ACTIVE", label: "Actifs" },
     { id: "SUSPENDED", label: "Suspendus" },
+  ];
+
+  const roleFilters = [
+    { id: "all", label: "Tous les rôles" },
+    { id: "SENIOR", label: "Seniors" },
+    { id: "JUNIOR", label: "Juniors" },
   ];
 
   if (isLoading) {
@@ -163,7 +174,7 @@ function UsersTab() {
         </div>
       )}
 
-      <div className="flex gap-2 mb-4 flex-wrap">
+      <div className="flex gap-2 mb-2 flex-wrap">
         {filters.map((f) => (
           <button
             key={f.id}
@@ -172,6 +183,20 @@ function UsersTab() {
               filter === f.id ? "bg-[#dc4256] text-white" : "bg-white text-muted-foreground hover:bg-muted border"
             }`}
             data-testid={`filter-users-${f.id}`}
+          >
+            {f.label}
+          </button>
+        ))}
+      </div>
+      <div className="flex gap-2 mb-4 flex-wrap">
+        {roleFilters.map((f) => (
+          <button
+            key={f.id}
+            onClick={() => setRoleFilter(f.id)}
+            className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
+              roleFilter === f.id ? "bg-[#dc4256] text-white" : "bg-white text-muted-foreground hover:bg-muted border"
+            }`}
+            data-testid={`filter-role-${f.id}`}
           >
             {f.label}
           </button>
