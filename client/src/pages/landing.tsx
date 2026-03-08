@@ -25,8 +25,11 @@ export default function Landing() {
             </Link>
           </div>
           <div className="flex-1 flex justify-center">
-            <div className="relative">
-              <div className="w-64 h-64 md:w-80 md:h-80 rounded-2xl overflow-hidden border-4 border-[#c9a4e8]">
+            <div className="relative w-72 h-80 md:w-96 md:h-[26rem]">
+              <div className="absolute top-0 right-0 w-40 h-40 md:w-52 md:h-52 rounded-2xl overflow-hidden border-4 border-[#c9a4e8] z-10 shadow-lg">
+                <img src={jeuneImg} alt="Jeune" className="w-full h-full object-cover" />
+              </div>
+              <div className="absolute bottom-0 left-0 w-52 h-52 md:w-72 md:h-72 rounded-2xl overflow-hidden border-4 border-[#c9a4e8] shadow-lg">
                 <img src={seniorImg} alt="Senior" className="w-full h-full object-cover" />
               </div>
             </div>
