@@ -88,26 +88,39 @@ export const loginSchema = z.object({
   password: z.string().min(6, "Le mot de passe doit faire au moins 6 caractères"),
 });
 
+const optionalString = z.preprocess(
+  (val) => (val === "" ? undefined : val),
+  z.string().optional()
+);
+
+const optionalEmail = z.preprocess(
+  (val) => (val === "" ? undefined : val),
+  z.string().email().optional()
+);
+
 export const insertUserSchema = z.object({
   email: z.string().email("Email invalide"),
   password: z.string().min(6, "Le mot de passe doit faire au moins 6 caractères"),
   firstName: z.string().min(1, "Prénom requis"),
   lastName: z.string().min(1, "Nom requis"),
   role: z.enum(["SENIOR", "JUNIOR"]),
-  birthDate: z.string().optional(),
-  phone: z.string().optional(),
-  address: z.string().optional(),
-  city: z.string().optional(),
-  postalCode: z.string().optional(),
-  bio: z.string().max(500).optional(),
-  desiredActivity: z.string().optional(),
-  schoolName: z.string().optional(),
-  referentTitle: z.string().optional(),
-  referentFirstName: z.string().optional(),
-  referentLastName: z.string().optional(),
-  referentEmail: z.string().email().optional(),
-  trustedPersonName: z.string().optional(),
-  trustedPersonEmail: z.string().email().optional(),
+  birthDate: optionalString,
+  phone: optionalString,
+  address: optionalString,
+  city: optionalString,
+  postalCode: optionalString,
+  bio: z.preprocess(
+    (val) => (val === "" ? undefined : val),
+    z.string().max(500).optional()
+  ),
+  desiredActivity: optionalString,
+  schoolName: optionalString,
+  referentTitle: optionalString,
+  referentFirstName: optionalString,
+  referentLastName: optionalString,
+  referentEmail: optionalEmail,
+  trustedPersonName: optionalString,
+  trustedPersonEmail: optionalEmail,
   validatorEmail: z.string().email("Email du validateur requis"),
   categoryIds: z.array(z.string()).optional(),
 });
