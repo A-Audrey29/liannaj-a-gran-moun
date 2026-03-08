@@ -184,9 +184,26 @@ export const updateProfileSchema = z.object({
   referentLastName: optionalString,
 });
 
+export interface PaymentRecord {
+  id: string;
+  userId: string;
+  amount: number;
+  label: string;
+  date: Date;
+  createdAt: Date;
+}
+
+export const createPaymentSchema = z.object({
+  userId: z.string().min(1, "Utilisateur requis"),
+  amount: z.number().positive("Montant doit être positif"),
+  label: z.string().min(1, "Libellé requis"),
+  date: z.string().optional(),
+});
+
 export type LoginInput = z.infer<typeof loginSchema>;
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type InsertIntervention = z.infer<typeof insertInterventionSchema>;
 export type FeedbackInput = z.infer<typeof feedbackSchema>;
 export type CreateRelationInput = z.infer<typeof createRelationSchema>;
 export type UpdateProfileInput = z.infer<typeof updateProfileSchema>;
+export type CreatePaymentInput = z.infer<typeof createPaymentSchema>;

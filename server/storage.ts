@@ -1,5 +1,5 @@
 import { prisma } from "./prisma";
-import type { User, Category, UserCategory, Relation, Intervention, AdminRecommendation, Notification, Prisma } from "../generated/prisma/client.ts";
+import type { User, Category, UserCategory, Relation, Intervention, AdminRecommendation, Notification, PaymentRecord, Prisma } from "../generated/prisma/client.ts";
 
 export interface IStorage {
   getUser(id: string): Promise<User | null>;
@@ -38,6 +38,13 @@ export interface IStorage {
   getNotifications(userId: string): Promise<Notification[]>;
   createNotification(data: Prisma.NotificationCreateInput): Promise<Notification>;
   markNotificationRead(id: string): Promise<Notification>;
+
+  getAllUsers(): Promise<User[]>;
+  deleteUser(id: string): Promise<void>;
+  getAllRelations(): Promise<(Relation & { senior: User; junior: User })[]>;
+  getAllRelationsByStatus(status: string): Promise<(Relation & { senior: User; junior: User })[]>;
+  createPayment(data: { userId: string; amount: number; label: string; date?: Date }): Promise<PaymentRecord>;
+  getPayments(): Promise<(PaymentRecord & { user: User })[]>;
 }
 
 class DatabaseStorage implements IStorage {
@@ -279,6 +286,56 @@ class DatabaseStorage implements IStorage {
     return prisma.notification.update({
       where: { id },
       data: { isRead: true },
+    });
+  }
+
+  async getAllUsers(): Promise<User[]> {
+    return prisma.user.findMany({
+      orderBy: [{ status: "asc" }, { createdAt: "desc" }],
+    });
+  }
+
+  async deleteUser(id: string): Promise<void> {
+    await prisma.user.delete({ where: { id } });
+  }
+
+  async getAllRelations(): Promise<(Relation & { senior: User; junior: User })[]> {
+    return prisma.relation.findMany({
+      include: { senior: true, junior: true },
+      orderBy: { createdAt: "desc" },
+    });
+  }
+
+  async getAllRelationsByStatus(status: string): Promise<(Relation & { senior: User; junior: User })[]> {
+    return prisma.relation.findMany({
+      where: { status: status as any },
+      include: { senior: true, junior: true },
+      orderBy: { createdAt: "desc" },
+    });
+  }
+
+  async createPayment(data: { userId: string; amount: number; label: string; date?: Date }): Promise<PaymentRecord> {
+    const [payment] = await prisma.$transaction([
+      prisma.paymentRecord.create({
+        data: {
+          userId: data.userId,
+          amount: data.amount,
+          label: data.label,
+          date: data.date || new Date(),
+        },
+      }),
+      prisma.user.update({
+        where: { id: data.userId },
+        data: { subscriptionActive: true },
+      }),
+    ]);
+    return payment;
+  }
+
+  async getPayments(): Promise<(PaymentRecord & { user: User })[]> {
+    return prisma.paymentRecord.findMany({
+      include: { user: true },
+      orderBy: { date: "desc" },
     });
   }
 }

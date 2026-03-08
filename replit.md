@@ -43,6 +43,7 @@ client/
       validation-success.tsx    # Compte validé avec succès
       validation-error.tsx      # Token expiré/invalide + renvoi de lien
       home.tsx           # Mon espace (Dashboard 4 onglets : Tableau de bord, Rencontres, Demandes, Profil)
+      admin.tsx          # Dashboard Admin (4 onglets : Utilisateurs, Relations, Cadrage, Paiements)
       relation-detail.tsx # Détail relation + interventions + feedback étoiles
       not-found.tsx      # Page 404
     components/
@@ -116,6 +117,14 @@ client/
 - `POST /api/interventions/:id/feedback` — soumettre feedback (rating 1-5 + comment)
 - `POST /api/admin/recommendations` — recommandation admin
 - `DELETE /api/admin/recommendations/:id` — supprimer recommandation
+- `GET /api/admin/users` — liste tous les utilisateurs (requireAdmin)
+- `PATCH /api/admin/users/:id/validate` — valider un utilisateur PENDING → ACTIVE
+- `PATCH /api/admin/users/:id/suspend` — suspendre un utilisateur
+- `DELETE /api/admin/users/:id` — supprimer un utilisateur
+- `GET /api/admin/relations` — toutes les relations
+- `GET /api/admin/relations/pending-meeting` — relations en attente de 1ère rencontre
+- `GET /api/admin/payments` — tous les paiements
+- `POST /api/admin/payments` — enregistrer un paiement (active subscriptionActive)
 
 ## Règles Métier Clés
 1. **Seuls les Seniors initient** les relations (Junior 403)
@@ -140,5 +149,5 @@ client/
 2. ✅ **Sprint 2**: Inscription + Validation Comptes (formulaires, token UUID, emails Brevo, renvoi de lien)
 3. ✅ **Sprint 3**: Logique Backend (Matching, Relations, Interventions, Feedback, Admin Recommendations)
 4. ✅ **Sprint 4**: Interfaces Utilisateurs (Landing, Dashboard 4 onglets, Détail Relation, Feedback étoiles, Notifications)
-5. 🔲 **Sprint 5**: Dashboard Admin (Gestion, Supervision)
+5. ✅ **Sprint 5**: Dashboard Admin (Gestion utilisateurs, Relations, Cadrage 1ère rencontre, Paiements)
 6. 🔲 **Sprint 6**: Notifications + Emails + PWA

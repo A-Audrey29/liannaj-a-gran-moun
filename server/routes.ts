@@ -7,7 +7,7 @@ import { requireAuth, requireAdmin } from "./auth";
 import { storage } from "./storage";
 import { sendEmail } from "./lib/email";
 import { getValidationEmailHtml } from "./lib/email-templates";
-import { insertUserSchema, createRelationSchema, insertInterventionSchema, feedbackSchema } from "../shared/schema";
+import { insertUserSchema, createRelationSchema, insertInterventionSchema, feedbackSchema, createPaymentSchema } from "../shared/schema";
 
 function sanitizeUser(user: any) {
   const { password, validationToken, validationExpiry, ...safe } = user;
@@ -713,6 +713,121 @@ export async function registerRoutes(
       res.json({ message: "Recommandation supprimée" });
     } catch (err) {
       console.error("[DELETE_RECOMMENDATION] Error:", err);
+      res.status(500).json({ message: "Erreur" });
+    }
+  });
+
+  // ==================== ADMIN DASHBOARD ====================
+
+  app.get("/api/admin/users", requireAdmin, async (_req, res) => {
+    try {
+      const users = await storage.getAllUsers();
+      res.json(users.map(sanitizeUser));
+    } catch (err) {
+      console.error("[ADMIN_USERS] Error:", err);
+      res.status(500).json({ message: "Erreur" });
+    }
+  });
+
+  app.patch("/api/admin/users/:id/validate", requireAdmin, async (req, res) => {
+    try {
+      const user = await storage.getUser(req.params.id);
+      if (!user) return res.status(404).json({ message: "Utilisateur non trouvé" });
+      if (user.status !== "PENDING_VALIDATION") {
+        return res.status(400).json({ message: "Cet utilisateur n'est pas en attente de validation" });
+      }
+      const updated = await storage.updateUser(user.id, { status: "ACTIVE", validationToken: null });
+      res.json(sanitizeUser(updated));
+    } catch (err) {
+      console.error("[ADMIN_VALIDATE] Error:", err);
+      res.status(500).json({ message: "Erreur" });
+    }
+  });
+
+  app.patch("/api/admin/users/:id/suspend", requireAdmin, async (req, res) => {
+    try {
+      const user = await storage.getUser(req.params.id);
+      if (!user) return res.status(404).json({ message: "Utilisateur non trouvé" });
+      if (user.role === "ADMIN") return res.status(403).json({ message: "Impossible de suspendre un administrateur" });
+      const updated = await storage.updateUser(user.id, { status: "SUSPENDED" });
+      res.json(sanitizeUser(updated));
+    } catch (err) {
+      console.error("[ADMIN_SUSPEND] Error:", err);
+      res.status(500).json({ message: "Erreur" });
+    }
+  });
+
+  app.delete("/api/admin/users/:id", requireAdmin, async (req, res) => {
+    try {
+      const user = await storage.getUser(req.params.id);
+      if (!user) return res.status(404).json({ message: "Utilisateur non trouvé" });
+      if (user.role === "ADMIN") return res.status(403).json({ message: "Impossible de supprimer un administrateur" });
+      await storage.deleteUser(user.id);
+      res.json({ message: "Utilisateur supprimé" });
+    } catch (err) {
+      console.error("[ADMIN_DELETE_USER] Error:", err);
+      res.status(500).json({ message: "Erreur" });
+    }
+  });
+
+  app.get("/api/admin/relations", requireAdmin, async (_req, res) => {
+    try {
+      const relations = await storage.getAllRelations();
+      res.json(relations.map((r) => ({
+        ...r,
+        senior: sanitizeUser(r.senior),
+        junior: sanitizeUser(r.junior),
+      })));
+    } catch (err) {
+      console.error("[ADMIN_RELATIONS] Error:", err);
+      res.status(500).json({ message: "Erreur" });
+    }
+  });
+
+  app.get("/api/admin/relations/pending-meeting", requireAdmin, async (_req, res) => {
+    try {
+      const relations = await storage.getAllRelationsByStatus("PENDING_FIRST_MEETING");
+      res.json(relations.map((r) => ({
+        ...r,
+        senior: sanitizeUser(r.senior),
+        junior: sanitizeUser(r.junior),
+      })));
+    } catch (err) {
+      console.error("[ADMIN_PENDING_MEETING] Error:", err);
+      res.status(500).json({ message: "Erreur" });
+    }
+  });
+
+  app.get("/api/admin/payments", requireAdmin, async (_req, res) => {
+    try {
+      const payments = await storage.getPayments();
+      res.json(payments.map((p) => ({
+        ...p,
+        user: sanitizeUser(p.user),
+      })));
+    } catch (err) {
+      console.error("[ADMIN_PAYMENTS] Error:", err);
+      res.status(500).json({ message: "Erreur" });
+    }
+  });
+
+  app.post("/api/admin/payments", requireAdmin, async (req, res) => {
+    try {
+      const parsed = createPaymentSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: "Données invalides", errors: parsed.error.flatten() });
+      }
+      const user = await storage.getUser(parsed.data.userId);
+      if (!user) return res.status(404).json({ message: "Utilisateur non trouvé" });
+      const payment = await storage.createPayment({
+        userId: parsed.data.userId,
+        amount: parsed.data.amount,
+        label: parsed.data.label,
+        date: parsed.data.date ? new Date(parsed.data.date) : undefined,
+      });
+      res.status(201).json(payment);
+    } catch (err) {
+      console.error("[ADMIN_CREATE_PAYMENT] Error:", err);
       res.status(500).json({ message: "Erreur" });
     }
   });
