@@ -16,7 +16,7 @@ import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import StatusBadge from "@/components/status-badge";
-import { Calendar, MessageCircle, User, LayoutGrid, ChevronRight, Plus, Check, X, Pencil, Heart, Camera, Trash2 } from "lucide-react";
+import { Calendar, MessageCircle, User, LayoutGrid, ChevronRight, Plus, Check, X, Pencil, Heart, Camera, Trash2, AlertTriangle, Star, Users, ClipboardCheck } from "lucide-react";
 import { useState, useRef } from "react";
 import { updateProfileSchema, type UpdateProfileInput } from "@shared/schema";
 import type { Relation, User as UserType, Intervention } from "@shared/schema";
@@ -31,6 +31,30 @@ const ALL_TABS = [
   { id: "profil", label: "Profil", icon: User },
 ] as const;
 
+function useDashboardCounts(relations?: RelationWithUsers[], pendingFB?: Intervention[], user?: AuthUser | null) {
+  const allRels = relations || [];
+  const isJunior = user?.role === "JUNIOR";
+
+  const pendingDemandes = allRels.filter((r) => {
+    if (isJunior) return r.status === "PENDING" && r.juniorId === user?.id;
+    return r.status === "PENDING";
+  });
+
+  const activeRelations = allRels.filter((r) => r.status === "ACTIVE" || r.status === "PENDING_FIRST_MEETING");
+
+  const proposedInterventions = activeRelations.flatMap((r) =>
+    (r.interventions || []).filter((i) => i.status === "PROPOSED")
+  );
+
+  const nextIntervention = activeRelations
+    .flatMap((r) => (r.interventions || []).filter((i) => i.status === "CONFIRMED" || i.status === "PROPOSED"))
+    .sort((a, b) => new Date(a.scheduledDate).getTime() - new Date(b.scheduledDate).getTime())[0];
+
+  const feedbackCount = (pendingFB || []).length;
+
+  return { pendingDemandes, activeRelations, proposedInterventions, nextIntervention, feedbackCount };
+}
+
 export default function Home() {
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useState<string>("dashboard");
@@ -40,20 +64,48 @@ export default function Home() {
   const { data: relations, isLoading: relLoading } = useQuery<RelationWithUsers[]>({ queryKey: ["/api/relations"] });
   const { data: pendingFB } = useQuery<Intervention[]>({ queryKey: ["/api/interventions/pending-feedback"] });
 
-  const pendingDemandes = (relations || []).filter((r) => {
-    if (user?.role === "JUNIOR") return r.status === "PENDING" && r.juniorId !== user?.id ? false : r.status === "PENDING";
-    return r.status === "PENDING";
-  });
+  const counts = useDashboardCounts(relations, pendingFB, user);
+
+  const getTabBadge = (tabId: string) => {
+    if (tabId === "demandes") return counts.pendingDemandes.length;
+    if (tabId === "rencontres" && user?.role === "JUNIOR") return counts.proposedInterventions.length;
+    return 0;
+  };
+
+  const urgentAlerts: { message: string; tab: string }[] = [];
+  if (user?.role === "JUNIOR" && counts.proposedInterventions.length > 0) {
+    urgentAlerts.push({ message: `${counts.proposedInterventions.length} intervention${counts.proposedInterventions.length > 1 ? "s" : ""} à confirmer !`, tab: "rencontres" });
+  }
+  if (counts.feedbackCount > 0) {
+    urgentAlerts.push({ message: `${counts.feedbackCount} feedback${counts.feedbackCount > 1 ? "s" : ""} à donner`, tab: "rencontres" });
+  }
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-8">
+      {urgentAlerts.length > 0 && (
+        <div className="space-y-2 mb-4">
+          {urgentAlerts.map((alert, i) => (
+            <button
+              key={i}
+              onClick={() => setActiveTab(alert.tab)}
+              className="w-full flex items-center gap-3 px-4 py-3 rounded-2xl bg-orange-50 border border-orange-200 text-left hover:bg-orange-100 transition-colors"
+              data-testid={`alert-urgent-${i}`}
+            >
+              <AlertTriangle className="w-5 h-5 text-orange-500 shrink-0" />
+              <span className="text-sm font-medium text-orange-800 flex-1">{alert.message}</span>
+              <ChevronRight className="w-4 h-4 text-orange-400" />
+            </button>
+          ))}
+        </div>
+      )}
+
       <h1 className="text-2xl md:text-3xl font-bold mb-6" data-testid="text-mon-espace">Bonjour {user?.firstName}</h1>
 
       <div className="flex gap-1 mb-8 overflow-x-auto pb-2">
         {tabs.map((tab) => {
           const isActive = activeTab === tab.id;
           const Icon = tab.icon;
-          const count = tab.id === "demandes" ? pendingDemandes.length : 0;
+          const count = getTabBadge(tab.id);
           return (
             <button
               key={tab.id}
@@ -75,7 +127,7 @@ export default function Home() {
         })}
       </div>
 
-      {activeTab === "dashboard" && <DashboardTab relations={relations} pendingFB={pendingFB} isLoading={relLoading} user={user} onSwitchTab={setActiveTab} />}
+      {activeTab === "dashboard" && <DashboardTab counts={counts} isLoading={relLoading} user={user} onSwitchTab={setActiveTab} />}
       {activeTab === "rencontres" && <RencontresTab relations={relations} isLoading={relLoading} user={user} />}
       {activeTab === "demandes" && <DemandesTab relations={relations} isLoading={relLoading} user={user} />}
       {activeTab === "profil" && <ProfilTab user={user} />}
@@ -83,68 +135,120 @@ export default function Home() {
   );
 }
 
-function DashboardTab({ relations, pendingFB, isLoading, user, onSwitchTab }: { relations?: RelationWithUsers[]; pendingFB?: Intervention[]; isLoading: boolean; user: any; onSwitchTab: (tab: string) => void }) {
+type DashboardCounts = ReturnType<typeof useDashboardCounts>;
+
+function DashboardCard({ icon: Icon, count, label, sublabel, onClick, highlight, testId }: {
+  icon: any; count: number | string; label: string; sublabel?: string; onClick: () => void; highlight?: "orange" | "red" | "purple"; testId: string;
+}) {
+  const bgClass = highlight === "orange" ? "bg-orange-50 border-orange-200" : highlight === "red" ? "bg-red-50 border-red-200" : highlight === "purple" ? "bg-[#f3eaff] border-[#e8d7fe]" : "bg-white border-transparent";
+  const iconColor = highlight === "orange" ? "text-orange-500" : highlight === "red" ? "text-[#dc4256]" : highlight === "purple" ? "text-[#8b5cf6]" : "text-muted-foreground";
+  const countColor = highlight === "orange" ? "text-orange-700" : highlight === "red" ? "text-[#dc4256]" : highlight === "purple" ? "text-[#8b5cf6]" : "text-foreground";
+
+  return (
+    <button
+      onClick={onClick}
+      className={`${bgClass} border rounded-2xl shadow-sm p-4 flex flex-col items-center justify-center aspect-square hover:shadow-md transition-shadow cursor-pointer text-center`}
+      data-testid={testId}
+    >
+      <Icon className={`w-7 h-7 ${iconColor} mb-2`} />
+      <span className={`text-3xl font-bold ${countColor}`}>{count}</span>
+      <span className="text-xs font-medium text-muted-foreground mt-1 leading-tight">{label}</span>
+      {sublabel && <span className="text-[10px] text-muted-foreground/70 mt-0.5">{sublabel}</span>}
+    </button>
+  );
+}
+
+function DashboardTab({ counts, isLoading, user, onSwitchTab }: { counts: DashboardCounts; isLoading: boolean; user: AuthUser | null; onSwitchTab: (tab: string) => void }) {
   const [, setLocation] = useLocation();
+  const isJunior = user?.role === "JUNIOR";
 
   if (isLoading) {
-    return <div className="space-y-4"><Skeleton className="h-20 rounded-2xl" /><Skeleton className="h-20 rounded-2xl" /></div>;
+    return <div className="grid grid-cols-2 gap-3"><Skeleton className="aspect-square rounded-2xl" /><Skeleton className="aspect-square rounded-2xl" /><Skeleton className="aspect-square rounded-2xl" /><Skeleton className="aspect-square rounded-2xl" /></div>;
   }
 
-  const activeRelations = (relations || []).filter((r) => r.status === "ACTIVE" || r.status === "PENDING_FIRST_MEETING");
-  const pendingDemandes = (relations || []).filter((r) => r.status === "PENDING");
-  const nextIntervention = activeRelations.flatMap((r) => (r.interventions || []).filter((i) => i.status === "CONFIRMED" || i.status === "PROPOSED")).sort((a, b) => new Date(a.scheduledDate).getTime() - new Date(b.scheduledDate).getTime())[0];
+  const nextDate = counts.nextIntervention
+    ? new Date(counts.nextIntervention.scheduledDate).toLocaleDateString("fr-FR", { day: "numeric", month: "short" })
+    : "--";
 
   return (
     <div>
-      <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-4" data-testid="text-resume">RESUME</h3>
-
-      <Card className="rounded-2xl mb-3 border-0 shadow-sm">
-        <CardContent className="flex items-center justify-between py-4">
-          <div className="flex items-center gap-3">
-            <Calendar className="w-5 h-5 text-muted-foreground" />
-            <span className="text-sm font-medium">
-              {nextIntervention
-                ? `Prochaine rencontre le ${new Date(nextIntervention.scheduledDate).toLocaleDateString("fr-FR")}`
-                : "Aucune rencontre prevue"}
-            </span>
-          </div>
-          <div className="flex items-center gap-2">
-            {!nextIntervention && <span className="text-muted-foreground text-lg">--</span>}
-            <button className="text-[#dc4256] text-sm font-medium flex items-center gap-1 hover:underline" onClick={() => onSwitchTab("rencontres")} data-testid="link-planifier">
-              Planifier <ChevronRight className="w-4 h-4" />
-            </button>
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card className="rounded-2xl mb-3 border-0 shadow-sm">
-        <CardContent className="flex items-center justify-between py-4">
-          <div className="flex items-center gap-3">
-            <MessageCircle className="w-5 h-5 text-muted-foreground" />
-            <span className="text-sm font-medium">{pendingDemandes.length} demande{pendingDemandes.length !== 1 ? "s" : ""} en attente</span>
-          </div>
-          <div className="flex items-center gap-2">
-            {pendingDemandes.length > 0 && (
-              <Badge className="bg-[#dc4256]/10 text-[#dc4256] border-[#dc4256]/20 text-xs">A traiter</Badge>
-            )}
-            <button className="text-[#dc4256] text-sm font-medium flex items-center gap-1 hover:underline" onClick={() => onSwitchTab("demandes")} data-testid="link-voir-demandes">
-              Voir <ChevronRight className="w-4 h-4" />
-            </button>
-          </div>
-        </CardContent>
-      </Card>
-
-      {(pendingFB || []).length > 0 && (
-        <Card className="rounded-2xl mb-3 border-0 shadow-sm bg-orange-50">
-          <CardContent className="flex items-center justify-between py-4">
-            <div className="flex items-center gap-3">
-              <span className="text-lg">&#9733;</span>
-              <span className="text-sm font-medium text-orange-800">{pendingFB!.length} feedback{pendingFB!.length > 1 ? "s" : ""} a donner</span>
-            </div>
-            <Badge className="bg-orange-200 text-orange-800 text-xs">Urgent</Badge>
-          </CardContent>
-        </Card>
-      )}
+      <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-4" data-testid="text-resume">Résumé</h3>
+      <div className="grid grid-cols-2 gap-3">
+        {isJunior ? (
+          <>
+            <DashboardCard
+              icon={ClipboardCheck}
+              count={counts.proposedInterventions.length}
+              label="À confirmer"
+              sublabel="Interventions"
+              onClick={() => onSwitchTab("rencontres")}
+              highlight={counts.proposedInterventions.length > 0 ? "orange" : undefined}
+              testId="card-a-confirmer"
+            />
+            <DashboardCard
+              icon={MessageCircle}
+              count={counts.pendingDemandes.length}
+              label="Demandes reçues"
+              sublabel="En attente"
+              onClick={() => onSwitchTab("demandes")}
+              highlight={counts.pendingDemandes.length > 0 ? "red" : undefined}
+              testId="card-demandes"
+            />
+            <DashboardCard
+              icon={Calendar}
+              count={nextDate}
+              label="Prochaine rencontre"
+              onClick={() => onSwitchTab("rencontres")}
+              highlight="purple"
+              testId="card-prochaine-rencontre"
+            />
+            <DashboardCard
+              icon={Star}
+              count={counts.feedbackCount}
+              label="Feedback à donner"
+              onClick={() => onSwitchTab("rencontres")}
+              highlight={counts.feedbackCount > 0 ? "orange" : undefined}
+              testId="card-feedback"
+            />
+          </>
+        ) : (
+          <>
+            <DashboardCard
+              icon={MessageCircle}
+              count={counts.pendingDemandes.length}
+              label="Demandes envoyées"
+              sublabel="En attente"
+              onClick={() => onSwitchTab("demandes")}
+              highlight={counts.pendingDemandes.length > 0 ? "purple" : undefined}
+              testId="card-demandes"
+            />
+            <DashboardCard
+              icon={Users}
+              count={counts.activeRelations.length}
+              label="Relations actives"
+              onClick={() => onSwitchTab("rencontres")}
+              highlight="purple"
+              testId="card-relations-actives"
+            />
+            <DashboardCard
+              icon={Calendar}
+              count={nextDate}
+              label="Prochaine rencontre"
+              onClick={() => onSwitchTab("rencontres")}
+              highlight="purple"
+              testId="card-prochaine-rencontre"
+            />
+            <DashboardCard
+              icon={Star}
+              count={counts.feedbackCount}
+              label="Feedback à donner"
+              onClick={() => onSwitchTab("rencontres")}
+              highlight={counts.feedbackCount > 0 ? "orange" : undefined}
+              testId="card-feedback"
+            />
+          </>
+        )}
+      </div>
     </div>
   );
 }

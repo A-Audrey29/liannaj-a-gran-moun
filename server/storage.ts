@@ -16,7 +16,7 @@ export interface IStorage {
   deleteUserCategories(userId: string): Promise<void>;
 
   getRelation(id: string): Promise<Relation | null>;
-  getRelationsByUser(userId: string): Promise<(Relation & { senior: User; junior: User })[]>;
+  getRelationsByUser(userId: string): Promise<(Relation & { senior: User; junior: User; interventions: Intervention[] })[]>;
   getRelationWithUsers(id: string): Promise<(Relation & { senior: User; junior: User; interventions: Intervention[] }) | null>;
   getRelationBySeniorAndJunior(seniorId: string, juniorId: string): Promise<Relation | null>;
   createRelation(seniorId: string, juniorId: string): Promise<Relation>;
@@ -106,12 +106,12 @@ class DatabaseStorage implements IStorage {
     return prisma.relation.findUnique({ where: { id } });
   }
 
-  async getRelationsByUser(userId: string): Promise<(Relation & { senior: User; junior: User })[]> {
+  async getRelationsByUser(userId: string): Promise<(Relation & { senior: User; junior: User; interventions: Intervention[] })[]> {
     return prisma.relation.findMany({
       where: {
         OR: [{ seniorId: userId }, { juniorId: userId }],
       },
-      include: { senior: true, junior: true },
+      include: { senior: true, junior: true, interventions: true },
       orderBy: { createdAt: "desc" },
     });
   }
