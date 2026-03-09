@@ -31,6 +31,8 @@ const ALL_TABS = [
   { id: "profil", label: "Profil", icon: User },
 ] as const;
 
+type InterventionWithPartner = Intervention & { partnerName: string; relationId: string };
+
 function useDashboardCounts(relations?: RelationWithUsers[], pendingFB?: Intervention[], user?: AuthUser | null) {
   const allRels = relations || [];
   const isJunior = user?.role === "JUNIOR";
@@ -42,13 +44,21 @@ function useDashboardCounts(relations?: RelationWithUsers[], pendingFB?: Interve
 
   const activeRelations = allRels.filter((r) => r.status === "ACTIVE" || r.status === "PENDING_FIRST_MEETING");
 
-  const proposedInterventions = activeRelations.flatMap((r) =>
-    (r.interventions || []).filter((i) => i.status === "PROPOSED")
-  );
+  const proposedInterventions: InterventionWithPartner[] = activeRelations.flatMap((r) => {
+    const partner = r.seniorId === user?.id ? r.junior : r.senior;
+    return (r.interventions || []).filter((i) => i.status === "PROPOSED").map((i) => ({
+      ...i, partnerName: `${partner.firstName} ${partner.lastName}`, relationId: r.id,
+    }));
+  });
 
-  const nextIntervention = activeRelations
-    .flatMap((r) => (r.interventions || []).filter((i) => i.status === "CONFIRMED" || i.status === "PROPOSED"))
-    .sort((a, b) => new Date(a.scheduledDate).getTime() - new Date(b.scheduledDate).getTime())[0];
+  const allUpcoming = activeRelations.flatMap((r) => {
+    const partner = r.seniorId === user?.id ? r.junior : r.senior;
+    return (r.interventions || []).filter((i) => i.status === "CONFIRMED" || i.status === "PROPOSED").map((i) => ({
+      ...i, partnerName: `${partner.firstName} ${partner.lastName}`, relationId: r.id,
+    }));
+  }).sort((a, b) => new Date(a.scheduledDate).getTime() - new Date(b.scheduledDate).getTime());
+
+  const nextIntervention = allUpcoming[0] || null;
 
   const feedbackCount = (pendingFB || []).length;
 
@@ -137,8 +147,8 @@ export default function Home() {
 
 type DashboardCounts = ReturnType<typeof useDashboardCounts>;
 
-function DashboardCard({ icon: Icon, count, label, sublabel, onClick, highlight, testId }: {
-  icon: any; count: number | string; label: string; sublabel?: string; onClick: () => void; highlight?: "orange" | "red" | "purple"; testId: string;
+function DashboardCard({ icon: Icon, count, label, detail, onClick, highlight, testId }: {
+  icon: any; count: number | string; label: string; detail?: string; onClick: () => void; highlight?: "orange" | "red" | "purple"; testId: string;
 }) {
   const bgClass = highlight === "orange" ? "bg-orange-50 border-orange-200" : highlight === "red" ? "bg-red-50 border-red-200" : highlight === "purple" ? "bg-[#f3eaff] border-[#e8d7fe]" : "bg-white border-transparent";
   const iconColor = highlight === "orange" ? "text-orange-500" : highlight === "red" ? "text-[#dc4256]" : highlight === "purple" ? "text-[#8b5cf6]" : "text-muted-foreground";
@@ -147,28 +157,54 @@ function DashboardCard({ icon: Icon, count, label, sublabel, onClick, highlight,
   return (
     <button
       onClick={onClick}
-      className={`${bgClass} border rounded-2xl shadow-sm p-4 flex flex-col items-center justify-center aspect-square hover:shadow-md transition-shadow cursor-pointer text-center`}
+      className={`${bgClass} border rounded-2xl shadow-sm p-3 flex flex-col items-center justify-center hover:shadow-md transition-shadow cursor-pointer text-center min-h-[120px]`}
       data-testid={testId}
     >
-      <Icon className={`w-7 h-7 ${iconColor} mb-2`} />
-      <span className={`text-3xl font-bold ${countColor}`}>{count}</span>
-      <span className="text-xs font-medium text-muted-foreground mt-1 leading-tight">{label}</span>
-      {sublabel && <span className="text-[10px] text-muted-foreground/70 mt-0.5">{sublabel}</span>}
+      <Icon className={`w-5 h-5 ${iconColor} mb-1`} />
+      <span className={`text-2xl font-bold ${countColor} leading-tight`}>{count}</span>
+      <span className="text-[11px] font-semibold text-muted-foreground mt-1 leading-tight">{label}</span>
+      {detail && <span className="text-[10px] text-muted-foreground/80 mt-0.5 leading-tight line-clamp-2">{detail}</span>}
     </button>
   );
 }
 
 function DashboardTab({ counts, isLoading, user, onSwitchTab }: { counts: DashboardCounts; isLoading: boolean; user: AuthUser | null; onSwitchTab: (tab: string) => void }) {
-  const [, setLocation] = useLocation();
   const isJunior = user?.role === "JUNIOR";
 
   if (isLoading) {
-    return <div className="grid grid-cols-2 gap-3"><Skeleton className="aspect-square rounded-2xl" /><Skeleton className="aspect-square rounded-2xl" /><Skeleton className="aspect-square rounded-2xl" /><Skeleton className="aspect-square rounded-2xl" /></div>;
+    return <div className="grid grid-cols-2 gap-3"><Skeleton className="h-[120px] rounded-2xl" /><Skeleton className="h-[120px] rounded-2xl" /><Skeleton className="h-[120px] rounded-2xl" /><Skeleton className="h-[120px] rounded-2xl" /></div>;
   }
 
   const nextDate = counts.nextIntervention
-    ? new Date(counts.nextIntervention.scheduledDate).toLocaleDateString("fr-FR", { day: "numeric", month: "short" })
-    : "--";
+    ? new Date(counts.nextIntervention.scheduledDate).toLocaleDateString("fr-FR", { day: "numeric", month: "long" })
+    : null;
+  const nextPartner = counts.nextIntervention?.partnerName || null;
+  const nextLocation = counts.nextIntervention?.location || null;
+  const nextDetail = nextDate
+    ? `${nextDate}${nextPartner ? `\navec ${nextPartner}` : ""}${nextLocation ? ` · ${nextLocation}` : ""}`
+    : "Aucune prévue";
+
+  const pendingPartners = counts.pendingDemandes.slice(0, 2).map((r) => {
+    const partner = r.seniorId === user?.id ? r.junior : r.senior;
+    return partner.firstName;
+  });
+  const pendingDetail = pendingPartners.length > 0
+    ? pendingPartners.join(", ") + (counts.pendingDemandes.length > 2 ? "…" : "")
+    : "Aucune";
+
+  const proposedDetail = counts.proposedInterventions.length > 0
+    ? counts.proposedInterventions.length === 1
+      ? `de ${counts.proposedInterventions[0].partnerName}`
+      : `${counts.proposedInterventions.length} propositions`
+    : "Aucune";
+
+  const activePartners = counts.activeRelations.slice(0, 2).map((r) => {
+    const partner = r.seniorId === user?.id ? r.junior : r.senior;
+    return partner.firstName;
+  });
+  const activeDetail = activePartners.length > 0
+    ? activePartners.join(", ") + (counts.activeRelations.length > 2 ? "…" : "")
+    : "Aucune";
 
   return (
     <div>
@@ -180,7 +216,7 @@ function DashboardTab({ counts, isLoading, user, onSwitchTab }: { counts: Dashbo
               icon={ClipboardCheck}
               count={counts.proposedInterventions.length}
               label="À confirmer"
-              sublabel="Interventions"
+              detail={proposedDetail}
               onClick={() => onSwitchTab("rencontres")}
               highlight={counts.proposedInterventions.length > 0 ? "orange" : undefined}
               testId="card-a-confirmer"
@@ -189,26 +225,10 @@ function DashboardTab({ counts, isLoading, user, onSwitchTab }: { counts: Dashbo
               icon={MessageCircle}
               count={counts.pendingDemandes.length}
               label="Demandes reçues"
-              sublabel="En attente"
+              detail={pendingDetail}
               onClick={() => onSwitchTab("demandes")}
               highlight={counts.pendingDemandes.length > 0 ? "red" : undefined}
               testId="card-demandes"
-            />
-            <DashboardCard
-              icon={Calendar}
-              count={nextDate}
-              label="Prochaine rencontre"
-              onClick={() => onSwitchTab("rencontres")}
-              highlight="purple"
-              testId="card-prochaine-rencontre"
-            />
-            <DashboardCard
-              icon={Star}
-              count={counts.feedbackCount}
-              label="Feedback à donner"
-              onClick={() => onSwitchTab("rencontres")}
-              highlight={counts.feedbackCount > 0 ? "orange" : undefined}
-              testId="card-feedback"
             />
           </>
         ) : (
@@ -217,7 +237,7 @@ function DashboardTab({ counts, isLoading, user, onSwitchTab }: { counts: Dashbo
               icon={MessageCircle}
               count={counts.pendingDemandes.length}
               label="Demandes envoyées"
-              sublabel="En attente"
+              detail={pendingDetail}
               onClick={() => onSwitchTab("demandes")}
               highlight={counts.pendingDemandes.length > 0 ? "purple" : undefined}
               testId="card-demandes"
@@ -226,28 +246,31 @@ function DashboardTab({ counts, isLoading, user, onSwitchTab }: { counts: Dashbo
               icon={Users}
               count={counts.activeRelations.length}
               label="Relations actives"
+              detail={activeDetail}
               onClick={() => onSwitchTab("rencontres")}
               highlight="purple"
               testId="card-relations-actives"
             />
-            <DashboardCard
-              icon={Calendar}
-              count={nextDate}
-              label="Prochaine rencontre"
-              onClick={() => onSwitchTab("rencontres")}
-              highlight="purple"
-              testId="card-prochaine-rencontre"
-            />
-            <DashboardCard
-              icon={Star}
-              count={counts.feedbackCount}
-              label="Feedback à donner"
-              onClick={() => onSwitchTab("rencontres")}
-              highlight={counts.feedbackCount > 0 ? "orange" : undefined}
-              testId="card-feedback"
-            />
           </>
         )}
+        <DashboardCard
+          icon={Calendar}
+          count={nextDate || "--"}
+          label="Prochaine rencontre"
+          detail={nextDetail}
+          onClick={() => onSwitchTab("rencontres")}
+          highlight="purple"
+          testId="card-prochaine-rencontre"
+        />
+        <DashboardCard
+          icon={Star}
+          count={counts.feedbackCount}
+          label="Feedback à donner"
+          detail={counts.feedbackCount > 0 ? "Urgent" : "À jour"}
+          onClick={() => onSwitchTab("rencontres")}
+          highlight={counts.feedbackCount > 0 ? "orange" : undefined}
+          testId="card-feedback"
+        />
       </div>
     </div>
   );
@@ -255,6 +278,7 @@ function DashboardTab({ counts, isLoading, user, onSwitchTab }: { counts: Dashbo
 
 function RencontresTab({ relations, isLoading, user }: { relations?: RelationWithUsers[]; isLoading: boolean; user: any }) {
   const [, setLocation] = useLocation();
+  const [expandedId, setExpandedId] = useState<string | null>(null);
 
   if (isLoading) return <div className="space-y-4"><Skeleton className="h-24 rounded-2xl" /><Skeleton className="h-24 rounded-2xl" /></div>;
 
@@ -276,27 +300,70 @@ function RencontresTab({ relations, isLoading, user }: { relations?: RelationWit
     <div className="space-y-3">
       {activeRelations.map((rel) => {
         const partner = rel.seniorId === user?.id ? rel.junior : rel.senior;
+        const isExpanded = expandedId === rel.id;
+        const interventions = (rel.interventions || []).sort((a, b) => new Date(b.scheduledDate).getTime() - new Date(a.scheduledDate).getTime());
+
         return (
-          <Card
-            key={rel.id}
-            className="rounded-2xl border-0 shadow-sm cursor-pointer hover:shadow-md transition-shadow"
-            onClick={() => setLocation(`/relations/${rel.id}`)}
-            data-testid={`card-relation-${rel.id}`}
-          >
-            <CardContent className="flex items-center justify-between py-4">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-[#e8d7fe] flex items-center justify-center text-sm font-bold text-[#8b5cf6]">
-                  {partner.firstName[0]}{partner.lastName[0]}
+          <Card key={rel.id} className="rounded-2xl border-0 shadow-sm overflow-hidden" data-testid={`card-relation-${rel.id}`}>
+            <CardContent className="p-0">
+              <button
+                onClick={() => setExpandedId(isExpanded ? null : rel.id)}
+                className="w-full flex items-center justify-between py-4 px-4 hover:bg-muted/30 transition-colors text-left"
+                data-testid={`toggle-relation-${rel.id}`}
+              >
+                <div className="flex items-center gap-3">
+                  <UserAvatar user={partner} />
+                  <div>
+                    <p className="font-medium text-sm">{partner.firstName} {partner.lastName}</p>
+                    <p className="text-xs text-muted-foreground">{partner.city || "Ville non renseignée"}</p>
+                  </div>
                 </div>
-                <div>
-                  <p className="font-medium text-sm">{partner.firstName} {partner.lastName}</p>
-                  <p className="text-xs text-muted-foreground">{partner.city || "Ville non renseignee"}</p>
+                <div className="flex items-center gap-2">
+                  <StatusBadge status={rel.status} />
+                  <ChevronRight className={`w-4 h-4 text-muted-foreground transition-transform ${isExpanded ? "rotate-90" : ""}`} />
                 </div>
-              </div>
-              <div className="flex items-center gap-2">
-                <StatusBadge status={rel.status} />
-                <ChevronRight className="w-4 h-4 text-muted-foreground" />
-              </div>
+              </button>
+
+              {isExpanded && (
+                <div className="border-t px-4 pb-4">
+                  <div className="flex justify-end mt-3 mb-3">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="rounded-full text-xs"
+                      onClick={() => setLocation(`/relations/${rel.id}`)}
+                      data-testid={`button-voir-profil-${rel.id}`}
+                    >
+                      Voir son profil <ChevronRight className="w-3 h-3 ml-1" />
+                    </Button>
+                  </div>
+
+                  {interventions.length === 0 ? (
+                    <p className="text-xs text-muted-foreground text-center py-3">Aucune rencontre planifiée</p>
+                  ) : (
+                    <div className="space-y-2">
+                      <h4 className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Rencontres</h4>
+                      {interventions.map((interv) => (
+                        <div
+                          key={interv.id}
+                          className="flex items-center justify-between py-2 px-3 rounded-xl bg-muted/30 text-sm"
+                          data-testid={`intervention-${interv.id}`}
+                        >
+                          <div>
+                            <p className="font-medium text-xs">
+                              {new Date(interv.scheduledDate).toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "long" })}
+                            </p>
+                            <p className="text-[10px] text-muted-foreground">
+                              {interv.durationMinutes} min{interv.location ? ` · ${interv.location}` : ""}
+                            </p>
+                          </div>
+                          <StatusBadge status={interv.status} />
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
             </CardContent>
           </Card>
         );
