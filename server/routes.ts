@@ -911,6 +911,19 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/admin/notifications", requireAdmin, async (_req, res) => {
+    try {
+      const notifications = await storage.getAllNotifications();
+      res.json(notifications.map((n) => ({
+        ...n,
+        user: sanitizeUser(n.user),
+      })));
+    } catch (err) {
+      console.error("[ADMIN_NOTIFICATIONS] Error:", err);
+      res.status(500).json({ message: "Erreur" });
+    }
+  });
+
   app.get("/api/admin/payments", requireAdmin, async (_req, res) => {
     try {
       const payments = await storage.getPayments();

@@ -47,14 +47,18 @@ import {
   Loader2,
   UserCog,
   UserPlus,
+  Search,
+  Bell,
+  Eye,
 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
-import type { User, Relation, Intervention, PaymentRecord } from "@shared/schema";
+import type { User, Relation, Intervention, PaymentRecord, Notification } from "@shared/schema";
 
 type SafeUser = Omit<User, "password" | "validationToken" | "validationExpiry">;
 type RelationWithUsers = Relation & { senior: SafeUser; junior: SafeUser };
 type PaymentWithUser = PaymentRecord & { user: SafeUser };
 type InterventionWithRelation = Intervention & { relation: Relation & { senior: SafeUser; junior: SafeUser } };
+type NotificationWithUser = Notification & { user: SafeUser };
 
 const ADMIN_TABS = [
   { id: "utilisateurs", label: "Utilisateurs", icon: Users },
@@ -62,6 +66,7 @@ const ADMIN_TABS = [
   { id: "rencontres", label: "Rencontres", icon: Calendar },
   { id: "cadrage", label: "Cadrage", icon: Shield },
   { id: "paiements", label: "Paiements", icon: CreditCard },
+  { id: "notifications", label: "Notifications", icon: Bell },
   { id: "mon-compte", label: "Mon compte", icon: UserCog },
   { id: "creer-admin", label: "Créer un admin", icon: UserPlus },
 ] as const;
@@ -116,6 +121,9 @@ function UsersTab() {
   const { toast } = useToast();
   const [filter, setFilter] = useState("all");
   const [roleFilter, setRoleFilter] = useState("all");
+  const [search, setSearch] = useState("");
+  const [selectedUser, setSelectedUser] = useState<SafeUser | null>(null);
+  const [profileOpen, setProfileOpen] = useState(false);
 
   const { data: users = [], isLoading } = useQuery<SafeUser[]>({ queryKey: ["/api/admin/users"] });
 
@@ -146,11 +154,18 @@ function UsersTab() {
     onError: () => toast({ title: "Erreur", description: "Impossible de supprimer l'utilisateur", variant: "destructive" }),
   });
 
+  function openProfile(u: SafeUser) {
+    setSelectedUser(u);
+    setProfileOpen(true);
+  }
+
   const pendingCount = users.filter((u) => u.status === "PENDING_VALIDATION").length;
+  const searchLower = search.toLowerCase();
 
   const filtered = users.filter((u) => {
     if (filter !== "all" && u.status !== filter) return false;
     if (roleFilter !== "all" && u.role !== roleFilter) return false;
+    if (search && !`${u.firstName} ${u.lastName} ${u.email}`.toLowerCase().includes(searchLower)) return false;
     return true;
   });
 
@@ -165,6 +180,7 @@ function UsersTab() {
     { id: "all", label: "Tous les rôles" },
     { id: "SENIOR", label: "Seniors" },
     { id: "JUNIOR", label: "Juniors" },
+    { id: "ADMIN", label: "Admins" },
   ];
 
   if (isLoading) {
@@ -178,6 +194,17 @@ function UsersTab() {
           {pendingCount} utilisateur{pendingCount > 1 ? "s" : ""} en attente de validation
         </div>
       )}
+
+      <div className="relative mb-4">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+        <Input
+          placeholder="Rechercher par nom, prénom ou email..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          className="pl-9"
+          data-testid="input-search-users"
+        />
+      </div>
 
       <div className="flex gap-2 mb-2 flex-wrap">
         {filters.map((f) => (
@@ -212,8 +239,17 @@ function UsersTab() {
         {filtered.map((u) => (
           <div key={u.id} className="bg-white rounded-lg border p-4 flex flex-col sm:flex-row sm:items-center gap-3" data-testid={`card-user-${u.id}`}>
             <div className="flex-1 min-w-0">
-              <div className="font-medium truncate">{u.firstName} {u.lastName}</div>
+              <button
+                onClick={() => openProfile(u)}
+                className="font-medium text-[#dc4256] hover:underline cursor-pointer truncate"
+                data-testid={`link-user-${u.id}`}
+              >
+                {u.firstName} {u.lastName}
+              </button>
               <div className="text-sm text-muted-foreground truncate">{u.email}</div>
+              {u.referentFirstName && u.referentLastName && (
+                <div className="text-xs text-muted-foreground">Réf: {u.referentTitle || ""} {u.referentFirstName} {u.referentLastName}</div>
+              )}
               <div className="text-xs text-muted-foreground mt-1">Inscrit le {formatDate(u.createdAt)}</div>
             </div>
             <div className="flex items-center gap-2 flex-shrink-0">
@@ -291,6 +327,7 @@ function UsersTab() {
           <div className="text-center py-8 text-muted-foreground">Aucun utilisateur trouvé</div>
         )}
       </div>
+      <ProfileDialog user={selectedUser} open={profileOpen} onOpenChange={setProfileOpen} />
     </div>
   );
 }
@@ -301,6 +338,9 @@ function RelationsTab() {
   const { toast } = useToast();
   const [, navigate] = useLocation();
   const [filter, setFilter] = useState("all");
+  const [search, setSearch] = useState("");
+  const [selectedUser, setSelectedUser] = useState<SafeUser | null>(null);
+  const [profileOpen, setProfileOpen] = useState(false);
 
   const { data: relations = [], isLoading } = useQuery<RelationWithUsers[]>({ queryKey: ["/api/admin/relations"] });
 
@@ -313,7 +353,17 @@ function RelationsTab() {
     onError: () => toast({ title: "Erreur", description: "Impossible de fermer la relation", variant: "destructive" }),
   });
 
-  const filtered = filter === "all" ? relations : relations.filter((r) => r.status === filter);
+  function openProfile(user: SafeUser) {
+    setSelectedUser(user);
+    setProfileOpen(true);
+  }
+
+  const searchLower = search.toLowerCase();
+  const filtered = relations.filter((r) => {
+    if (filter !== "all" && r.status !== filter) return false;
+    if (search && !`${r.senior.firstName} ${r.senior.lastName} ${r.junior.firstName} ${r.junior.lastName}`.toLowerCase().includes(searchLower)) return false;
+    return true;
+  });
 
   const filters = [
     { id: "all", label: "Toutes" },
@@ -329,6 +379,17 @@ function RelationsTab() {
 
   return (
     <div>
+      <div className="relative mb-4">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+        <Input
+          placeholder="Rechercher par nom..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          className="pl-9"
+          data-testid="input-search-relations"
+        />
+      </div>
+
       <div className="flex gap-2 mb-4 flex-wrap">
         {filters.map((f) => (
           <button
@@ -348,19 +409,38 @@ function RelationsTab() {
         {filtered.map((r) => (
           <div
             key={r.id}
-            className="bg-white rounded-lg border p-4 flex flex-col sm:flex-row sm:items-center gap-3 cursor-pointer hover:border-[#dc4256]/30 transition-colors"
-            onClick={() => navigate(`/relations/${r.id}`)}
+            className="bg-white rounded-lg border p-4 flex flex-col sm:flex-row sm:items-center gap-3"
             data-testid={`card-relation-${r.id}`}
           >
             <div className="flex-1 min-w-0">
-              <div className="font-medium">
-                {r.senior.firstName} {r.senior.lastName}
-                <span className="text-muted-foreground mx-2">↔</span>
-                {r.junior.firstName} {r.junior.lastName}
+              <div className="flex items-center gap-1 flex-wrap">
+                <button
+                  onClick={() => openProfile(r.senior)}
+                  className="font-medium text-[#dc4256] hover:underline cursor-pointer"
+                  data-testid={`link-senior-rel-${r.id}`}
+                >
+                  {r.senior.firstName} {r.senior.lastName}
+                </button>
+                <span className="text-muted-foreground">↔</span>
+                <button
+                  onClick={() => openProfile(r.junior)}
+                  className="font-medium text-[#dc4256] hover:underline cursor-pointer"
+                  data-testid={`link-junior-rel-${r.id}`}
+                >
+                  {r.junior.firstName} {r.junior.lastName}
+                </button>
               </div>
               <div className="text-xs text-muted-foreground mt-1">Créée le {formatDate(r.createdAt)}</div>
             </div>
             <Badge className={STATUS_COLORS[r.status] || ""}>{STATUS_LABELS[r.status] || r.status}</Badge>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => navigate(`/relations/${r.id}`)}
+              data-testid={`btn-view-relation-${r.id}`}
+            >
+              <Eye className="w-3.5 h-3.5 mr-1" />Voir
+            </Button>
             {r.status !== "CLOSED" && (
               <AlertDialog>
                 <AlertDialogTrigger asChild>
@@ -368,7 +448,6 @@ function RelationsTab() {
                     size="sm"
                     variant="outline"
                     className="text-red-600 border-red-300 hover:bg-red-50"
-                    onClick={(e) => e.stopPropagation()}
                     data-testid={`btn-close-relation-${r.id}`}
                   >
                     Fermer
@@ -400,6 +479,7 @@ function RelationsTab() {
           <div className="text-center py-8 text-muted-foreground">Aucune relation trouvée</div>
         )}
       </div>
+      <ProfileDialog user={selectedUser} open={profileOpen} onOpenChange={setProfileOpen} />
     </div>
   );
 }
@@ -409,6 +489,7 @@ function RelationsTab() {
 function CadrageTab() {
   const { toast } = useToast();
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [search, setSearch] = useState("");
   const [selectedRelation, setSelectedRelation] = useState<RelationWithUsers | null>(null);
   const [formData, setFormData] = useState({
     scheduledDate: "",
@@ -453,16 +534,33 @@ function CadrageTab() {
     return <div className="flex justify-center py-12"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>;
   }
 
+  const searchLower = search.toLowerCase();
+  const filteredRelations = relations.filter((r) => {
+    if (search && !`${r.senior.firstName} ${r.senior.lastName} ${r.junior.firstName} ${r.junior.lastName}`.toLowerCase().includes(searchLower)) return false;
+    return true;
+  });
+
   return (
     <div>
-      {relations.length === 0 ? (
+      <div className="relative mb-4">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+        <Input
+          placeholder="Rechercher par nom..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          className="pl-9"
+          data-testid="input-search-cadrage"
+        />
+      </div>
+
+      {filteredRelations.length === 0 ? (
         <div className="text-center py-12 text-muted-foreground">
           <Shield className="w-10 h-10 mx-auto mb-3 opacity-40" />
           Aucun cadrage à organiser
         </div>
       ) : (
         <div className="space-y-2">
-          {relations.map((r) => (
+          {filteredRelations.map((r) => (
             <div key={r.id} className="bg-white rounded-lg border p-4 flex flex-col sm:flex-row sm:items-center gap-3" data-testid={`card-cadrage-${r.id}`}>
               <div className="flex-1">
                 <div className="font-medium">
@@ -610,6 +708,7 @@ function ProfileDialog({ user, open, onOpenChange }: { user: SafeUser | null; op
 
 function RencontresTab() {
   const [filter, setFilter] = useState("all");
+  const [search, setSearch] = useState("");
   const [selectedUser, setSelectedUser] = useState<SafeUser | null>(null);
   const [profileOpen, setProfileOpen] = useState(false);
 
@@ -617,7 +716,12 @@ function RencontresTab() {
     queryKey: ["/api/admin/interventions"],
   });
 
-  const filtered = filter === "all" ? interventions : interventions.filter((i) => i.status === filter);
+  const searchLower = search.toLowerCase();
+  const filtered = interventions.filter((i) => {
+    if (filter !== "all" && i.status !== filter) return false;
+    if (search && !`${i.relation.senior.firstName} ${i.relation.senior.lastName} ${i.relation.junior.firstName} ${i.relation.junior.lastName}`.toLowerCase().includes(searchLower)) return false;
+    return true;
+  });
 
   const filters = [
     { id: "all", label: "Toutes" },
@@ -639,6 +743,17 @@ function RencontresTab() {
 
   return (
     <div>
+      <div className="relative mb-4">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+        <Input
+          placeholder="Rechercher par nom..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          className="pl-9"
+          data-testid="input-search-rencontres"
+        />
+      </div>
+
       <div className="flex gap-2 mb-4 flex-wrap">
         {filters.map((f) => (
           <button
@@ -712,6 +827,143 @@ function RencontresTab() {
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      <ProfileDialog user={selectedUser} open={profileOpen} onOpenChange={setProfileOpen} />
+    </div>
+  );
+}
+
+// ==================== NOTIFICATIONS ADMIN ====================
+
+const NOTIF_TYPE_COLORS: Record<string, string> = {
+  RELATION_REQUEST: "bg-green-100 text-green-800",
+  INTERVENTION_PROPOSED: "bg-blue-100 text-blue-800",
+  INTERVENTION_CONFIRMED: "bg-indigo-100 text-indigo-800",
+  FEEDBACK_REMINDER: "bg-amber-100 text-amber-800",
+  SYSTEM: "bg-gray-100 text-gray-700",
+};
+
+const NOTIF_TYPE_LABELS: Record<string, string> = {
+  RELATION_REQUEST: "Relation",
+  INTERVENTION_PROPOSED: "Intervention proposée",
+  INTERVENTION_CONFIRMED: "Intervention confirmée",
+  FEEDBACK_REMINDER: "Rappel feedback",
+  SYSTEM: "Système",
+};
+
+function NotificationsAdminTab() {
+  const [search, setSearch] = useState("");
+  const [typeFilter, setTypeFilter] = useState("all");
+  const [selectedUser, setSelectedUser] = useState<SafeUser | null>(null);
+  const [profileOpen, setProfileOpen] = useState(false);
+
+  const { data: notifications = [], isLoading } = useQuery<NotificationWithUser[]>({
+    queryKey: ["/api/admin/notifications"],
+  });
+
+  function openProfile(user: SafeUser) {
+    setSelectedUser(user);
+    setProfileOpen(true);
+  }
+
+  const types = Array.from(new Set(notifications.map((n) => n.type)));
+  const searchLower = search.toLowerCase();
+  const filtered = notifications.filter((n) => {
+    if (typeFilter !== "all" && n.type !== typeFilter) return false;
+    if (search && !`${n.user.firstName} ${n.user.lastName}`.toLowerCase().includes(searchLower)) return false;
+    return true;
+  });
+
+  if (isLoading) {
+    return <div className="flex justify-center py-12"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>;
+  }
+
+  return (
+    <div>
+      <div className="relative mb-4">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+        <Input
+          placeholder="Rechercher par nom d'utilisateur..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          className="pl-9"
+          data-testid="input-search-notifications"
+        />
+      </div>
+
+      <div className="flex gap-2 mb-4 flex-wrap">
+        <button
+          onClick={() => setTypeFilter("all")}
+          className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
+            typeFilter === "all" ? "bg-[#dc4256] text-white" : "bg-white text-muted-foreground hover:bg-muted border"
+          }`}
+          data-testid="filter-notif-all"
+        >
+          Toutes
+        </button>
+        {types.map((t) => (
+          <button
+            key={t}
+            onClick={() => setTypeFilter(t)}
+            className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
+              typeFilter === t ? "bg-[#dc4256] text-white" : "bg-white text-muted-foreground hover:bg-muted border"
+            }`}
+            data-testid={`filter-notif-${t}`}
+          >
+            {NOTIF_TYPE_LABELS[t] || t}
+          </button>
+        ))}
+      </div>
+
+      {filtered.length === 0 ? (
+        <div className="text-center py-12 text-muted-foreground">
+          <Bell className="w-10 h-10 mx-auto mb-3 opacity-40" />
+          Aucune notification trouvée
+        </div>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm" data-testid="table-notifications">
+            <thead>
+              <tr className="border-b text-left text-muted-foreground">
+                <th className="py-2 pr-4">Destinataire</th>
+                <th className="py-2 pr-4">Type</th>
+                <th className="py-2 pr-4">Titre</th>
+                <th className="py-2 pr-4">Message</th>
+                <th className="py-2 pr-4">Date</th>
+                <th className="py-2">Lue</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map((n) => (
+                <tr key={n.id} className="border-b last:border-0" data-testid={`row-notif-${n.id}`}>
+                  <td className="py-3 pr-4">
+                    <button
+                      onClick={() => openProfile(n.user)}
+                      className="font-medium text-[#dc4256] hover:underline cursor-pointer"
+                      data-testid={`link-notif-user-${n.id}`}
+                    >
+                      {n.user.firstName} {n.user.lastName}
+                    </button>
+                  </td>
+                  <td className="py-3 pr-4">
+                    <Badge className={NOTIF_TYPE_COLORS[n.type] || "bg-gray-100 text-gray-700"}>
+                      {NOTIF_TYPE_LABELS[n.type] || n.type}
+                    </Badge>
+                  </td>
+                  <td className="py-3 pr-4 max-w-[200px] truncate">{n.title}</td>
+                  <td className="py-3 pr-4 max-w-[250px] truncate text-muted-foreground">{n.message}</td>
+                  <td className="py-3 pr-4 whitespace-nowrap">{formatDate(n.createdAt)}</td>
+                  <td className="py-3">
+                    <Badge className={n.isRead ? "bg-green-100 text-green-800" : "bg-amber-100 text-amber-800"}>
+                      {n.isRead ? "Oui" : "Non"}
+                    </Badge>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
 
@@ -1176,6 +1428,7 @@ export default function Admin() {
       {activeTab === "rencontres" && <RencontresTab />}
       {activeTab === "cadrage" && <CadrageTab />}
       {activeTab === "paiements" && <PaiementsTab />}
+      {activeTab === "notifications" && <NotificationsAdminTab />}
       {activeTab === "mon-compte" && <MonCompteTab />}
       {activeTab === "creer-admin" && <CreerAdminTab />}
     </div>

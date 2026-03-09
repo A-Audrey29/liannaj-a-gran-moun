@@ -41,6 +41,7 @@ export interface IStorage {
   createNotification(data: Prisma.NotificationCreateInput): Promise<Notification>;
   markNotificationRead(id: string): Promise<Notification>;
   markAllNotificationsRead(userId: string): Promise<void>;
+  getAllNotifications(): Promise<(Notification & { user: User })[]>;
 
   getAllUsers(): Promise<User[]>;
   deleteUser(id: string): Promise<void>;
@@ -317,6 +318,14 @@ class DatabaseStorage implements IStorage {
     await prisma.notification.updateMany({
       where: { userId, isRead: false },
       data: { isRead: true },
+    });
+  }
+
+  async getAllNotifications(): Promise<(Notification & { user: User })[]> {
+    return prisma.notification.findMany({
+      include: { user: true },
+      orderBy: { createdAt: "desc" },
+      take: 200,
     });
   }
 

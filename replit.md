@@ -44,7 +44,7 @@ client/
       validation-success.tsx    # Compte validé avec succès
       validation-error.tsx      # Token expiré/invalide + renvoi de lien
       home.tsx           # Mon espace (Dashboard 4 onglets : Tableau de bord, Rencontres, Demandes, Profil)
-      admin.tsx          # Dashboard Admin (7 onglets : Utilisateurs, Relations, Rencontres, Cadrage, Paiements, Mon compte, Créer admin)
+      admin.tsx          # Dashboard Admin (8 onglets : Utilisateurs, Relations, Rencontres, Cadrage, Paiements, Notifications, Mon compte, Créer admin)
       notifications.tsx  # Page notifications complète (toutes, marquer lu, tout marquer lu)
       relation-detail.tsx # Détail relation + interventions + feedback étoiles
       not-found.tsx      # Page 404
@@ -131,6 +131,7 @@ client/
 - `PATCH /api/auth/me/password` — changer le mot de passe (requireAuth)
 - `GET /api/admin/payments` — tous les paiements
 - `POST /api/admin/payments` — enregistrer un paiement (active subscriptionActive)
+- `GET /api/admin/notifications` — toutes les notifications avec user associé (requireAdmin)
 - `POST /api/admin/create-admin` — créer un compte administrateur (requireAdmin)
 
 ## Règles Métier Clés
@@ -158,3 +159,4 @@ client/
 4. ✅ **Sprint 4**: Interfaces Utilisateurs (Landing, Dashboard 4 onglets, Détail Relation, Feedback étoiles, Notifications)
 5. ✅ **Sprint 5**: Dashboard Admin (Gestion utilisateurs, Relations, Rencontres avec fiche profil, Cadrage 1ère rencontre, Paiements)
 6. ✅ **Sprint 6**: Notifications enrichies + Emails transactionnels + Relance feedback auto + PWA installable
+7. ✅ **Sprint 7**: Admin améliorations — Nom cliquable → modale profil partout, recherche par nom tous onglets, filtre ADMIN, référent sur card, onglet Notifications admin, fix bouton retour

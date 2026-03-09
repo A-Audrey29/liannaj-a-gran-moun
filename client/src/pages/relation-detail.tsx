@@ -71,7 +71,7 @@ export default function RelationDetail() {
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-8">
-      <button onClick={() => setLocation("/mon-espace")} className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground mb-6 transition-colors" data-testid="button-back">
+      <button onClick={() => setLocation(user?.role === "ADMIN" ? "/admin" : "/mon-espace")} className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground mb-6 transition-colors" data-testid="button-back">
         <ArrowLeft className="w-4 h-4" /> Retour
       </button>
 
