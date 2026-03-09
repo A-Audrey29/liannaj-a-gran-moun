@@ -54,6 +54,7 @@ import {
   Eye,
   X,
   ChevronsUpDown,
+  Download,
 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import type { User, Relation, Intervention, PaymentRecord, Notification } from "@shared/schema";
@@ -817,19 +818,62 @@ function RencontresTab() {
     setProfileOpen(true);
   }
 
+  function exportCSV() {
+    const csvEscape = (val: string) => {
+      if (val.includes(",") || val.includes('"') || val.includes("\n")) {
+        return `"${val.replace(/"/g, '""')}"`;
+      }
+      return val;
+    };
+    const header = ["Senior", "Junior", "Date", "Heure", "Durée (min)", "Lieu", "Activités", "Statut"];
+    const rows = filtered.map((i) => [
+      csvEscape(`${i.relation.senior.firstName} ${i.relation.senior.lastName}`),
+      csvEscape(`${i.relation.junior.firstName} ${i.relation.junior.lastName}`),
+      new Date(i.scheduledDate).toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric" }),
+      new Date(i.scheduledDate).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }),
+      String(i.durationMinutes),
+      csvEscape(i.location || ""),
+      csvEscape((i.tasks || []).join(", ")),
+      csvEscape(STATUS_LABELS[i.status] || i.status),
+    ]);
+    const bom = "\uFEFF";
+    const csv = bom + [header.join(";"), ...rows.map((r) => r.join(";"))].join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `rencontres_${new Date().toISOString().split("T")[0]}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
   if (isLoading) {
     return <div className="flex justify-center py-12"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>;
   }
 
   return (
     <div>
-      <UserCombobox
-        users={allUsers}
-        selectedUserId={searchUserId}
-        onSelect={setSearchUserId}
-        placeholder="Filtrer par utilisateur..."
-        testId="combobox-rencontres"
-      />
+      <div className="flex gap-2 mb-4 items-start">
+        <div className="flex-1">
+          <UserCombobox
+            users={allUsers}
+            selectedUserId={searchUserId}
+            onSelect={setSearchUserId}
+            placeholder="Filtrer par utilisateur..."
+            testId="combobox-rencontres"
+          />
+        </div>
+        <Button
+          variant="outline"
+          onClick={exportCSV}
+          disabled={filtered.length === 0}
+          className="shrink-0"
+          data-testid="btn-export-csv"
+        >
+          <Download className="w-4 h-4 mr-1" />
+          Exporter CSV
+        </Button>
+      </div>
 
       <div className="flex gap-2 mb-4 flex-wrap">
         {filters.map((f) => (
