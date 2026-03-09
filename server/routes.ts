@@ -3,6 +3,9 @@ import { createServer, type Server } from "http";
 import passport from "passport";
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
+import multer from "multer";
+import path from "path";
+import fs from "fs";
 import { requireAuth, requireAdmin } from "./auth";
 import { storage } from "./storage";
 import { sendEmail } from "./lib/email";
@@ -14,6 +17,32 @@ import {
   getFeedbackReminderEmailHtml,
 } from "./lib/email-templates";
 import { insertUserSchema, createRelationSchema, insertInterventionSchema, feedbackSchema, createPaymentSchema, changePasswordSchema, createAdminSchema } from "../shared/schema";
+
+const uploadStorage = multer.diskStorage({
+  destination: (_req, _file, cb) => {
+    const dir = path.join(process.cwd(), "uploads");
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    cb(null, dir);
+  },
+  filename: (_req, file, cb) => {
+    const ext = path.extname(file.originalname).toLowerCase();
+    cb(null, `${crypto.randomUUID()}${ext}`);
+  },
+});
+
+const upload = multer({
+  storage: uploadStorage,
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    const allowed = [".jpg", ".jpeg", ".png", ".webp"];
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (allowed.includes(ext)) {
+      cb(null, true);
+    } else {
+      cb(new Error("Format non supporté. Utilisez JPG, PNG ou WebP."));
+    }
+  },
+});
 
 function sanitizeUser(user: any) {
   const { password, validationToken, validationExpiry, ...safe } = user;
@@ -176,6 +205,94 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/auth/me/photo", requireAuth, upload.single("photo"), async (req, res) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ message: "Aucun fichier envoyé" });
+      }
+      const user = req.user!;
+      if (user.profilePhoto) {
+        const oldPath = path.join(process.cwd(), user.profilePhoto.replace(/^\//, ""));
+        if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
+      }
+      const photoPath = `/uploads/${req.file.filename}`;
+      const updated = await storage.updateUser(user.id, { profilePhoto: photoPath });
+      const safeUser = sanitizeUser(updated);
+      req.login(safeUser, (err) => {
+        if (err) return res.status(500).json({ message: "Erreur session" });
+        res.json({ user: safeUser });
+      });
+    } catch (err) {
+      console.error("[PHOTO_UPLOAD] Error:", err);
+      res.status(500).json({ message: "Erreur lors de l'upload de la photo" });
+    }
+  });
+
+  app.delete("/api/auth/me/photo", requireAuth, async (req, res) => {
+    try {
+      const user = req.user!;
+      if (user.profilePhoto) {
+        const oldPath = path.join(process.cwd(), user.profilePhoto.replace(/^\//, ""));
+        if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
+      }
+      const updated = await storage.updateUser(user.id, { profilePhoto: null });
+      const safeUser = sanitizeUser(updated);
+      req.login(safeUser, (err) => {
+        if (err) return res.status(500).json({ message: "Erreur session" });
+        res.json({ user: safeUser });
+      });
+    } catch (err) {
+      console.error("[PHOTO_DELETE] Error:", err);
+      res.status(500).json({ message: "Erreur lors de la suppression de la photo" });
+    }
+  });
+
+  app.get("/api/favorites", requireAuth, async (req, res) => {
+    try {
+      const user = req.user!;
+      if (user.role !== "SENIOR") {
+        return res.status(403).json({ message: "Réservé aux seniors" });
+      }
+      const juniorIds = await storage.getFavoriteJuniorIds(user.id);
+      res.json(juniorIds);
+    } catch (err) {
+      console.error("[FAVORITES] Error:", err);
+      res.status(500).json({ message: "Erreur lors du chargement des favoris" });
+    }
+  });
+
+  app.post("/api/favorites/:juniorId", requireAuth, async (req, res) => {
+    try {
+      const user = req.user!;
+      if (user.role !== "SENIOR") {
+        return res.status(403).json({ message: "Réservé aux seniors" });
+      }
+      const junior = await storage.getUser(req.params.juniorId);
+      if (!junior || junior.role !== "JUNIOR") {
+        return res.status(404).json({ message: "Jeune non trouvé" });
+      }
+      const favorite = await storage.addFavorite(user.id, req.params.juniorId);
+      res.status(201).json(favorite);
+    } catch (err) {
+      console.error("[FAVORITE_ADD] Error:", err);
+      res.status(500).json({ message: "Erreur lors de l'ajout du favori" });
+    }
+  });
+
+  app.delete("/api/favorites/:juniorId", requireAuth, async (req, res) => {
+    try {
+      const user = req.user!;
+      if (user.role !== "SENIOR") {
+        return res.status(403).json({ message: "Réservé aux seniors" });
+      }
+      await storage.removeFavorite(user.id, req.params.juniorId);
+      res.json({ message: "Favori supprimé" });
+    } catch (err) {
+      console.error("[FAVORITE_REMOVE] Error:", err);
+      res.status(500).json({ message: "Erreur lors de la suppression du favori" });
+    }
+  });
+
   app.get("/api/categories", async (_req, res) => {
     try {
       const categories = await storage.getCategories();
@@ -296,10 +413,14 @@ export async function registerRoutes(
         return res.status(400).json({ message: "Les administrateurs n'ont pas de suggestions de matching" });
       }
       const suggestions = await storage.getMatchingSuggestions(user.id);
+      const favoriteIds = user.role === "SENIOR"
+        ? new Set(await storage.getFavoriteJuniorIds(user.id))
+        : new Set<string>();
       const sanitized = suggestions.map((s) => ({
         user: sanitizeUser(s.user),
         commonCategories: s.commonCategories,
         isRecommended: s.isRecommended,
+        isFavorite: favoriteIds.has(s.user.id),
       }));
       res.json(sanitized);
     } catch (err) {

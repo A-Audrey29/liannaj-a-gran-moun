@@ -16,13 +16,13 @@ import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import StatusBadge from "@/components/status-badge";
-import { Calendar, MessageCircle, User, LayoutGrid, ChevronRight, Plus, Check, X, Pencil } from "lucide-react";
-import { useState } from "react";
+import { Calendar, MessageCircle, User, LayoutGrid, ChevronRight, Plus, Check, X, Pencil, Heart, Camera, Trash2 } from "lucide-react";
+import { useState, useRef } from "react";
 import { updateProfileSchema, type UpdateProfileInput } from "@shared/schema";
 import type { Relation, User as UserType, Intervention } from "@shared/schema";
 
 type RelationWithUsers = Relation & { senior: UserType; junior: UserType; interventions?: Intervention[] };
-type MatchSuggestion = { user: UserType; commonCategories: string[]; isRecommended: boolean };
+type MatchSuggestion = { user: UserType; commonCategories: string[]; isRecommended: boolean; isFavorite: boolean };
 
 const ALL_TABS = [
   { id: "dashboard", label: "Tableau de bord", icon: LayoutGrid },
@@ -201,9 +201,22 @@ function RencontresTab({ relations, isLoading, user }: { relations?: RelationWit
   );
 }
 
+function UserAvatar({ user, size = "sm" }: { user: { firstName: string; lastName: string; profilePhoto?: string | null }; size?: "sm" | "md" | "lg" }) {
+  const sizeClasses = { sm: "w-10 h-10 text-sm", md: "w-14 h-14 text-lg", lg: "w-16 h-16 text-xl" };
+  if (user.profilePhoto) {
+    return <img src={user.profilePhoto} alt={`${user.firstName} ${user.lastName}`} className={`${sizeClasses[size]} rounded-full object-cover`} />;
+  }
+  return (
+    <div className={`${sizeClasses[size]} rounded-full bg-[#e8d7fe] flex items-center justify-center font-bold text-[#8b5cf6]`}>
+      {user.firstName[0]}{user.lastName[0]}
+    </div>
+  );
+}
+
 function DemandesTab({ relations, isLoading, user }: { relations?: RelationWithUsers[]; isLoading: boolean; user: any }) {
   const { toast } = useToast();
   const isSenior = user?.role === "SENIOR";
+  const [sugFilter, setSugFilter] = useState<"all" | "favorites" | "recommended">("all");
 
   const { data: suggestions, isLoading: sugLoading } = useQuery<MatchSuggestion[]>({
     queryKey: ["/api/matching/suggestions"],
@@ -222,6 +235,20 @@ function DemandesTab({ relations, isLoading, user }: { relations?: RelationWithU
     onError: (e: Error) => {
       toast({ title: "Erreur", description: e.message, variant: "destructive" });
     },
+  });
+
+  const toggleFavoriteMutation = useMutation({
+    mutationFn: async ({ juniorId, isFavorite }: { juniorId: string; isFavorite: boolean }) => {
+      if (isFavorite) {
+        await apiRequest("DELETE", `/api/favorites/${juniorId}`);
+      } else {
+        await apiRequest("POST", `/api/favorites/${juniorId}`);
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/matching/suggestions"] });
+    },
+    onError: () => toast({ title: "Erreur", variant: "destructive" }),
   });
 
   const acceptMutation = useMutation({
@@ -250,32 +277,59 @@ function DemandesTab({ relations, isLoading, user }: { relations?: RelationWithU
 
   const pendingRelations = (relations || []).filter((r) => r.status === "PENDING");
 
+  const filteredSuggestions = (suggestions || []).filter((s) => {
+    if (sugFilter === "favorites") return s.isFavorite;
+    if (sugFilter === "recommended") return s.isRecommended;
+    return true;
+  });
+
+  const filterButtons = [
+    { id: "all" as const, label: "Tous" },
+    { id: "favorites" as const, label: "Favoris" },
+    { id: "recommended" as const, label: "Recommandés FEVES" },
+  ];
+
   return (
     <div className="space-y-6">
       {isSenior && (
         <div>
           <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-4">Suggestions de matching</h3>
+          <div className="flex gap-2 mb-4 flex-wrap">
+            {filterButtons.map((f) => (
+              <button
+                key={f.id}
+                onClick={() => setSugFilter(f.id)}
+                className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
+                  sugFilter === f.id
+                    ? "bg-[#dc4256] text-white"
+                    : "bg-white text-muted-foreground hover:bg-muted border"
+                }`}
+                data-testid={`filter-suggestions-${f.id}`}
+              >
+                {f.id === "favorites" && <Heart className="w-3 h-3 inline mr-1" />}
+                {f.label}
+              </button>
+            ))}
+          </div>
           {sugLoading ? (
             <div className="space-y-3"><Skeleton className="h-24 rounded-2xl" /><Skeleton className="h-24 rounded-2xl" /></div>
-          ) : (suggestions || []).length === 0 ? (
+          ) : filteredSuggestions.length === 0 ? (
             <Card className="rounded-2xl border-0 shadow-sm">
               <CardContent className="py-6 text-center text-muted-foreground text-sm">
-                Aucune suggestion disponible pour le moment.
+                {sugFilter === "favorites" ? "Aucun favori pour le moment." : sugFilter === "recommended" ? "Aucune recommandation FEVES pour le moment." : "Aucune suggestion disponible pour le moment."}
               </CardContent>
             </Card>
           ) : (
             <div className="space-y-3">
-              {(suggestions || []).map((s) => (
+              {filteredSuggestions.map((s) => (
                 <Card key={s.user.id} className="rounded-2xl border-0 shadow-sm" data-testid={`card-suggestion-${s.user.id}`}>
                   <CardContent className="flex items-center justify-between py-4">
                     <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-full bg-[#e8d7fe] flex items-center justify-center text-sm font-bold text-[#8b5cf6]">
-                        {s.user.firstName[0]}{s.user.lastName[0]}
-                      </div>
+                      <UserAvatar user={s.user} />
                       <div>
                         <div className="flex items-center gap-2">
                           <p className="font-medium text-sm">{s.user.firstName} {s.user.lastName}</p>
-                          {s.isRecommended && <Badge className="bg-[#e8d7fe] text-[#8b5cf6] text-[10px] px-1.5">Recommande</Badge>}
+                          {s.isRecommended && <Badge className="bg-[#e8d7fe] text-[#8b5cf6] text-[10px] px-1.5">Recommandé</Badge>}
                         </div>
                         <p className="text-xs text-muted-foreground">{s.user.city || ""}</p>
                         {s.commonCategories.length > 0 && (
@@ -287,15 +341,26 @@ function DemandesTab({ relations, isLoading, user }: { relations?: RelationWithU
                         )}
                       </div>
                     </div>
-                    <Button
-                      size="sm"
-                      className="rounded-full bg-[#dc4256] hover:bg-[#c73848] text-white text-xs"
-                      onClick={() => createRelationMutation.mutate(s.user.id)}
-                      disabled={createRelationMutation.isPending}
-                      data-testid={`button-propose-${s.user.id}`}
-                    >
-                      <Plus className="w-3 h-3 mr-1" /> Proposer
-                    </Button>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => toggleFavoriteMutation.mutate({ juniorId: s.user.id, isFavorite: s.isFavorite })}
+                        disabled={toggleFavoriteMutation.isPending}
+                        className="p-1.5 rounded-full hover:bg-muted transition-colors"
+                        data-testid={`button-favorite-${s.user.id}`}
+                        aria-label={s.isFavorite ? "Retirer des favoris" : "Ajouter aux favoris"}
+                      >
+                        <Heart className={`w-5 h-5 transition-colors ${s.isFavorite ? "fill-[#dc4256] text-[#dc4256]" : "text-muted-foreground"}`} />
+                      </button>
+                      <Button
+                        size="sm"
+                        className="rounded-full bg-[#dc4256] hover:bg-[#c73848] text-white text-xs"
+                        onClick={() => createRelationMutation.mutate(s.user.id)}
+                        disabled={createRelationMutation.isPending}
+                        data-testid={`button-propose-${s.user.id}`}
+                      >
+                        <Plus className="w-3 h-3 mr-1" /> Proposer
+                      </Button>
+                    </div>
                   </CardContent>
                 </Card>
               ))}
@@ -324,9 +389,7 @@ function DemandesTab({ relations, isLoading, user }: { relations?: RelationWithU
                 <Card key={rel.id} className="rounded-2xl border-0 shadow-sm" data-testid={`card-demande-${rel.id}`}>
                   <CardContent className="flex items-center justify-between py-4">
                     <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-full bg-[#e8d7fe] flex items-center justify-center text-sm font-bold text-[#8b5cf6]">
-                        {partner.firstName[0]}{partner.lastName[0]}
-                      </div>
+                      <UserAvatar user={partner} />
                       <div>
                         <p className="font-medium text-sm">{partner.firstName} {partner.lastName}</p>
                         <p className="text-xs text-muted-foreground">{partner.city || ""} - <StatusBadge status={partner.role} /></p>
@@ -383,6 +446,100 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
   return <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">{children}</h4>;
 }
 
+function PhotoUpload({ user }: { user: AuthUser }) {
+  const { toast } = useToast();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const uploadMutation = useMutation({
+    mutationFn: async (file: File) => {
+      const formData = new FormData();
+      formData.append("photo", file);
+      const res = await fetch("/api/auth/me/photo", {
+        method: "POST",
+        body: formData,
+        credentials: "include",
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.message || "Erreur upload");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
+      toast({ title: "Photo mise à jour !" });
+    },
+    onError: (e: Error) => {
+      toast({ title: "Erreur", description: e.message, variant: "destructive" });
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async () => {
+      await apiRequest("DELETE", "/api/auth/me/photo");
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
+      toast({ title: "Photo supprimée" });
+    },
+    onError: () => toast({ title: "Erreur", variant: "destructive" }),
+  });
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) uploadMutation.mutate(file);
+    e.target.value = "";
+  };
+
+  return (
+    <div className="relative group">
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/jpeg,image/png,image/webp"
+        className="hidden"
+        onChange={handleFileChange}
+        data-testid="input-photo-upload"
+      />
+      {user.profilePhoto ? (
+        <div className="relative">
+          <img src={user.profilePhoto} alt="Photo de profil" className="w-16 h-16 rounded-full object-cover" />
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            className="absolute inset-0 w-16 h-16 rounded-full bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
+            disabled={uploadMutation.isPending}
+            data-testid="button-change-photo"
+          >
+            <Camera className="w-5 h-5 text-white" />
+          </button>
+          <button
+            onClick={() => deleteMutation.mutate()}
+            className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-[#dc4256] text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+            disabled={deleteMutation.isPending}
+            data-testid="button-delete-photo"
+            aria-label="Supprimer la photo"
+          >
+            <X className="w-3 h-3" />
+          </button>
+        </div>
+      ) : (
+        <button
+          onClick={() => fileInputRef.current?.click()}
+          className="w-16 h-16 rounded-full bg-[#e8d7fe] flex items-center justify-center cursor-pointer hover:bg-[#dac8f0] transition-colors"
+          disabled={uploadMutation.isPending}
+          data-testid="button-add-photo"
+        >
+          {uploadMutation.isPending ? (
+            <span className="text-xs text-[#8b5cf6]">...</span>
+          ) : (
+            <Camera className="w-6 h-6 text-[#8b5cf6]" />
+          )}
+        </button>
+      )}
+    </div>
+  );
+}
+
 function ProfilTab({ user }: { user: AuthUser | null }) {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
@@ -406,9 +563,7 @@ function ProfilTab({ user }: { user: AuthUser | null }) {
         <CardContent className="py-6">
           <SectionTitle>Identite</SectionTitle>
           <div className="flex items-center gap-4 mb-4">
-            <div className="w-16 h-16 rounded-full bg-[#e8d7fe] flex items-center justify-center text-xl font-bold text-[#8b5cf6]">
-              {user.firstName[0]}{user.lastName[0]}
-            </div>
+            <PhotoUpload user={user} />
             <div>
               <h3 className="text-lg font-bold" data-testid="text-profile-name">{user.firstName} {user.lastName}</h3>
               <div className="flex items-center gap-2 mt-1">

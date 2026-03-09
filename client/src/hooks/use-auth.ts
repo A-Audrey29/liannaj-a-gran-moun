@@ -22,6 +22,7 @@ export interface AuthUser {
   referentEmail: string | null;
   trustedPersonName: string | null;
   trustedPersonEmail: string | null;
+  profilePhoto: string | null;
 }
 
 export function useAuth() {

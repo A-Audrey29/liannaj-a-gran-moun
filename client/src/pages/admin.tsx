@@ -798,7 +798,16 @@ function ProfileDialog({ user, open, onOpenChange }: { user: SafeUser | null; op
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg max-h-[80vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>{user.firstName} {user.lastName}</DialogTitle>
+          <DialogTitle className="flex items-center gap-3">
+            {user.profilePhoto ? (
+              <img src={user.profilePhoto} alt={`${user.firstName} ${user.lastName}`} className="w-12 h-12 rounded-full object-cover" />
+            ) : (
+              <div className="w-12 h-12 rounded-full bg-[#e8d7fe] flex items-center justify-center text-lg font-bold text-[#8b5cf6]">
+                {user.firstName[0]}{user.lastName[0]}
+              </div>
+            )}
+            <span>{user.firstName} {user.lastName}</span>
+          </DialogTitle>
         </DialogHeader>
         <div className="flex gap-2 mb-4">
           <Badge className={ROLE_COLORS[user.role] || ""}>{user.role}</Badge>

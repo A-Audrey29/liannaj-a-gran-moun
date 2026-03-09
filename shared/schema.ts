@@ -31,6 +31,7 @@ export interface User {
   validatorEmail: string | null;
   validationToken: string | null;
   validationExpiry: Date | null;
+  profilePhoto: string | null;
   subscriptionActive: boolean;
   createdAt: Date;
   updatedAt: Date;
@@ -80,6 +81,13 @@ export interface Notification {
   message: string;
   link: string | null;
   isRead: boolean;
+  createdAt: Date;
+}
+
+export interface Favorite {
+  id: string;
+  seniorId: string;
+  juniorId: string;
   createdAt: Date;
 }
 

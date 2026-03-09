@@ -61,6 +61,7 @@ model User {
   postalCode          String?
   bio                 String?
   desiredActivity     String?
+  profilePhoto        String?
 
   schoolName          String?
   referentTitle       String?
@@ -91,6 +92,9 @@ model User {
   reportsReceived     Report[] @relation("Target")
 
   notifications       Notification[]
+
+  favoriteSeniors     Favorite[] @relation("SeniorFavorites")
+  favoriteJuniors     Favorite[] @relation("JuniorFavorites")
 
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
@@ -216,4 +220,17 @@ model Notification {
 
   @@index([userId, isRead])
   @@index([createdAt])
+}
+
+model Favorite {
+  id        String   @id @default(cuid())
+  seniorId  String
+  juniorId  String
+  createdAt DateTime @default(now())
+
+  senior    User     @relation("SeniorFavorites", fields: [seniorId], references: [id], onDelete: Cascade)
+  junior    User     @relation("JuniorFavorites", fields: [juniorId], references: [id], onDelete: Cascade)
+
+  @@unique([seniorId, juniorId])
+  @@index([seniorId])
 }

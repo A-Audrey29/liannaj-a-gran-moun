@@ -12,6 +12,7 @@ async function main() {
   const hashedPassword = await bcrypt.hash("password", 10);
 
   await prisma.report.deleteMany();
+  await prisma.favorite.deleteMany();
   await prisma.userCategory.deleteMany();
   await prisma.adminRecommendation.deleteMany();
   await prisma.intervention.deleteMany();
@@ -551,6 +552,13 @@ async function main() {
     ],
   });
 
+  await prisma.favorite.createMany({
+    data: [
+      { seniorId: senior1.id, juniorId: junior3.id },
+      { seniorId: senior2.id, juniorId: junior6.id },
+    ],
+  });
+
   console.log("✅ Seed complet (Guadeloupe) :");
   console.log("   - 1 Admin (Pointe-à-Pitre)");
   console.log("   - 6 Seniors : 5 actifs (Les Abymes) + 1 pending (Pointe-à-Pitre)");
@@ -558,7 +566,7 @@ async function main() {
   console.log("   - 6 Catégories : Bricolage, Jardinage, Informatique, Cuisine, Lecture, Promenade");
   console.log("   - 5 Relations : 1 PENDING, 1 PENDING_FIRST_MEETING, 3 ACTIVE");
   console.log("   - 6 Interventions : 2 CONFIRMED, 1 PROPOSED, 2 COMPLETED, 1 COMPLETED_PENDING_FEEDBACK");
-  console.log("   - 2 AdminRecommendations, 1 Paiement, 4 Notifications");
+  console.log("   - 2 AdminRecommendations, 1 Paiement, 4 Notifications, 2 Favoris");
   console.log("   - Mot de passe pour tous : password");
 }
 

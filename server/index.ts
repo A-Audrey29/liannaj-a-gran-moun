@@ -23,6 +23,7 @@ app.use(
 );
 
 app.use(express.urlencoded({ extended: false }));
+app.use("/uploads", express.static("uploads"));
 
 setupAuth(app);
 

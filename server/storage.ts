@@ -1,5 +1,5 @@
 import { prisma } from "./prisma";
-import type { User, Category, UserCategory, Relation, Intervention, AdminRecommendation, Notification, PaymentRecord, Prisma } from "../generated/prisma/client.ts";
+import type { User, Category, UserCategory, Relation, Intervention, AdminRecommendation, Notification, PaymentRecord, Favorite, Prisma } from "../generated/prisma/client.ts";
 
 export interface IStorage {
   getUser(id: string): Promise<User | null>;
@@ -50,6 +50,10 @@ export interface IStorage {
   createPayment(data: { userId: string; amount: number; label: string; date?: Date }): Promise<PaymentRecord>;
   getPayments(): Promise<(PaymentRecord & { user: User })[]>;
   getAllInterventions(): Promise<(Intervention & { relation: Relation & { senior: User; junior: User } })[]>;
+
+  addFavorite(seniorId: string, juniorId: string): Promise<Favorite>;
+  removeFavorite(seniorId: string, juniorId: string): Promise<void>;
+  getFavoriteJuniorIds(seniorId: string): Promise<string[]>;
 }
 
 class DatabaseStorage implements IStorage {
@@ -384,6 +388,28 @@ class DatabaseStorage implements IStorage {
       include: { relation: { include: { senior: true, junior: true } } },
       orderBy: { scheduledDate: "desc" },
     });
+  }
+
+  async addFavorite(seniorId: string, juniorId: string): Promise<Favorite> {
+    return prisma.favorite.upsert({
+      where: { seniorId_juniorId: { seniorId, juniorId } },
+      update: {},
+      create: { seniorId, juniorId },
+    });
+  }
+
+  async removeFavorite(seniorId: string, juniorId: string): Promise<void> {
+    await prisma.favorite.deleteMany({
+      where: { seniorId, juniorId },
+    });
+  }
+
+  async getFavoriteJuniorIds(seniorId: string): Promise<string[]> {
+    const favs = await prisma.favorite.findMany({
+      where: { seniorId },
+      select: { juniorId: true },
+    });
+    return favs.map((f) => f.juniorId);
   }
 }
 

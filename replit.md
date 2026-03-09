@@ -62,11 +62,12 @@ client/
 ```
 
 ## Modèle de Données
-- **User**: Admin/Senior/Junior avec statuts (PENDING_VALIDATION, ACTIVE, SUSPENDED, BANNED)
+- **User**: Admin/Senior/Junior avec statuts (PENDING_VALIDATION, ACTIVE, SUSPENDED, BANNED) + `profilePhoto` optionnelle
 - **Category**: Catégories d'intérêts/compétences
 - **UserCategory**: Table de jointure User ↔ Category
 - **Relation**: Lien Senior ↔ Junior (PENDING → PENDING_FIRST_MEETING → ACTIVE → CLOSED)
 - **Intervention**: Rencontres planifiées avec feedback obligatoire
+- **Favorite**: Favoris Senior → Junior (@@unique seniorId+juniorId)
 - **AdminRecommendation**: Suggestions de matching Admin
 - **PaymentRecord**: Historique paiements
 - **Report**: Signalements
@@ -142,7 +143,13 @@ client/
 - `GET /api/admin/relations` — toutes les relations
 - `GET /api/admin/relations/pending-meeting` — relations en attente de 1ère rencontre
 - `GET /api/admin/interventions` — toutes les interventions avec participants
+- `PATCH /api/auth/me` — modifier profil (requireAuth)
 - `PATCH /api/auth/me/password` — changer le mot de passe (requireAuth)
+- `POST /api/auth/me/photo` — upload photo de profil (multipart, max 5Mo, jpg/png/webp)
+- `DELETE /api/auth/me/photo` — supprimer sa photo de profil
+- `POST /api/favorites/:juniorId` — ajouter un favori (Senior only)
+- `DELETE /api/favorites/:juniorId` — retirer un favori (Senior only)
+- `GET /api/favorites` — liste des favoris du senior
 - `GET /api/admin/payments` — tous les paiements
 - `POST /api/admin/payments` — enregistrer un paiement (active subscriptionActive)
 - `GET /api/admin/notifications` — toutes les notifications avec user associé (requireAdmin)
@@ -174,3 +181,4 @@ client/
 5. ✅ **Sprint 5**: Dashboard Admin (Gestion utilisateurs, Relations, Rencontres avec fiche profil, Cadrage 1ère rencontre, Paiements)
 6. ✅ **Sprint 6**: Notifications enrichies + Emails transactionnels + Relance feedback auto + PWA installable
 7. ✅ **Sprint 7**: Admin améliorations — Nom cliquable → modale profil partout, recherche par nom tous onglets, filtre ADMIN, référent sur card, onglet Notifications admin, fix bouton retour
+8. ✅ **Sprint 8**: Photo de profil (upload multer 5Mo, jpg/png/webp, UUID naming) + Favoris Senior→Junior (cœur toggle, filtres Tous/Favoris/Recommandés)
