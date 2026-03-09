@@ -47,7 +47,7 @@ export default function Home() {
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-8">
-      <h1 className="text-2xl md:text-3xl font-bold mb-6" data-testid="text-mon-espace">Mon espace</h1>
+      <h1 className="text-2xl md:text-3xl font-bold mb-6" data-testid="text-mon-espace">Bonjour {user?.firstName}</h1>
 
       <div className="flex gap-1 mb-8 overflow-x-auto pb-2">
         {tabs.map((tab) => {
