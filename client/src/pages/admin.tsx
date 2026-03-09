@@ -7,6 +7,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
+import { Command, CommandInput, CommandList, CommandEmpty, CommandGroup, CommandItem } from "@/components/ui/command";
 import {
   Dialog,
   DialogContent,
@@ -50,6 +52,8 @@ import {
   Search,
   Bell,
   Eye,
+  X,
+  ChevronsUpDown,
 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import type { User, Relation, Intervention, PaymentRecord, Notification } from "@shared/schema";
@@ -115,13 +119,99 @@ function formatDate(d: string | Date) {
   return new Date(d).toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric" });
 }
 
+// ==================== COMBOBOX UTILISATEURS ====================
+
+function UserCombobox({
+  users,
+  selectedUserId,
+  onSelect,
+  placeholder = "Filtrer par utilisateur...",
+  testId = "combobox-user",
+}: {
+  users: SafeUser[];
+  selectedUserId: string | null;
+  onSelect: (userId: string | null) => void;
+  placeholder?: string;
+  testId?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const selected = users.find((u) => u.id === selectedUserId);
+
+  return (
+    <div className="flex gap-2 mb-4 items-center">
+      <Popover open={open} onOpenChange={setOpen}>
+        <PopoverTrigger asChild>
+          <Button
+            variant="outline"
+            role="combobox"
+            aria-expanded={open}
+            className="w-full justify-between font-normal"
+            data-testid={testId}
+          >
+            {selected ? (
+              <span className="flex items-center gap-2">
+                <Search className="w-4 h-4 text-muted-foreground shrink-0" />
+                <span className="truncate">{selected.firstName} {selected.lastName}</span>
+                <Badge className={`${ROLE_COLORS[selected.role] || ""} text-[10px] px-1.5 py-0`}>{selected.role}</Badge>
+              </span>
+            ) : (
+              <span className="flex items-center gap-2 text-muted-foreground">
+                <Search className="w-4 h-4 shrink-0" />
+                {placeholder}
+              </span>
+            )}
+            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+          <Command>
+            <CommandInput placeholder="Rechercher un utilisateur..." data-testid={`${testId}-search`} />
+            <CommandList>
+              <CommandEmpty>Aucun utilisateur trouvé</CommandEmpty>
+              <CommandGroup>
+                {users.map((u) => (
+                  <CommandItem
+                    key={u.id}
+                    value={`${u.firstName} ${u.lastName} ${u.email}`}
+                    onSelect={() => {
+                      onSelect(selectedUserId === u.id ? null : u.id);
+                      setOpen(false);
+                    }}
+                    className={selectedUserId === u.id ? "bg-accent" : ""}
+                    data-testid={`${testId}-item-${u.id}`}
+                  >
+                    <span className="flex-1 truncate">{u.firstName} {u.lastName}</span>
+                    <Badge className={`${ROLE_COLORS[u.role] || ""} text-[10px] px-1.5 py-0`}>{u.role}</Badge>
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+            </CommandList>
+          </Command>
+        </PopoverContent>
+      </Popover>
+      {selectedUserId && (
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => onSelect(null)}
+          className="shrink-0 text-muted-foreground hover:text-foreground"
+          aria-label="Effacer le filtre utilisateur"
+          data-testid={`${testId}-clear`}
+        >
+          <X className="w-4 h-4" />
+        </Button>
+      )}
+    </div>
+  );
+}
+
 // ==================== UTILISATEURS ====================
 
 function UsersTab() {
   const { toast } = useToast();
   const [filter, setFilter] = useState("all");
   const [roleFilter, setRoleFilter] = useState("all");
-  const [search, setSearch] = useState("");
+  const [searchUserId, setSearchUserId] = useState<string | null>(null);
   const [selectedUser, setSelectedUser] = useState<SafeUser | null>(null);
   const [profileOpen, setProfileOpen] = useState(false);
 
@@ -160,12 +250,11 @@ function UsersTab() {
   }
 
   const pendingCount = users.filter((u) => u.status === "PENDING_VALIDATION").length;
-  const searchLower = search.toLowerCase();
 
   const filtered = users.filter((u) => {
     if (filter !== "all" && u.status !== filter) return false;
     if (roleFilter !== "all" && u.role !== roleFilter) return false;
-    if (search && !`${u.firstName} ${u.lastName} ${u.email}`.toLowerCase().includes(searchLower)) return false;
+    if (searchUserId && u.id !== searchUserId) return false;
     return true;
   });
 
@@ -195,16 +284,13 @@ function UsersTab() {
         </div>
       )}
 
-      <div className="relative mb-4">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-        <Input
-          placeholder="Rechercher par nom, prénom ou email..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="pl-9"
-          data-testid="input-search-users"
-        />
-      </div>
+      <UserCombobox
+        users={users}
+        selectedUserId={searchUserId}
+        onSelect={setSearchUserId}
+        placeholder="Filtrer par utilisateur..."
+        testId="combobox-users"
+      />
 
       <div className="flex gap-2 mb-2 flex-wrap">
         {filters.map((f) => (
@@ -338,11 +424,12 @@ function RelationsTab() {
   const { toast } = useToast();
   const [, navigate] = useLocation();
   const [filter, setFilter] = useState("all");
-  const [search, setSearch] = useState("");
+  const [searchUserId, setSearchUserId] = useState<string | null>(null);
   const [selectedUser, setSelectedUser] = useState<SafeUser | null>(null);
   const [profileOpen, setProfileOpen] = useState(false);
 
   const { data: relations = [], isLoading } = useQuery<RelationWithUsers[]>({ queryKey: ["/api/admin/relations"] });
+  const { data: allUsers = [] } = useQuery<SafeUser[]>({ queryKey: ["/api/admin/users"] });
 
   const closeMut = useMutation({
     mutationFn: (id: string) => apiRequest("PATCH", `/api/relations/${id}/close`),
@@ -358,10 +445,9 @@ function RelationsTab() {
     setProfileOpen(true);
   }
 
-  const searchLower = search.toLowerCase();
   const filtered = relations.filter((r) => {
     if (filter !== "all" && r.status !== filter) return false;
-    if (search && !`${r.senior.firstName} ${r.senior.lastName} ${r.junior.firstName} ${r.junior.lastName}`.toLowerCase().includes(searchLower)) return false;
+    if (searchUserId && r.seniorId !== searchUserId && r.juniorId !== searchUserId) return false;
     return true;
   });
 
@@ -379,16 +465,13 @@ function RelationsTab() {
 
   return (
     <div>
-      <div className="relative mb-4">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-        <Input
-          placeholder="Rechercher par nom..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="pl-9"
-          data-testid="input-search-relations"
-        />
-      </div>
+      <UserCombobox
+        users={allUsers}
+        selectedUserId={searchUserId}
+        onSelect={setSearchUserId}
+        placeholder="Filtrer par utilisateur..."
+        testId="combobox-relations"
+      />
 
       <div className="flex gap-2 mb-4 flex-wrap">
         {filters.map((f) => (
@@ -489,7 +572,7 @@ function RelationsTab() {
 function CadrageTab() {
   const { toast } = useToast();
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [search, setSearch] = useState("");
+  const [searchUserId, setSearchUserId] = useState<string | null>(null);
   const [selectedRelation, setSelectedRelation] = useState<RelationWithUsers | null>(null);
   const [formData, setFormData] = useState({
     scheduledDate: "",
@@ -501,6 +584,7 @@ function CadrageTab() {
   const { data: relations = [], isLoading } = useQuery<RelationWithUsers[]>({
     queryKey: ["/api/admin/relations/pending-meeting"],
   });
+  const { data: allUsers = [] } = useQuery<SafeUser[]>({ queryKey: ["/api/admin/users"] });
 
   const createMut = useMutation({
     mutationFn: (data: { relationId: string; scheduledDate: string; durationMinutes: number; location?: string; tasks?: string[] }) =>
@@ -534,24 +618,20 @@ function CadrageTab() {
     return <div className="flex justify-center py-12"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>;
   }
 
-  const searchLower = search.toLowerCase();
   const filteredRelations = relations.filter((r) => {
-    if (search && !`${r.senior.firstName} ${r.senior.lastName} ${r.junior.firstName} ${r.junior.lastName}`.toLowerCase().includes(searchLower)) return false;
+    if (searchUserId && r.seniorId !== searchUserId && r.juniorId !== searchUserId) return false;
     return true;
   });
 
   return (
     <div>
-      <div className="relative mb-4">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-        <Input
-          placeholder="Rechercher par nom..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="pl-9"
-          data-testid="input-search-cadrage"
-        />
-      </div>
+      <UserCombobox
+        users={allUsers}
+        selectedUserId={searchUserId}
+        onSelect={setSearchUserId}
+        placeholder="Filtrer par utilisateur..."
+        testId="combobox-cadrage"
+      />
 
       {filteredRelations.length === 0 ? (
         <div className="text-center py-12 text-muted-foreground">
@@ -708,18 +788,18 @@ function ProfileDialog({ user, open, onOpenChange }: { user: SafeUser | null; op
 
 function RencontresTab() {
   const [filter, setFilter] = useState("all");
-  const [search, setSearch] = useState("");
+  const [searchUserId, setSearchUserId] = useState<string | null>(null);
   const [selectedUser, setSelectedUser] = useState<SafeUser | null>(null);
   const [profileOpen, setProfileOpen] = useState(false);
 
   const { data: interventions = [], isLoading } = useQuery<InterventionWithRelation[]>({
     queryKey: ["/api/admin/interventions"],
   });
+  const { data: allUsers = [] } = useQuery<SafeUser[]>({ queryKey: ["/api/admin/users"] });
 
-  const searchLower = search.toLowerCase();
   const filtered = interventions.filter((i) => {
     if (filter !== "all" && i.status !== filter) return false;
-    if (search && !`${i.relation.senior.firstName} ${i.relation.senior.lastName} ${i.relation.junior.firstName} ${i.relation.junior.lastName}`.toLowerCase().includes(searchLower)) return false;
+    if (searchUserId && i.relation.seniorId !== searchUserId && i.relation.juniorId !== searchUserId) return false;
     return true;
   });
 
@@ -743,16 +823,13 @@ function RencontresTab() {
 
   return (
     <div>
-      <div className="relative mb-4">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-        <Input
-          placeholder="Rechercher par nom..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="pl-9"
-          data-testid="input-search-rencontres"
-        />
-      </div>
+      <UserCombobox
+        users={allUsers}
+        selectedUserId={searchUserId}
+        onSelect={setSearchUserId}
+        placeholder="Filtrer par utilisateur..."
+        testId="combobox-rencontres"
+      />
 
       <div className="flex gap-2 mb-4 flex-wrap">
         {filters.map((f) => (
@@ -854,7 +931,7 @@ const NOTIF_TYPE_LABELS: Record<string, string> = {
 };
 
 function NotificationsAdminTab() {
-  const [search, setSearch] = useState("");
+  const [searchUserId, setSearchUserId] = useState<string | null>(null);
   const [typeFilter, setTypeFilter] = useState("all");
   const [selectedUser, setSelectedUser] = useState<SafeUser | null>(null);
   const [profileOpen, setProfileOpen] = useState(false);
@@ -862,6 +939,7 @@ function NotificationsAdminTab() {
   const { data: notifications = [], isLoading } = useQuery<NotificationWithUser[]>({
     queryKey: ["/api/admin/notifications"],
   });
+  const { data: allUsers = [] } = useQuery<SafeUser[]>({ queryKey: ["/api/admin/users"] });
 
   function openProfile(user: SafeUser) {
     setSelectedUser(user);
@@ -869,10 +947,9 @@ function NotificationsAdminTab() {
   }
 
   const types = Array.from(new Set(notifications.map((n) => n.type)));
-  const searchLower = search.toLowerCase();
   const filtered = notifications.filter((n) => {
     if (typeFilter !== "all" && n.type !== typeFilter) return false;
-    if (search && !`${n.user.firstName} ${n.user.lastName}`.toLowerCase().includes(searchLower)) return false;
+    if (searchUserId && n.userId !== searchUserId) return false;
     return true;
   });
 
@@ -882,16 +959,13 @@ function NotificationsAdminTab() {
 
   return (
     <div>
-      <div className="relative mb-4">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-        <Input
-          placeholder="Rechercher par nom d'utilisateur..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="pl-9"
-          data-testid="input-search-notifications"
-        />
-      </div>
+      <UserCombobox
+        users={allUsers}
+        selectedUserId={searchUserId}
+        onSelect={setSearchUserId}
+        placeholder="Filtrer par utilisateur..."
+        testId="combobox-notifications"
+      />
 
       <div className="flex gap-2 mb-4 flex-wrap">
         <button
