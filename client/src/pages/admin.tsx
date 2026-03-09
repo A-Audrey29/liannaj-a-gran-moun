@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
+import StarRating from "@/components/star-rating";
 import { Command, CommandInput, CommandList, CommandEmpty, CommandGroup, CommandItem } from "@/components/ui/command";
 import {
   Dialog,
@@ -825,7 +826,7 @@ function RencontresTab() {
       }
       return val;
     };
-    const header = ["Senior", "Junior", "Date", "Heure", "Durée (min)", "Lieu", "Activités", "Statut"];
+    const header = ["Senior", "Junior", "Date", "Heure", "Durée (min)", "Lieu", "Activités", "Statut", "Note Senior", "Commentaire Senior", "Note Jeune", "Commentaire Jeune"];
     const rows = filtered.map((i) => [
       csvEscape(`${i.relation.senior.firstName} ${i.relation.senior.lastName}`),
       csvEscape(`${i.relation.junior.firstName} ${i.relation.junior.lastName}`),
@@ -835,6 +836,10 @@ function RencontresTab() {
       csvEscape(i.location || ""),
       csvEscape((i.tasks || []).join(", ")),
       csvEscape(STATUS_LABELS[i.status] || i.status),
+      i.seniorRating !== null ? String(i.seniorRating) : "",
+      csvEscape(i.seniorComment || ""),
+      i.juniorRating !== null ? String(i.juniorRating) : "",
+      csvEscape(i.juniorComment || ""),
     ]);
     const bom = "\uFEFF";
     const csv = bom + [header.join(";"), ...rows.map((r) => r.join(";"))].join("\n");
@@ -946,6 +951,35 @@ function RencontresTab() {
                   {STATUS_LABELS[i.status] || i.status}
                 </Badge>
               </div>
+              {(i.seniorRating !== null || i.juniorRating !== null || i.status === "COMPLETED_PENDING_FEEDBACK") && (
+                <div className="mt-3 pt-3 border-t space-y-2" data-testid={`feedback-section-${i.id}`}>
+                  <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Feedbacks</div>
+                  {i.seniorRating !== null ? (
+                    <div className="flex items-center gap-2 flex-wrap" data-testid={`feedback-senior-${i.id}`}>
+                      <span className="text-xs font-medium w-12">Senior</span>
+                      <StarRating value={i.seniorRating} readonly size={16} />
+                      {i.seniorComment && <span className="text-xs text-muted-foreground italic">"{i.seniorComment}"</span>}
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2 text-xs text-amber-600" data-testid={`feedback-senior-pending-${i.id}`}>
+                      <span className="font-medium w-12">Senior</span>
+                      <span>En attente</span>
+                    </div>
+                  )}
+                  {i.juniorRating !== null ? (
+                    <div className="flex items-center gap-2 flex-wrap" data-testid={`feedback-junior-${i.id}`}>
+                      <span className="text-xs font-medium w-12">Jeune</span>
+                      <StarRating value={i.juniorRating} readonly size={16} />
+                      {i.juniorComment && <span className="text-xs text-muted-foreground italic">"{i.juniorComment}"</span>}
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2 text-xs text-amber-600" data-testid={`feedback-junior-pending-${i.id}`}>
+                      <span className="font-medium w-12">Jeune</span>
+                      <span>En attente</span>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           ))}
         </div>
