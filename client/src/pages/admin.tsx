@@ -35,6 +35,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import {
   Users,
   Link2,
@@ -192,16 +193,21 @@ function UserCombobox({
         </PopoverContent>
       </Popover>
       {selectedUserId && (
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => onSelect(null)}
-          className="shrink-0 text-muted-foreground hover:text-foreground"
-          aria-label="Effacer le filtre utilisateur"
-          data-testid={`${testId}-clear`}
-        >
-          <X className="w-4 h-4" />
-        </Button>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => onSelect(null)}
+              className="shrink-0 text-muted-foreground hover:text-foreground"
+              aria-label="Effacer le filtre utilisateur"
+              data-testid={`${testId}-clear`}
+            >
+              <X className="w-4 h-4" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>Effacer le filtre</TooltipContent>
+        </Tooltip>
       )}
     </div>
   );
@@ -383,11 +389,16 @@ function UsersTab() {
               )}
               {u.role !== "ADMIN" && (
                 <AlertDialog>
-                  <AlertDialogTrigger asChild>
-                    <Button size="sm" variant="outline" className="text-red-600 border-red-300 hover:bg-red-50" data-testid={`btn-delete-${u.id}`}>
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </Button>
-                  </AlertDialogTrigger>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <AlertDialogTrigger asChild>
+                        <Button size="sm" variant="outline" className="text-red-600 border-red-300 hover:bg-red-50" aria-label="Supprimer" data-testid={`btn-delete-${u.id}`}>
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </Button>
+                      </AlertDialogTrigger>
+                    </TooltipTrigger>
+                    <TooltipContent>Supprimer</TooltipContent>
+                  </Tooltip>
                   <AlertDialogContent>
                     <AlertDialogHeader>
                       <AlertDialogTitle>Supprimer {u.firstName} {u.lastName} ?</AlertDialogTitle>
@@ -528,16 +539,21 @@ function RelationsTab() {
             </Button>
             {r.status !== "CLOSED" && (
               <AlertDialog>
-                <AlertDialogTrigger asChild>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="text-red-600 border-red-300 hover:bg-red-50"
-                    data-testid={`btn-close-relation-${r.id}`}
-                  >
-                    Fermer
-                  </Button>
-                </AlertDialogTrigger>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <AlertDialogTrigger asChild>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="text-red-600 border-red-300 hover:bg-red-50"
+                        data-testid={`btn-close-relation-${r.id}`}
+                      >
+                        Fermer
+                      </Button>
+                    </AlertDialogTrigger>
+                  </TooltipTrigger>
+                  <TooltipContent>Mettre fin à cette relation</TooltipContent>
+                </Tooltip>
                 <AlertDialogContent>
                   <AlertDialogHeader>
                     <AlertDialogTitle>Fermer cette relation ?</AlertDialogTitle>

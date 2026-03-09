@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { Menu, Bell, LogOut, X } from "lucide-react";
 import { useState } from "react";
 import type { Notification } from "@shared/schema";
@@ -49,16 +50,21 @@ function NotificationBell() {
 
   return (
     <Popover>
-      <PopoverTrigger asChild>
-        <Button variant="ghost" size="icon" className="relative" data-testid="button-notifications">
-          <Bell className="w-5 h-5" />
-          {count > 0 && (
-            <span className="absolute -top-1 -right-1 bg-[#dc4256] text-white text-[10px] font-bold rounded-full w-5 h-5 flex items-center justify-center">
-              {count > 9 ? "9+" : count}
-            </span>
-          )}
-        </Button>
-      </PopoverTrigger>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <PopoverTrigger asChild>
+            <Button variant="ghost" size="icon" className="relative" aria-label="Notifications" data-testid="button-notifications">
+              <Bell className="w-5 h-5" />
+              {count > 0 && (
+                <span className="absolute -top-1 -right-1 bg-[#dc4256] text-white text-[10px] font-bold rounded-full w-5 h-5 flex items-center justify-center">
+                  {count > 9 ? "9+" : count}
+                </span>
+              )}
+            </Button>
+          </PopoverTrigger>
+        </TooltipTrigger>
+        <TooltipContent>Notifications</TooltipContent>
+      </Tooltip>
       <PopoverContent className="w-80 p-0" align="end">
         <div className="p-3 border-b font-semibold text-sm">Notifications</div>
         <ScrollArea className="max-h-80">
@@ -156,9 +162,14 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             {isAuthenticated && (
               <>
                 <NotificationBell />
-                <Button variant="ghost" size="icon" onClick={handleLogout} data-testid="button-logout">
-                  <LogOut className="w-5 h-5" />
-                </Button>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button variant="ghost" size="icon" onClick={handleLogout} aria-label="Déconnexion" data-testid="button-logout">
+                      <LogOut className="w-5 h-5" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Déconnexion</TooltipContent>
+                </Tooltip>
               </>
             )}
           </nav>
@@ -166,11 +177,16 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           <div className="flex md:hidden items-center gap-2">
             {isAuthenticated && <NotificationBell />}
             <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
-              <SheetTrigger asChild>
-                <Button variant="ghost" size="icon" data-testid="button-mobile-menu">
-                  <Menu className="w-5 h-5" />
-                </Button>
-              </SheetTrigger>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <SheetTrigger asChild>
+                    <Button variant="ghost" size="icon" aria-label="Menu" data-testid="button-mobile-menu">
+                      <Menu className="w-5 h-5" />
+                    </Button>
+                  </SheetTrigger>
+                </TooltipTrigger>
+                <TooltipContent>Menu</TooltipContent>
+              </Tooltip>
               <SheetContent side="right" className="w-72 bg-white">
                 <div className="flex flex-col gap-4 pt-8">
                   <NavLinks authenticated={isAuthenticated} role={user?.role} onClick={() => setMobileOpen(false)} />
