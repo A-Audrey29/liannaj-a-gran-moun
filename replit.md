@@ -81,12 +81,26 @@ client/
 6. **Relance**: >3 jours sans feedback → email de rappel automatique (cron 6h) + in-app au login
 7. **Emails transactionnels**: relation acceptée, intervention proposée/confirmée, feedback requis (Brevo, fail silencieux)
 
-## Comptes de Test (Seed)
-- admin@feves.fr / password (ADMIN, ACTIVE)
-- senior@test.fr / password (SENIOR, ACTIVE, Lyon)
-- junior@test.fr / password (JUNIOR, ACTIVE, Lyon)
-- junior2@test.fr / password (JUNIOR, ACTIVE, Lyon)
-- senior.pending@test.fr / password (SENIOR, PENDING_VALIDATION, Marseille)
+## Comptes de Test (Seed) — Tous en Guadeloupe
+- admin@feves.fr / password (ADMIN, ACTIVE, Pointe-à-Pitre 97110)
+- **Seniors (Les Abymes 97139)** :
+  - senior@test.fr / password — Jean Dupont (ACTIVE, Jardinage)
+  - senior2@test.fr / password — Madeleine Fontaine (ACTIVE, Cuisine, Lecture)
+  - senior3@test.fr / password — Georges Blanc (ACTIVE, Bricolage, Jardinage, subscriptionActive)
+  - senior4@test.fr / password — Simone Rousseau (ACTIVE, Informatique, Promenade)
+  - senior5@test.fr / password — René Moreau (ACTIVE, Cuisine, Promenade, Jardinage)
+  - senior.pending@test.fr / password — Pierre Durand (PENDING_VALIDATION, Pointe-à-Pitre 97110)
+- **Juniors (Les Abymes 97139)** :
+  - junior@test.fr / password — Marie Martin (ACTIVE, Jardinage, Bricolage)
+  - junior2@test.fr / password — Lucas Bernard (ACTIVE, Informatique)
+  - junior3@test.fr / password — Emma Lefèvre (ACTIVE, Cuisine, Jardinage)
+  - junior4@test.fr / password — Théo Garcia (ACTIVE, Informatique, Bricolage)
+  - junior5@test.fr / password — Léa Dubois (ACTIVE, Lecture, Promenade)
+  - junior6@test.fr / password — Nathan Petit (ACTIVE, Cuisine, Promenade, Bricolage)
+- **6 Catégories** : Bricolage, Jardinage, Informatique, Cuisine, Lecture, Promenade
+- **5 Relations** : Senior1↔Junior1 (ACTIVE), René→Emma (PENDING), Madeleine↔Léa (PENDING_FIRST_MEETING), Georges↔Théo (ACTIVE), Simone↔Nathan (ACTIVE)
+- **5 Interventions** : 1 CONFIRMED, 1 PROPOSED, 2 COMPLETED, 1 COMPLETED_PENDING_FEEDBACK
+- **2 AdminRecommendations**, **1 Paiement**, **4 Notifications**
 
 ## Variables d'Environnement
 - DATABASE_URL (Replit Managed)
