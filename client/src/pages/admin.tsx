@@ -353,39 +353,54 @@ function UsersTab() {
             <div className="flex gap-1.5 flex-shrink-0">
               {u.status === "PENDING_VALIDATION" && (
                 <>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="text-green-700 border-green-300 hover:bg-green-50"
-                    onClick={() => validateMut.mutate(u.id)}
-                    disabled={validateMut.isPending}
-                    data-testid={`btn-validate-${u.id}`}
-                  >
-                    <CheckCircle className="w-3.5 h-3.5 mr-1" />Valider
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="text-gray-600"
-                    onClick={() => suspendMut.mutate(u.id)}
-                    disabled={suspendMut.isPending}
-                    data-testid={`btn-refuse-${u.id}`}
-                  >
-                    <XCircle className="w-3.5 h-3.5 mr-1" />Refuser
-                  </Button>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="text-green-700 border-green-300 hover:bg-green-50"
+                        onClick={() => validateMut.mutate(u.id)}
+                        disabled={validateMut.isPending}
+                        data-testid={`btn-validate-${u.id}`}
+                      >
+                        <CheckCircle className="w-3.5 h-3.5 mr-1" />Valider
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>Valider le compte utilisateur</TooltipContent>
+                  </Tooltip>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="text-gray-600"
+                        onClick={() => suspendMut.mutate(u.id)}
+                        disabled={suspendMut.isPending}
+                        data-testid={`btn-refuse-${u.id}`}
+                      >
+                        <XCircle className="w-3.5 h-3.5 mr-1" />Refuser
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>Refuser l'inscription</TooltipContent>
+                  </Tooltip>
                 </>
               )}
               {u.status === "ACTIVE" && u.role !== "ADMIN" && (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="text-orange-600 border-orange-300 hover:bg-orange-50"
-                  onClick={() => suspendMut.mutate(u.id)}
-                  disabled={suspendMut.isPending}
-                  data-testid={`btn-suspend-${u.id}`}
-                >
-                  <Ban className="w-3.5 h-3.5 mr-1" />Suspendre
-                </Button>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="text-orange-600 border-orange-300 hover:bg-orange-50"
+                      onClick={() => suspendMut.mutate(u.id)}
+                      disabled={suspendMut.isPending}
+                      data-testid={`btn-suspend-${u.id}`}
+                    >
+                      <Ban className="w-3.5 h-3.5 mr-1" />Suspendre
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Suspendre le compte utilisateur</TooltipContent>
+                </Tooltip>
               )}
               {u.role !== "ADMIN" && (
                 <AlertDialog>
@@ -397,7 +412,7 @@ function UsersTab() {
                         </Button>
                       </AlertDialogTrigger>
                     </TooltipTrigger>
-                    <TooltipContent>Supprimer</TooltipContent>
+                    <TooltipContent>Supprimer l'utilisateur</TooltipContent>
                   </Tooltip>
                   <AlertDialogContent>
                     <AlertDialogHeader>
