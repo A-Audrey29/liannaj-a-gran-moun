@@ -338,57 +338,60 @@ function RencontresTab({ relations, isLoading, user }: { relations?: RelationWit
               )}
 
               {interventions.length > 0 && (
-                <div className="border-t pt-3 pb-4" style={{ marginLeft: "10%", paddingLeft: "1rem", paddingRight: "1rem" }}>
-                  <div className="ml-4 border-l-2 border-primary/20 pl-4">
-                    <div className="flex items-center justify-between mb-3">
-                      <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Historique des rencontres</h4>
-                      <Button
-                        variant={isExpanded ? "outline" : "default"}
-                        size="sm"
-                        className="rounded-full text-xs gap-1.5"
-                        aria-expanded={isExpanded}
-                        onClick={() => {
-                          setCollapsedIds((prev) => {
-                            const next = new Set(prev);
-                            if (next.has(rel.id)) {
-                              next.delete(rel.id);
-                            } else {
-                              next.add(rel.id);
-                            }
-                            return next;
-                          });
-                        }}
-                        data-testid={`toggle-history-${rel.id}`}
-                      >
-                        {isExpanded ? (
-                          <><EyeOff className="w-3.5 h-3.5" /> Masquer l'historique</>
-                        ) : (
-                          <><Eye className="w-3.5 h-3.5" /> Voir l'historique ({interventions.length})</>
-                        )}
-                      </Button>
-                    </div>
-
-                    {isExpanded && (
-                      <div className="space-y-2">
-                        {interventions.map((interv) => (
-                          <div
-                            key={interv.id}
-                            className="flex items-center justify-between py-2 px-3 rounded-xl bg-muted/30 text-sm"
-                            data-testid={`intervention-${interv.id}`}
-                          >
-                            <div>
-                              <p className="font-medium text-xs">
-                                {new Date(interv.scheduledDate).toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "long" })}
-                              </p>
-                              <p className="text-[10px] text-muted-foreground">
-                                {interv.durationMinutes} min{interv.location ? ` · ${interv.location}` : ""}
-                              </p>
-                            </div>
-                            <StatusBadge status={interv.status} />
-                          </div>
-                        ))}
+                <div>
+                  <div className="border-t" />
+                  <div className="pt-3 pb-4 pr-4" style={{ marginLeft: "10%" }}>
+                    <div className="border-l-2 border-primary/20 pl-4">
+                      <div className="flex items-center justify-between mb-3">
+                        <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Historique des rencontres</h4>
+                        <Button
+                          variant={isExpanded ? "outline" : "default"}
+                          size="sm"
+                          className="rounded-full text-xs gap-1.5"
+                          aria-expanded={isExpanded}
+                          onClick={() => {
+                            setCollapsedIds((prev) => {
+                              const next = new Set(prev);
+                              if (next.has(rel.id)) {
+                                next.delete(rel.id);
+                              } else {
+                                next.add(rel.id);
+                              }
+                              return next;
+                            });
+                          }}
+                          data-testid={`toggle-history-${rel.id}`}
+                        >
+                          {isExpanded ? (
+                            <><EyeOff className="w-3.5 h-3.5" /> Masquer l'historique</>
+                          ) : (
+                            <><Eye className="w-3.5 h-3.5" /> Voir l'historique ({interventions.length})</>
+                          )}
+                        </Button>
                       </div>
-                    )}
+
+                      {isExpanded && (
+                        <div className="space-y-2">
+                          {interventions.map((interv) => (
+                            <div
+                              key={interv.id}
+                              className="flex items-center justify-between py-2 px-3 rounded-xl bg-muted/30 text-sm"
+                              data-testid={`intervention-${interv.id}`}
+                            >
+                              <div>
+                                <p className="font-medium text-xs">
+                                  {new Date(interv.scheduledDate).toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "long" })}
+                                </p>
+                                <p className="text-[10px] text-muted-foreground">
+                                  {interv.durationMinutes} min{interv.location ? ` · ${interv.location}` : ""}
+                                </p>
+                              </div>
+                              <StatusBadge status={interv.status} />
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
               )}
