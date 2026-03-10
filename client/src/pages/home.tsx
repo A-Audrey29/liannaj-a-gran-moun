@@ -306,9 +306,13 @@ function RencontresTab({ relations, isLoading, user }: { relations?: RelationWit
         return (
           <Card key={rel.id} className="rounded-2xl border-0 shadow-sm overflow-hidden" data-testid={`card-relation-${rel.id}`}>
             <CardContent className="p-0">
-              <button
+              <div
                 onClick={() => setExpandedId(isExpanded ? null : rel.id)}
-                className="w-full flex items-center justify-between py-4 px-4 hover:bg-muted/30 transition-colors text-left"
+                className="w-full flex items-center justify-between py-4 px-4 hover:bg-muted/30 transition-colors text-left cursor-pointer"
+                role="button"
+                tabIndex={0}
+                aria-expanded={isExpanded}
+                onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setExpandedId(isExpanded ? null : rel.id); } }}
                 data-testid={`toggle-relation-${rel.id}`}
               >
                 <div className="flex items-center gap-3">
@@ -320,23 +324,21 @@ function RencontresTab({ relations, isLoading, user }: { relations?: RelationWit
                 </div>
                 <div className="flex items-center gap-2">
                   <StatusBadge status={rel.status} />
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="rounded-full text-xs"
+                    onClick={(e) => { e.stopPropagation(); setLocation(`/relations/${rel.id}`); }}
+                    data-testid={`button-voir-profil-${rel.id}`}
+                  >
+                    Voir son profil <ChevronRight className="w-3 h-3 ml-1" />
+                  </Button>
                   <ChevronRight className={`w-4 h-4 text-muted-foreground transition-transform ${isExpanded ? "rotate-90" : ""}`} />
                 </div>
-              </button>
+              </div>
 
               {isExpanded && (
                 <div className="border-t px-4 pb-4">
-                  <div className="flex justify-end mt-3 mb-3">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="rounded-full text-xs"
-                      onClick={() => setLocation(`/relations/${rel.id}`)}
-                      data-testid={`button-voir-profil-${rel.id}`}
-                    >
-                      Voir son profil <ChevronRight className="w-3 h-3 ml-1" />
-                    </Button>
-                  </div>
 
                   {interventions.length === 0 ? (
                     <p className="text-xs text-muted-foreground text-center py-3">Aucune rencontre planifiée</p>
