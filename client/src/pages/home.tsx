@@ -16,9 +16,9 @@ import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import StatusBadge from "@/components/status-badge";
-import { Calendar, MessageCircle, User, LayoutGrid, ChevronRight, ChevronLeft, Plus, Check, X, Pencil, Heart, Camera, Trash2, AlertTriangle, Star, Users, ClipboardCheck, Eye, EyeOff, List, GalleryHorizontalEnd, MapPin } from "lucide-react";
+import { Calendar, MessageCircle, User, LayoutGrid, ChevronRight, ChevronLeft, Plus, Check, X, Pencil, Heart, Camera, Trash2, AlertTriangle, Star, Users, ClipboardCheck, Eye, EyeOff, List, GalleryHorizontalEnd, MapPin, Lock } from "lucide-react";
 import { useState, useRef } from "react";
-import { updateProfileSchema, type UpdateProfileInput } from "@shared/schema";
+import { updateProfileSchema, type UpdateProfileInput, changePasswordSchema, type ChangePasswordInput } from "@shared/schema";
 import type { Relation, User as UserType, Intervention } from "@shared/schema";
 
 type RelationWithUsers = Relation & { senior: UserType; junior: UserType; interventions?: Intervention[] };
@@ -998,6 +998,8 @@ function ProfilTab({ user }: { user: AuthUser | null }) {
         </Card>
       )}
 
+      <ChangePasswordSection />
+
       <EditProfileDialog user={user} open={editOpen} onOpenChange={setEditOpen} />
 
       <Button
@@ -1017,6 +1019,90 @@ function ProfilTab({ user }: { user: AuthUser | null }) {
         Deconnexion
       </Button>
     </div>
+  );
+}
+
+function ChangePasswordSection() {
+  const { toast } = useToast();
+  const [open, setOpen] = useState(false);
+
+  const form = useForm<ChangePasswordInput>({
+    resolver: zodResolver(changePasswordSchema),
+    defaultValues: { currentPassword: "", newPassword: "" },
+  });
+
+  const mutation = useMutation({
+    mutationFn: async (data: ChangePasswordInput) => {
+      await apiRequest("PATCH", "/api/auth/me/password", data);
+    },
+    onSuccess: () => {
+      toast({ title: "Mot de passe modifié avec succès" });
+      form.reset();
+      setOpen(false);
+    },
+    onError: (error: Error) => {
+      const msg = error.message.includes("400")
+        ? "Mot de passe actuel incorrect"
+        : "Erreur lors du changement de mot de passe";
+      toast({ title: "Erreur", description: msg, variant: "destructive" });
+    },
+  });
+
+  return (
+    <Card className="rounded-2xl border-0 shadow-sm">
+      <CardContent className="py-6">
+        <button
+          type="button"
+          onClick={() => setOpen(!open)}
+          className="flex items-center gap-2 w-full text-left"
+          data-testid="button-toggle-password"
+        >
+          <Lock className="w-4 h-4 text-[#dc4256]" />
+          <SectionTitle>Modifier mon mot de passe</SectionTitle>
+          <ChevronRight className={`w-4 h-4 ml-auto transition-transform ${open ? "rotate-90" : ""}`} />
+        </button>
+        {open && (
+          <Form {...form}>
+            <form onSubmit={form.handleSubmit((data) => mutation.mutate(data))} className="space-y-4 mt-4">
+              <FormField
+                control={form.control}
+                name="currentPassword"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Mot de passe actuel</FormLabel>
+                    <FormControl>
+                      <Input type="password" placeholder="Votre mot de passe actuel" {...field} data-testid="input-current-password" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="newPassword"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Nouveau mot de passe</FormLabel>
+                    <FormControl>
+                      <Input type="password" placeholder="Min. 6 caractères" {...field} data-testid="input-new-password" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <Button
+                type="submit"
+                disabled={mutation.isPending}
+                className="w-full rounded-full bg-[#dc4256] hover:bg-[#c73848] text-white"
+                data-testid="button-submit-password"
+              >
+                {mutation.isPending ? "Modification en cours..." : "Valider"}
+              </Button>
+            </form>
+          </Form>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 
