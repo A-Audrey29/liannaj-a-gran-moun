@@ -58,6 +58,9 @@ client/
       use-auth.ts        # Hook d'authentification (useQuery /api/auth/me)
       use-mobile.tsx     # Détection mobile
       use-toast.ts       # Hook toast notifications
+      use-sse.ts         # Hook SSE pour messages temps réel (EventSource + invalidation TanStack Query)
+      use-unread-count.ts # Hook compteur messages non lus
+      use-push.ts        # Hook notifications push PWA (Web Push API + VAPID)
     lib/                 # Utilitaires (queryClient)
 ```
 
@@ -72,6 +75,9 @@ client/
 - **PaymentRecord**: Historique paiements
 - **Report**: Signalements
 - **Notification**: Notifications in-app
+- **Conversation**: Messagerie interne (1:1 liée à Relation, unique par relation)
+- **Message**: Messages texte (content, isRead, isDeleted, deletedByAdmin, sender)
+- **PushSubscription**: Souscriptions Web Push (endpoint, p256dh, auth)
 
 ## Logique Métier Clé
 1. **Inscription**: User créé (PENDING_VALIDATION) → Email validation envoyé au référent → Clic lien → ACTIVE
@@ -81,6 +87,8 @@ client/
 5. **Feedback Obligatoire**: DONE → COMPLETED_PENDING_FEEDBACK → les deux notent → COMPLETED
 6. **Relance**: >3 jours sans feedback → email de rappel automatique (cron 6h) + in-app au login
 7. **Emails transactionnels**: relation acceptée, intervention proposée/confirmée, feedback requis (Brevo, fail silencieux)
+8. **Messagerie interne**: SSE temps réel, conversations 1:1 par relation, admin modération complète
+9. **Notifications push**: Web Push (VAPID), fallback silencieux sans clés configurées
 
 ## Comptes de Test (Seed) — Tous en Guadeloupe
 - admin@feves.fr / password (ADMIN, ACTIVE, Pointe-à-Pitre 97110)
@@ -154,6 +162,17 @@ client/
 - `POST /api/admin/payments` — enregistrer un paiement (active subscriptionActive)
 - `GET /api/admin/notifications` — toutes les notifications avec user associé (requireAdmin)
 - `POST /api/admin/create-admin` — créer un compte administrateur (requireAdmin)
+- `GET /api/messages/stream` — SSE temps réel (événements: new_message, message_sent, messages_read, message_deleted)
+- `GET /api/messages/conversations` — conversations de l'utilisateur
+- `GET /api/messages/conversations/:id` — messages d'une conversation (paginé)
+- `POST /api/messages/conversations/:id` — envoyer un message
+- `PATCH /api/messages/conversations/:id/read` — marquer messages comme lus
+- `GET /api/messages/unread-count` — compteur messages non lus
+- `GET /api/push/vapid-key` — clé publique VAPID
+- `POST /api/push/subscribe` — enregistrer souscription push
+- `GET /api/admin/messages/conversations` — toutes les conversations (admin)
+- `GET /api/admin/messages/conversations/:id` — messages d'une conversation (admin, inclut supprimés)
+- `DELETE /api/admin/messages/:messageId` — supprimer un message (admin, soft delete)
 
 ## Règles Métier Clés
 1. **Seuls les Seniors initient** les relations (Junior 403)
@@ -182,3 +201,9 @@ client/
 6. ✅ **Sprint 6**: Notifications enrichies + Emails transactionnels + Relance feedback auto + PWA installable
 7. ✅ **Sprint 7**: Admin améliorations — Nom cliquable → modale profil partout, recherche par nom tous onglets, filtre ADMIN, référent sur card, onglet Notifications admin, fix bouton retour
 8. ✅ **Sprint 8**: Photo de profil (upload multer 5Mo, jpg/png/webp, UUID naming) + Favoris Senior→Junior (cœur toggle, filtres Tous/Favoris/Recommandés)
+9. ✅ **Sprint 9**: Messagerie interne SSE + Notifications Push PWA + Admin Modération + Doc Brevo
+
+## Variables d'Environnement Supplémentaires (Sprint 9)
+- VAPID_PUBLIC_KEY (clé publique VAPID pour Web Push, optionnel)
+- VAPID_PRIVATE_KEY (clé privée VAPID pour Web Push, optionnel)
+- VAPID_SUBJECT (identifiant contact push, default: mailto:contact@feves.fr)

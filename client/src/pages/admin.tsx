@@ -57,9 +57,11 @@ import {
   X,
   ChevronsUpDown,
   Download,
+  MessageSquare,
 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import type { User, Relation, Intervention, PaymentRecord, Notification } from "@shared/schema";
+import MessagerieAdminTab from "@/components/admin-messages-tab";
 
 type SafeUser = Omit<User, "password" | "validationToken" | "validationExpiry">;
 type RelationWithUsers = Relation & { senior: SafeUser; junior: SafeUser };
@@ -72,6 +74,7 @@ const ADMIN_TABS = [
   { id: "relations", label: "Relations", icon: Link2 },
   { id: "rencontres", label: "Rencontres", icon: Calendar },
   { id: "cadrage", label: "Cadrage", icon: Shield },
+  { id: "messagerie", label: "Messagerie", icon: MessageSquare },
   { id: "paiements", label: "Paiements", icon: CreditCard },
   { id: "notifications", label: "Notifications", icon: Bell },
   { id: "mon-compte", label: "Mon compte", icon: UserCog },
@@ -1619,6 +1622,7 @@ export default function Admin() {
       {activeTab === "relations" && <RelationsTab />}
       {activeTab === "rencontres" && <RencontresTab />}
       {activeTab === "cadrage" && <CadrageTab />}
+      {activeTab === "messagerie" && <MessagerieAdminTab />}
       {activeTab === "paiements" && <PaiementsTab />}
       {activeTab === "notifications" && <NotificationsAdminTab />}
       {activeTab === "mon-compte" && <MonCompteTab />}

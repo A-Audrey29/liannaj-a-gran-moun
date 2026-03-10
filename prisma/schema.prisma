@@ -80,6 +80,8 @@ model User {
 
   categories          UserCategory[]
 
+  sentMessages        Message[] @relation("SentMessages")
+
   seniorRelations     Relation[] @relation("SeniorRelations")
   juniorRelations     Relation[] @relation("JuniorRelations")
 
@@ -92,6 +94,7 @@ model User {
   reportsReceived     Report[] @relation("Target")
 
   notifications       Notification[]
+  pushSubscriptions   PushSubscription[]
 
   favoriteSeniors     Favorite[] @relation("SeniorFavorites")
   favoriteJuniors     Favorite[] @relation("JuniorFavorites")
@@ -133,6 +136,7 @@ model Relation {
 
   interventions Intervention[]
   reports       Report[]
+  conversation  Conversation?
 
   createdAt DateTime @default(now())
 
@@ -233,4 +237,42 @@ model Favorite {
 
   @@unique([seniorId, juniorId])
   @@index([seniorId])
+}
+
+model Conversation {
+  id         String    @id @default(cuid())
+  relationId String    @unique
+  relation   Relation  @relation(fields: [relationId], references: [id], onDelete: Cascade)
+  messages   Message[]
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+}
+
+model Message {
+  id             String       @id @default(cuid())
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  senderId       String
+  sender         User         @relation("SentMessages", fields: [senderId], references: [id], onDelete: Cascade)
+  content        String
+  isRead         Boolean      @default(false)
+  isDeleted      Boolean      @default(false)
+  deletedByAdmin Boolean      @default(false)
+  createdAt      DateTime     @default(now())
+
+  @@index([conversationId, createdAt])
+  @@index([senderId])
+  @@index([conversationId, isRead])
+}
+
+model PushSubscription {
+  id       String @id @default(cuid())
+  userId   String
+  user     User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  endpoint String @unique
+  p256dh   String
+  auth     String
+  createdAt DateTime @default(now())
+
+  @@index([userId])
 }

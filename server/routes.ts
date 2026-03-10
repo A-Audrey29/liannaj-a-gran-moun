@@ -17,6 +17,8 @@ import {
   getFeedbackReminderEmailHtml,
 } from "./lib/email-templates";
 import { insertUserSchema, createRelationSchema, insertInterventionSchema, feedbackSchema, createPaymentSchema, changePasswordSchema, createAdminSchema } from "../shared/schema";
+import { addSSEClient, sendSSEEvent, isUserConnected } from "./lib/sse";
+import { sendPushNotification, getVapidPublicKey } from "./lib/push";
 
 const uploadStorage = multer.diskStorage({
   destination: (_req, _file, cb) => {
@@ -1108,6 +1110,250 @@ export async function registerRoutes(
       res.status(201).json(payment);
     } catch (err) {
       console.error("[ADMIN_CREATE_PAYMENT] Error:", err);
+      res.status(500).json({ message: "Erreur" });
+    }
+  });
+
+  // ==================== MESSAGING (SSE) ====================
+
+  app.get("/api/messages/stream", requireAuth, (req, res) => {
+    res.writeHead(200, {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache",
+      Connection: "keep-alive",
+      "X-Accel-Buffering": "no",
+    });
+    res.write("event: connected\ndata: {}\n\n");
+
+    addSSEClient(req.user!.id, res);
+
+    const heartbeat = setInterval(() => {
+      try { res.write(": heartbeat\n\n"); } catch { clearInterval(heartbeat); }
+    }, 30000);
+
+    req.on("close", () => clearInterval(heartbeat));
+  });
+
+  app.get("/api/messages/unread-count", requireAuth, async (req, res) => {
+    try {
+      const count = await storage.getUnreadMessageCountForUser(req.user!.id);
+      res.json({ count });
+    } catch (err) {
+      console.error("[MSG_UNREAD] Error:", err);
+      res.status(500).json({ message: "Erreur" });
+    }
+  });
+
+  app.get("/api/messages/conversations", requireAuth, async (req, res) => {
+    try {
+      const conversations = await storage.getConversationsForUser(req.user!.id);
+      res.json(conversations);
+    } catch (err) {
+      console.error("[MSG_CONVERSATIONS] Error:", err);
+      res.status(500).json({ message: "Erreur" });
+    }
+  });
+
+  app.get("/api/messages/conversations/:id", requireAuth, async (req, res) => {
+    try {
+      const relationId = req.params.id as string;
+      const relation = await storage.getRelationWithUsers(relationId);
+      if (!relation) return res.status(404).json({ message: "Relation non trouvée" });
+
+      const userId = req.user!.id;
+      if (relation.seniorId !== userId && relation.juniorId !== userId) {
+        return res.status(403).json({ message: "Accès refusé" });
+      }
+
+      const conv = await storage.getOrCreateConversation(relationId);
+      const limit = parseInt(req.query.limit as string) || 50;
+      const cursor = req.query.cursor as string | undefined;
+      const messages = await storage.getMessages(conv.id, limit, cursor);
+      res.json({ messages, conversationId: conv.id });
+    } catch (err) {
+      console.error("[MSG_GET] Error:", err);
+      res.status(500).json({ message: "Erreur" });
+    }
+  });
+
+  app.post("/api/messages/conversations/:id", requireAuth, async (req, res) => {
+    try {
+      const { content } = req.body;
+      if (!content || typeof content !== "string" || content.trim().length === 0) {
+        return res.status(400).json({ message: "Le message ne peut pas être vide" });
+      }
+      if (content.length > 2000) {
+        return res.status(400).json({ message: "Le message est trop long (max 2000 caractères)" });
+      }
+
+      const relationId = req.params.id as string;
+      const relation = await storage.getRelationWithUsers(relationId);
+      if (!relation) return res.status(404).json({ message: "Relation non trouvée" });
+
+      const userId = req.user!.id;
+      if (relation.seniorId !== userId && relation.juniorId !== userId) {
+        return res.status(403).json({ message: "Accès refusé" });
+      }
+
+      const conv = await storage.getOrCreateConversation(relationId);
+      const message = await storage.createMessage(conv.id, userId, content.trim());
+
+      const recipientId = relation.seniorId === userId ? relation.juniorId : relation.seniorId;
+
+      sendSSEEvent(recipientId, "new_message", {
+        message,
+        conversationId: conv.id,
+        relationId: relationId,
+      });
+
+      sendSSEEvent(userId, "message_sent", {
+        message,
+        conversationId: conv.id,
+        relationId: relationId,
+      });
+
+      if (!isUserConnected(recipientId)) {
+        const senderName = `${req.user!.firstName} ${req.user!.lastName}`;
+        sendPushNotification(recipientId, {
+          title: `Nouveau message de ${senderName}`,
+          body: content.trim().substring(0, 100),
+          url: `/`,
+        }).catch(console.error);
+      }
+
+      res.status(201).json(message);
+    } catch (err) {
+      console.error("[MSG_SEND] Error:", err);
+      res.status(500).json({ message: "Erreur lors de l'envoi du message" });
+    }
+  });
+
+  app.patch("/api/messages/conversations/:id/read", requireAuth, async (req, res) => {
+    try {
+      const relationId = req.params.id as string;
+      const relation = await storage.getRelationWithUsers(relationId);
+      if (!relation) return res.status(404).json({ message: "Relation non trouvée" });
+
+      const userId = req.user!.id;
+      if (relation.seniorId !== userId && relation.juniorId !== userId) {
+        return res.status(403).json({ message: "Accès refusé" });
+      }
+
+      const conv = await storage.getOrCreateConversation(relationId);
+      const count = await storage.markMessagesAsRead(conv.id, userId);
+
+      if (count > 0) {
+        const otherId = relation.seniorId === userId ? relation.juniorId : relation.seniorId;
+        sendSSEEvent(otherId, "messages_read", { conversationId: conv.id, relationId: relationId });
+      }
+
+      res.json({ count });
+    } catch (err) {
+      console.error("[MSG_READ] Error:", err);
+      res.status(500).json({ message: "Erreur" });
+    }
+  });
+
+  // ==================== PUSH NOTIFICATIONS ====================
+
+  app.get("/api/push/vapid-key", (_req, res) => {
+    const key = getVapidPublicKey();
+    res.json({ key });
+  });
+
+  app.post("/api/push/subscribe", requireAuth, async (req, res) => {
+    try {
+      const { endpoint, keys } = req.body;
+      if (!endpoint || !keys?.p256dh || !keys?.auth) {
+        return res.status(400).json({ message: "Données de souscription invalides" });
+      }
+      await storage.createPushSubscription(req.user!.id, endpoint, keys.p256dh, keys.auth);
+      res.json({ message: "Souscription enregistrée" });
+    } catch (err) {
+      console.error("[PUSH_SUB] Error:", err);
+      res.status(500).json({ message: "Erreur" });
+    }
+  });
+
+  // ==================== ADMIN MESSAGING ====================
+
+  app.get("/api/admin/messages/conversations", requireAdmin, async (_req, res) => {
+    try {
+      const conversations = await storage.getAllConversations();
+      res.json(conversations);
+    } catch (err) {
+      console.error("[ADMIN_MSG_CONV] Error:", err);
+      res.status(500).json({ message: "Erreur" });
+    }
+  });
+
+  app.get("/api/admin/messages/conversations/:id", requireAdmin, async (req, res) => {
+    try {
+      const { prisma } = await import("./prisma");
+      const conv = await prisma.conversation.findUnique({
+        where: { id: req.params.id },
+        include: {
+          relation: {
+            include: {
+              senior: { select: { id: true, firstName: true, lastName: true, email: true, profilePhoto: true } },
+              junior: { select: { id: true, firstName: true, lastName: true, email: true, profilePhoto: true } },
+            },
+          },
+        },
+      });
+      if (!conv) {
+        const convByRelation = await prisma.conversation.findUnique({
+          where: { relationId: req.params.id },
+          include: {
+            relation: {
+              include: {
+                senior: { select: { id: true, firstName: true, lastName: true, email: true, profilePhoto: true } },
+                junior: { select: { id: true, firstName: true, lastName: true, email: true, profilePhoto: true } },
+              },
+            },
+          },
+        });
+        if (!convByRelation) return res.status(404).json({ message: "Conversation non trouvée" });
+        const messages = await prisma.message.findMany({
+          where: { conversationId: convByRelation.id },
+          orderBy: { createdAt: "desc" },
+          take: 200,
+          include: {
+            sender: { select: { id: true, firstName: true, lastName: true, profilePhoto: true } },
+          },
+        });
+        return res.json({ conversation: convByRelation, messages });
+      }
+      const messages = await prisma.message.findMany({
+        where: { conversationId: conv.id },
+        orderBy: { createdAt: "desc" },
+        take: 200,
+        include: {
+          sender: { select: { id: true, firstName: true, lastName: true, profilePhoto: true } },
+        },
+      });
+      res.json({ conversation: conv, messages });
+    } catch (err) {
+      console.error("[ADMIN_MSG_DETAIL] Error:", err);
+      res.status(500).json({ message: "Erreur" });
+    }
+  });
+
+  app.delete("/api/admin/messages/:messageId", requireAdmin, async (req, res) => {
+    try {
+      const message = await storage.deleteMessage(req.params.messageId);
+      const { prisma } = await import("./prisma");
+      const conv = await prisma.conversation.findUnique({
+        where: { id: message.conversationId },
+        include: { relation: true },
+      });
+      if (conv) {
+        sendSSEEvent(conv.relation.seniorId, "message_deleted", { messageId: message.id, conversationId: conv.id, relationId: conv.relationId });
+        sendSSEEvent(conv.relation.juniorId, "message_deleted", { messageId: message.id, conversationId: conv.id, relationId: conv.relationId });
+      }
+      res.json(message);
+    } catch (err) {
+      console.error("[ADMIN_MSG_DELETE] Error:", err);
       res.status(500).json({ message: "Erreur" });
     }
   });

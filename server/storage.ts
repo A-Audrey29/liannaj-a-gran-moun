@@ -1,5 +1,5 @@
 import { prisma } from "./prisma";
-import type { User, Category, UserCategory, Relation, Intervention, AdminRecommendation, Notification, PaymentRecord, Favorite, Prisma } from "../generated/prisma/client.ts";
+import type { User, Category, UserCategory, Relation, Intervention, AdminRecommendation, Notification, PaymentRecord, Favorite, Conversation, Message, PushSubscription, Prisma } from "../generated/prisma/client.ts";
 
 export interface IStorage {
   getUser(id: string): Promise<User | null>;
@@ -54,6 +54,19 @@ export interface IStorage {
   addFavorite(seniorId: string, juniorId: string): Promise<Favorite>;
   removeFavorite(seniorId: string, juniorId: string): Promise<void>;
   getFavoriteJuniorIds(seniorId: string): Promise<string[]>;
+
+  getOrCreateConversation(relationId: string): Promise<Conversation>;
+  getConversationsForUser(userId: string): Promise<any[]>;
+  getMessages(conversationId: string, limit: number, cursor?: string): Promise<Message[]>;
+  createMessage(conversationId: string, senderId: string, content: string): Promise<Message>;
+  markMessagesAsRead(conversationId: string, userId: string): Promise<number>;
+  deleteMessage(messageId: string): Promise<Message>;
+  getAllConversations(): Promise<any[]>;
+  getUnreadMessageCountForUser(userId: string): Promise<number>;
+
+  createPushSubscription(userId: string, endpoint: string, p256dh: string, auth: string): Promise<PushSubscription>;
+  getPushSubscriptions(userId: string): Promise<PushSubscription[]>;
+  deletePushSubscription(endpoint: string): Promise<void>;
 }
 
 class DatabaseStorage implements IStorage {
@@ -410,6 +423,182 @@ class DatabaseStorage implements IStorage {
       select: { juniorId: true },
     });
     return favs.map((f) => f.juniorId);
+  }
+
+  async getOrCreateConversation(relationId: string): Promise<Conversation> {
+    const existing = await prisma.conversation.findUnique({ where: { relationId } });
+    if (existing) return existing;
+    try {
+      return await prisma.conversation.create({ data: { relationId } });
+    } catch (err: any) {
+      if (err.code === "P2002") {
+        const found = await prisma.conversation.findUnique({ where: { relationId } });
+        if (found) return found;
+      }
+      throw err;
+    }
+  }
+
+  async getConversationsForUser(userId: string): Promise<any[]> {
+    const relations = await prisma.relation.findMany({
+      where: {
+        OR: [{ seniorId: userId }, { juniorId: userId }],
+        status: { notIn: ["CLOSED"] },
+      },
+      select: { id: true },
+    });
+    const relationIds = relations.map((r) => r.id);
+    if (relationIds.length === 0) return [];
+
+    const conversations = await prisma.conversation.findMany({
+      where: { relationId: { in: relationIds } },
+      include: {
+        relation: {
+          include: {
+            senior: { select: { id: true, firstName: true, lastName: true, profilePhoto: true, role: true } },
+            junior: { select: { id: true, firstName: true, lastName: true, profilePhoto: true, role: true } },
+          },
+        },
+        messages: {
+          where: { isDeleted: false },
+          orderBy: { createdAt: "desc" },
+          take: 1,
+        },
+      },
+      orderBy: { updatedAt: "desc" },
+    });
+
+    const result = await Promise.all(
+      conversations.map(async (conv) => {
+        const unreadCount = await prisma.message.count({
+          where: {
+            conversationId: conv.id,
+            senderId: { not: userId },
+            isRead: false,
+            isDeleted: false,
+          },
+        });
+        const partner = conv.relation.seniorId === userId ? conv.relation.junior : conv.relation.senior;
+        return {
+          id: conv.id,
+          relationId: conv.relationId,
+          partner,
+          lastMessage: conv.messages[0] || null,
+          unreadCount,
+          updatedAt: conv.updatedAt,
+        };
+      })
+    );
+
+    return result;
+  }
+
+  async getMessages(conversationId: string, limit: number, cursor?: string): Promise<Message[]> {
+    return prisma.message.findMany({
+      where: {
+        conversationId,
+        isDeleted: false,
+        ...(cursor ? { createdAt: { lt: new Date(cursor) } } : {}),
+      },
+      orderBy: { createdAt: "desc" },
+      take: limit,
+      include: {
+        sender: { select: { id: true, firstName: true, lastName: true, profilePhoto: true } },
+      },
+    });
+  }
+
+  async createMessage(conversationId: string, senderId: string, content: string): Promise<Message> {
+    const [message] = await prisma.$transaction([
+      prisma.message.create({
+        data: { conversationId, senderId, content },
+        include: {
+          sender: { select: { id: true, firstName: true, lastName: true, profilePhoto: true } },
+        },
+      }),
+      prisma.conversation.update({
+        where: { id: conversationId },
+        data: { updatedAt: new Date() },
+      }),
+    ]);
+    return message;
+  }
+
+  async markMessagesAsRead(conversationId: string, userId: string): Promise<number> {
+    const result = await prisma.message.updateMany({
+      where: {
+        conversationId,
+        senderId: { not: userId },
+        isRead: false,
+        isDeleted: false,
+      },
+      data: { isRead: true },
+    });
+    return result.count;
+  }
+
+  async deleteMessage(messageId: string): Promise<Message> {
+    return prisma.message.update({
+      where: { id: messageId },
+      data: { isDeleted: true, deletedByAdmin: true },
+    });
+  }
+
+  async getAllConversations(): Promise<any[]> {
+    return prisma.conversation.findMany({
+      include: {
+        relation: {
+          include: {
+            senior: { select: { id: true, firstName: true, lastName: true, email: true, profilePhoto: true } },
+            junior: { select: { id: true, firstName: true, lastName: true, email: true, profilePhoto: true } },
+          },
+        },
+        messages: {
+          orderBy: { createdAt: "desc" },
+          take: 1,
+        },
+        _count: { select: { messages: true } },
+      },
+      orderBy: { updatedAt: "desc" },
+    });
+  }
+
+  async getUnreadMessageCountForUser(userId: string): Promise<number> {
+    const relations = await prisma.relation.findMany({
+      where: {
+        OR: [{ seniorId: userId }, { juniorId: userId }],
+      },
+      include: { conversation: { select: { id: true } } },
+    });
+    const conversationIds = relations
+      .map((r) => r.conversation?.id)
+      .filter(Boolean) as string[];
+    if (conversationIds.length === 0) return 0;
+
+    return prisma.message.count({
+      where: {
+        conversationId: { in: conversationIds },
+        senderId: { not: userId },
+        isRead: false,
+        isDeleted: false,
+      },
+    });
+  }
+
+  async createPushSubscription(userId: string, endpoint: string, p256dh: string, auth: string): Promise<PushSubscription> {
+    return prisma.pushSubscription.upsert({
+      where: { endpoint },
+      update: { userId, p256dh, auth },
+      create: { userId, endpoint, p256dh, auth },
+    });
+  }
+
+  async getPushSubscriptions(userId: string): Promise<PushSubscription[]> {
+    return prisma.pushSubscription.findMany({ where: { userId } });
+  }
+
+  async deletePushSubscription(endpoint: string): Promise<void> {
+    await prisma.pushSubscription.deleteMany({ where: { endpoint } });
   }
 }
 

@@ -16,10 +16,14 @@ import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import StatusBadge from "@/components/status-badge";
-import { Calendar, MessageCircle, User, LayoutGrid, ChevronRight, ChevronLeft, Plus, Check, X, Pencil, Heart, Camera, Trash2, AlertTriangle, Star, Users, ClipboardCheck, Eye, EyeOff, List, GalleryHorizontalEnd, MapPin, Lock } from "lucide-react";
+import { Calendar, MessageCircle, Mail, User, LayoutGrid, ChevronRight, ChevronLeft, Plus, Check, X, Pencil, Heart, Camera, Trash2, AlertTriangle, Star, Users, ClipboardCheck, Eye, EyeOff, List, GalleryHorizontalEnd, MapPin, Lock } from "lucide-react";
 import { useState, useRef } from "react";
 import { updateProfileSchema, type UpdateProfileInput, changePasswordSchema, type ChangePasswordInput } from "@shared/schema";
 import type { Relation, User as UserType, Intervention } from "@shared/schema";
+import MessagesTab from "@/components/messages-tab";
+import { useSSE } from "@/hooks/use-sse";
+import { useUnreadMessageCount } from "@/hooks/use-unread-count";
+import { usePushNotifications } from "@/hooks/use-push";
 
 type RelationWithUsers = Relation & { senior: UserType; junior: UserType; interventions?: Intervention[] };
 type MatchSuggestion = { user: UserType; commonCategories: string[]; isRecommended: boolean; isFavorite: boolean };
@@ -27,6 +31,7 @@ type MatchSuggestion = { user: UserType; commonCategories: string[]; isRecommend
 const ALL_TABS = [
   { id: "dashboard", label: "Tableau de bord", icon: LayoutGrid },
   { id: "rencontres", label: "Mes rencontres", icon: Calendar },
+  { id: "messages", label: "Messages", icon: Mail },
   { id: "demandes", label: "Trouver un profil", icon: MessageCircle },
   { id: "profil", label: "Profil", icon: User },
 ] as const;
@@ -68,12 +73,17 @@ function useDashboardCounts(relations?: RelationWithUsers[], pendingFB?: Interve
 export default function Home() {
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useState<string>("dashboard");
+  const isNotAdmin = user?.role !== "ADMIN";
   const tabs = user?.role === "ADMIN"
-    ? ALL_TABS.filter((t) => t.id !== "profil")
+    ? ALL_TABS.filter((t) => t.id !== "profil" && t.id !== "messages")
     : user?.role === "JUNIOR"
     ? ALL_TABS.filter((t) => t.id !== "demandes")
     : ALL_TABS;
   const { toast } = useToast();
+
+  useSSE(!!user);
+  usePushNotifications(!!user);
+  const unreadMessages = useUnreadMessageCount(isNotAdmin);
 
   const { data: relations, isLoading: relLoading } = useQuery<RelationWithUsers[]>({ queryKey: ["/api/relations"] });
   const { data: pendingFB } = useQuery<Intervention[]>({ queryKey: ["/api/interventions/pending-feedback"] });
@@ -81,6 +91,7 @@ export default function Home() {
   const counts = useDashboardCounts(relations, pendingFB, user);
 
   const getTabBadge = (tabId: string) => {
+    if (tabId === "messages") return unreadMessages;
     if (tabId === "demandes") return counts.pendingDemandes.length;
     if (tabId === "rencontres" && user?.role === "JUNIOR") return counts.proposedInterventions.length;
     return 0;
@@ -143,6 +154,7 @@ export default function Home() {
 
       {activeTab === "dashboard" && <DashboardTab counts={counts} isLoading={relLoading} user={user} onSwitchTab={setActiveTab} />}
       {activeTab === "rencontres" && <RencontresTab relations={relations} isLoading={relLoading} user={user} />}
+      {activeTab === "messages" && <MessagesTab user={user} />}
       {activeTab === "demandes" && <DemandesTab relations={relations} isLoading={relLoading} user={user} />}
       {activeTab === "profil" && <ProfilTab user={user} />}
     </div>
