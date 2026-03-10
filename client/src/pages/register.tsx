@@ -459,6 +459,19 @@ export default function Register() {
                   />
                   <FormField
                     control={form.control}
+                    name="referentLastName"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Nom du référent</FormLabel>
+                        <FormControl>
+                          <Input placeholder="Nom" {...field} data-testid="input-referentLastName" />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
                     name="referentTitle"
                     render={({ field }) => (
                       <FormItem>
@@ -480,19 +493,6 @@ export default function Register() {
                             Mme
                           </label>
                         </div>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={form.control}
-                    name="referentLastName"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Nom du référent</FormLabel>
-                        <FormControl>
-                          <Input placeholder="Nom" {...field} data-testid="input-referentLastName" />
-                        </FormControl>
                         <FormMessage />
                       </FormItem>
                     )}
