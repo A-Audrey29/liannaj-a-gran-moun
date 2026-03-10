@@ -19,8 +19,8 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { User, GraduationCap, Loader2 } from "lucide-react";
-import { useState } from "react";
+import { User, GraduationCap, Loader2, Upload, Camera, X, ImagePlus } from "lucide-react";
+import { useState, useRef, useCallback } from "react";
 
 const registerSchema = insertUserBaseSchema.extend({
   confirmPassword: z.string().min(6, "Confirmation requise"),
@@ -36,6 +36,8 @@ export default function Register() {
   const [, navigate] = useLocation();
   const { toast } = useToast();
   const [trustedCivilite, setTrustedCivilite] = useState<"M." | "Mme" | "">("");
+  const [photo, setPhoto] = useState<File | null>(null);
+  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
 
   const form = useForm<RegisterForm>({
     resolver: zodResolver(registerSchema),
@@ -71,6 +73,27 @@ export default function Register() {
     queryKey: ["/api/categories"],
   });
 
+  const handlePhotoSelect = useCallback((file: File) => {
+    const allowed = ["image/jpeg", "image/png", "image/webp"];
+    if (!allowed.includes(file.type)) {
+      toast({ title: "Format non supporté", description: "Utilisez JPG, PNG ou WebP.", variant: "destructive" });
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      toast({ title: "Fichier trop volumineux", description: "La taille maximale est de 5 Mo.", variant: "destructive" });
+      return;
+    }
+    setPhoto(file);
+    const reader = new FileReader();
+    reader.onload = (e) => setPhotoPreview(e.target?.result as string);
+    reader.readAsDataURL(file);
+  }, [toast]);
+
+  const removePhoto = useCallback(() => {
+    setPhoto(null);
+    setPhotoPreview(null);
+  }, []);
+
   const registerMutation = useMutation({
     mutationFn: async (data: RegisterForm) => {
       const { confirmPassword, ...payload } = data;
@@ -79,7 +102,16 @@ export default function Register() {
       } else {
         payload.validatorEmail = payload.referentEmail;
       }
-      await apiRequest("POST", "/api/auth/register", payload);
+      const formData = new FormData();
+      formData.append("data", JSON.stringify(payload));
+      if (photo) {
+        formData.append("photo", photo);
+      }
+      const res = await fetch("/api/auth/register", { method: "POST", body: formData });
+      if (!res.ok) {
+        const errBody = await res.json().catch(() => ({}));
+        throw new Error(errBody.message || `${res.status}`);
+      }
     },
     onSuccess: () => {
       navigate("/registration-pending");
@@ -340,6 +372,17 @@ export default function Register() {
               </div>
 
               <div className="space-y-4">
+                <h3 className="text-base font-semibold" data-testid="text-section-photo">
+                  Photo de profil
+                </h3>
+                <PhotoUploadField
+                  photoPreview={photoPreview}
+                  onSelect={handlePhotoSelect}
+                  onRemove={removePhoto}
+                />
+              </div>
+
+              <div className="space-y-4">
                 <h3 className="text-base font-semibold" data-testid="text-section-categories">
                   Catégories d'intérêt
                 </h3>
@@ -543,6 +586,128 @@ export default function Register() {
           </Form>
         </CardContent>
       </Card>
+    </div>
+  );
+}
+
+function PhotoUploadField({
+  photoPreview,
+  onSelect,
+  onRemove,
+}: {
+  photoPreview: string | null;
+  onSelect: (file: File) => void;
+  onRemove: () => void;
+}) {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
+  const [isDragging, setIsDragging] = useState(false);
+
+  const handleDrop = useCallback(
+    (e: React.DragEvent) => {
+      e.preventDefault();
+      setIsDragging(false);
+      const file = e.dataTransfer.files[0];
+      if (file) onSelect(file);
+    },
+    [onSelect]
+  );
+
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(true);
+  }, []);
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+  }, []);
+
+  if (photoPreview) {
+    return (
+      <div className="relative w-32 h-32 mx-auto">
+        <img
+          src={photoPreview}
+          alt="Aperçu"
+          className="w-32 h-32 rounded-full object-cover border-2 border-border"
+          data-testid="img-photo-preview"
+        />
+        <button
+          type="button"
+          onClick={onRemove}
+          className="absolute -top-1 -right-1 bg-destructive text-white rounded-full p-1"
+          data-testid="button-remove-photo"
+        >
+          <X className="w-4 h-4" />
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      onDrop={handleDrop}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      className={`border-2 border-dashed rounded-xl p-6 text-center transition-colors ${
+        isDragging ? "border-[#dc4256] bg-red-50" : "border-border"
+      }`}
+      data-testid="dropzone-photo"
+    >
+      <ImagePlus className="w-10 h-10 mx-auto mb-3 text-muted-foreground" />
+      <p className="text-sm text-muted-foreground mb-3">
+        Glissez-déposez une photo ici
+      </p>
+      <div className="flex gap-2 justify-center flex-wrap">
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => fileInputRef.current?.click()}
+          className="rounded-full text-sm"
+          data-testid="button-browse-photo"
+        >
+          <Upload className="w-4 h-4 mr-1" />
+          Parcourir
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => cameraInputRef.current?.click()}
+          className="rounded-full text-sm"
+          data-testid="button-camera-photo"
+        >
+          <Camera className="w-4 h-4 mr-1" />
+          Prendre une photo
+        </Button>
+      </div>
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/jpeg,image/png,image/webp"
+        className="hidden"
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          if (file) onSelect(file);
+        }}
+        data-testid="input-file-photo"
+      />
+      <input
+        ref={cameraInputRef}
+        type="file"
+        accept="image/jpeg,image/png,image/webp"
+        capture="environment"
+        className="hidden"
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          if (file) onSelect(file);
+        }}
+        data-testid="input-camera-photo"
+      />
+      <p className="text-xs text-muted-foreground mt-2">
+        JPG, PNG ou WebP — 5 Mo max
+      </p>
     </div>
   );
 }

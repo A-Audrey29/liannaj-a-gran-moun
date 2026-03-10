@@ -60,9 +60,10 @@ export async function registerRoutes(
   app: Express
 ): Promise<Server> {
 
-  app.post("/api/auth/register", async (req, res) => {
+  app.post("/api/auth/register", upload.single("photo"), async (req, res) => {
     try {
-      const parsed = insertUserSchema.safeParse(req.body);
+      const body = typeof req.body.data === "string" ? JSON.parse(req.body.data) : req.body;
+      const parsed = insertUserSchema.safeParse(body);
       if (!parsed.success) {
         return res.status(400).json({
           message: "Données invalides",
@@ -82,6 +83,8 @@ export async function registerRoutes(
 
       const { categoryIds, birthDate, ...userData } = data;
 
+      const profilePhoto = req.file ? `/uploads/${req.file.filename}` : undefined;
+
       const user = await storage.createUser({
         ...userData,
         email: userData.email.toLowerCase().trim(),
@@ -90,6 +93,7 @@ export async function registerRoutes(
         status: "PENDING_VALIDATION",
         role: userData.role,
         validationToken,
+        ...(profilePhoto ? { profilePhoto } : {}),
       });
 
       if (categoryIds && categoryIds.length > 0) {
