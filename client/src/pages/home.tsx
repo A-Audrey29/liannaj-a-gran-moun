@@ -26,8 +26,8 @@ type MatchSuggestion = { user: UserType; commonCategories: string[]; isRecommend
 
 const ALL_TABS = [
   { id: "dashboard", label: "Tableau de bord", icon: LayoutGrid },
-  { id: "rencontres", label: "Rencontres", icon: Calendar },
-  { id: "demandes", label: "Demandes", icon: MessageCircle },
+  { id: "rencontres", label: "Mes rencontres", icon: Calendar },
+  { id: "demandes", label: "Trouver un profil", icon: MessageCircle },
   { id: "profil", label: "Profil", icon: User },
 ] as const;
 
@@ -290,7 +290,7 @@ function RencontresTab({ relations, isLoading, user }: { relations?: RelationWit
         <CardContent className="py-8 text-center text-muted-foreground">
           <Calendar className="w-12 h-12 mx-auto mb-3 text-muted-foreground/50" />
           <p>Aucune relation active pour le moment.</p>
-          <p className="text-sm mt-1">Rendez-vous dans l'onglet Demandes pour trouver votre partenaire.</p>
+          <p className="text-sm mt-1">Rendez-vous dans l'onglet Trouver un profil pour trouver votre partenaire.</p>
         </CardContent>
       </Card>
     );
