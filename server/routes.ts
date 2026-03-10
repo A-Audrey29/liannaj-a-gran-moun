@@ -743,6 +743,7 @@ export async function registerRoutes(
 
       if (intervention.relation.status === "PENDING_FIRST_MEETING") {
         await storage.updateRelationStatus(intervention.relationId, "ACTIVE");
+        await storage.getOrCreateConversation(intervention.relationId);
       }
 
       const seniorId = intervention.relation.seniorId;
@@ -1164,6 +1165,9 @@ export async function registerRoutes(
       if (relation.seniorId !== userId && relation.juniorId !== userId) {
         return res.status(403).json({ message: "Accès refusé" });
       }
+      if (relation.status !== "ACTIVE") {
+        return res.status(400).json({ message: "La messagerie n'est disponible qu'après la première rencontre" });
+      }
 
       const conv = await storage.getOrCreateConversation(relationId);
       const limit = parseInt(req.query.limit as string) || 50;
@@ -1193,6 +1197,9 @@ export async function registerRoutes(
       const userId = req.user!.id;
       if (relation.seniorId !== userId && relation.juniorId !== userId) {
         return res.status(403).json({ message: "Accès refusé" });
+      }
+      if (relation.status !== "ACTIVE") {
+        return res.status(400).json({ message: "La messagerie n'est disponible qu'après la première rencontre" });
       }
 
       const conv = await storage.getOrCreateConversation(relationId);
@@ -1237,6 +1244,9 @@ export async function registerRoutes(
       const userId = req.user!.id;
       if (relation.seniorId !== userId && relation.juniorId !== userId) {
         return res.status(403).json({ message: "Accès refusé" });
+      }
+      if (relation.status !== "ACTIVE") {
+        return res.status(400).json({ message: "La messagerie n'est disponible qu'après la première rencontre" });
       }
 
       const conv = await storage.getOrCreateConversation(relationId);

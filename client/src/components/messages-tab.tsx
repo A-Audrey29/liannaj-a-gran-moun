@@ -84,11 +84,11 @@ function ConversationList({ conversations, isLoading, onSelect, userId }: {
 
   if (conversations.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center py-16 text-center" data-testid="messages-empty">
+      <div className="flex flex-col items-center justify-center py-16 text-center px-6" data-testid="messages-empty">
         <MessageSquare className="w-16 h-16 text-muted-foreground/30 mb-4" />
-        <p className="text-lg font-medium text-muted-foreground mb-2">Aucun message</p>
-        <p className="text-sm text-muted-foreground/70 max-w-xs">
-          Vos conversations apparaîtront ici une fois que vous aurez une relation active.
+        <p className="text-lg font-medium text-muted-foreground mb-2">Aucun message pour le moment</p>
+        <p className="text-base text-muted-foreground/70 max-w-sm leading-relaxed">
+          La messagerie est disponible une fois qu'une première rencontre a été organisée par FEVES avec votre partenaire.
         </p>
       </div>
     );
@@ -278,12 +278,23 @@ function ChatView({ conversation, userId, onBack }: {
   );
 }
 
-export default function MessagesTab({ user }: { user: AuthUser | null }) {
+export default function MessagesTab({ user, openRelationId }: { user: AuthUser | null; openRelationId?: string | null }) {
   const [selectedConv, setSelectedConv] = useState<ConversationItem | null>(null);
+  const autoOpenedRef = useRef<string | null>(null);
 
   const { data: conversations = [], isLoading } = useQuery<ConversationItem[]>({
     queryKey: ["/api/messages/conversations"],
   });
+
+  useEffect(() => {
+    if (openRelationId && conversations.length > 0 && autoOpenedRef.current !== openRelationId) {
+      const target = conversations.find((c) => c.relationId === openRelationId);
+      if (target) {
+        setSelectedConv(target);
+        autoOpenedRef.current = openRelationId;
+      }
+    }
+  }, [openRelationId, conversations]);
 
   if (!user) return null;
 

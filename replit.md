@@ -43,14 +43,16 @@ client/
       registration-pending.tsx  # Confirmation post-inscription
       validation-success.tsx    # Compte validé avec succès
       validation-error.tsx      # Token expiré/invalide + renvoi de lien
-      home.tsx           # Mon espace (Dashboard 4 onglets : Tableau de bord, Rencontres, Demandes, Profil)
+      home.tsx           # Mon espace (Dashboard 5 onglets : Tableau de bord, Rencontres, Messages, Demandes, Profil)
       admin.tsx          # Dashboard Admin (8 onglets : Utilisateurs, Relations, Rencontres, Cadrage, Paiements, Notifications, Mon compte, Créer admin)
       notifications.tsx  # Page notifications complète (toutes, marquer lu, tout marquer lu)
-      relation-detail.tsx # Détail relation + interventions + feedback étoiles
+      relation-detail.tsx # Détail relation + interventions + feedback étoiles + bouton message (ACTIVE only)
       not-found.tsx      # Page 404
     components/
       app-layout.tsx     # Layout partagé (header brand + footer + notifications cloche)
       auth-guard.tsx     # Protection des routes authentifiées
+      messages-tab.tsx   # Onglet messagerie (liste conversations + chat, accessible uniquement relations ACTIVE)
+      admin-messages-tab.tsx # Modération admin des messages (lecture intégrale + soft-delete)
       star-rating.tsx    # Composant étoiles cliquables (1-5) / lecture seule
       status-badge.tsx   # Badge coloré selon statut (relation/intervention/rôle)
       ui/                # Composants Shadcn/UI
@@ -87,7 +89,7 @@ client/
 5. **Feedback Obligatoire**: DONE → COMPLETED_PENDING_FEEDBACK → les deux notent → COMPLETED
 6. **Relance**: >3 jours sans feedback → email de rappel automatique (cron 6h) + in-app au login
 7. **Emails transactionnels**: relation acceptée, intervention proposée/confirmée, feedback requis (Brevo, fail silencieux)
-8. **Messagerie interne**: SSE temps réel, conversations 1:1 par relation, admin modération complète
+8. **Messagerie interne**: SSE temps réel, conversations 1:1 par relation ACTIVE uniquement (après 1ère rencontre), boutons "Envoyer un message" sur cartes relation et page détail, admin modération complète
 9. **Notifications push**: Web Push (VAPID), fallback silencieux sans clés configurées
 
 ## Comptes de Test (Seed) — Tous en Guadeloupe

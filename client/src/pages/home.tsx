@@ -17,7 +17,7 @@ import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import StatusBadge from "@/components/status-badge";
 import { Calendar, MessageCircle, Mail, User, LayoutGrid, ChevronRight, ChevronLeft, Plus, Check, X, Pencil, Heart, Camera, Trash2, AlertTriangle, Star, Users, ClipboardCheck, Eye, EyeOff, List, GalleryHorizontalEnd, MapPin, Lock } from "lucide-react";
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { updateProfileSchema, type UpdateProfileInput, changePasswordSchema, type ChangePasswordInput } from "@shared/schema";
 import type { Relation, User as UserType, Intervention } from "@shared/schema";
 import MessagesTab from "@/components/messages-tab";
@@ -73,6 +73,7 @@ function useDashboardCounts(relations?: RelationWithUsers[], pendingFB?: Interve
 export default function Home() {
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useState<string>("dashboard");
+  const [openRelationId, setOpenRelationId] = useState<string | null>(null);
   const isNotAdmin = user?.role !== "ADMIN";
   const tabs = user?.role === "ADMIN"
     ? ALL_TABS.filter((t) => t.id !== "profil" && t.id !== "messages")
@@ -80,6 +81,17 @@ export default function Home() {
     ? ALL_TABS.filter((t) => t.id !== "demandes")
     : ALL_TABS;
   const { toast } = useToast();
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const tab = params.get("tab");
+    const relation = params.get("relation");
+    if (tab) setActiveTab(tab);
+    if (relation) setOpenRelationId(relation);
+    if (tab || relation) {
+      window.history.replaceState({}, "", window.location.pathname);
+    }
+  }, []);
 
   useSSE(!!user);
   usePushNotifications(!!user);
@@ -153,8 +165,8 @@ export default function Home() {
       </div>
 
       {activeTab === "dashboard" && <DashboardTab counts={counts} isLoading={relLoading} user={user} onSwitchTab={setActiveTab} />}
-      {activeTab === "rencontres" && <RencontresTab relations={relations} isLoading={relLoading} user={user} />}
-      {activeTab === "messages" && <MessagesTab user={user} />}
+      {activeTab === "rencontres" && <RencontresTab relations={relations} isLoading={relLoading} user={user} onOpenMessage={(relationId) => { setOpenRelationId(relationId); setActiveTab("messages"); }} />}
+      {activeTab === "messages" && <MessagesTab user={user} openRelationId={openRelationId} />}
       {activeTab === "demandes" && <DemandesTab relations={relations} isLoading={relLoading} user={user} />}
       {activeTab === "profil" && <ProfilTab user={user} />}
     </div>
@@ -292,7 +304,7 @@ function DashboardTab({ counts, isLoading, user, onSwitchTab }: { counts: Dashbo
   );
 }
 
-function RencontresTab({ relations, isLoading, user }: { relations?: RelationWithUsers[]; isLoading: boolean; user: any }) {
+function RencontresTab({ relations, isLoading, user, onOpenMessage }: { relations?: RelationWithUsers[]; isLoading: boolean; user: any; onOpenMessage: (relationId: string) => void }) {
   const [, setLocation] = useLocation();
   const [collapsedIds, setCollapsedIds] = useState<Set<string>>(new Set());
 
@@ -335,6 +347,16 @@ function RencontresTab({ relations, isLoading, user }: { relations?: RelationWit
                 </div>
                 <div className="flex items-center gap-2">
                   <StatusBadge status={rel.status} />
+                  {rel.status === "ACTIVE" && (
+                    <Button
+                      size="sm"
+                      className="rounded-full text-xs bg-[#dc4256] hover:bg-[#c73848] text-white"
+                      onClick={() => onOpenMessage(rel.id)}
+                      data-testid={`button-message-${rel.id}`}
+                    >
+                      <Mail className="w-3 h-3 mr-1" /> Envoyer un message
+                    </Button>
+                  )}
                   <Button
                     size="sm"
                     variant="outline"

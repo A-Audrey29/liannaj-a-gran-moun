@@ -443,12 +443,22 @@ class DatabaseStorage implements IStorage {
     const relations = await prisma.relation.findMany({
       where: {
         OR: [{ seniorId: userId }, { juniorId: userId }],
-        status: { notIn: ["CLOSED"] },
+        status: "ACTIVE",
       },
       select: { id: true },
     });
     const relationIds = relations.map((r) => r.id);
     if (relationIds.length === 0) return [];
+
+    const existingConvs = await prisma.conversation.findMany({
+      where: { relationId: { in: relationIds } },
+      select: { relationId: true },
+    });
+    const existingRelationIds = new Set(existingConvs.map((c) => c.relationId));
+    const missingRelationIds = relationIds.filter((id) => !existingRelationIds.has(id));
+    if (missingRelationIds.length > 0) {
+      await Promise.all(missingRelationIds.map((rid) => this.getOrCreateConversation(rid)));
+    }
 
     const conversations = await prisma.conversation.findMany({
       where: { relationId: { in: relationIds } },
@@ -567,6 +577,7 @@ class DatabaseStorage implements IStorage {
     const relations = await prisma.relation.findMany({
       where: {
         OR: [{ seniorId: userId }, { juniorId: userId }],
+        status: "ACTIVE",
       },
       include: { conversation: { select: { id: true } } },
     });

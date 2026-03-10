@@ -14,7 +14,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import StatusBadge from "@/components/status-badge";
 import StarRating from "@/components/star-rating";
-import { ArrowLeft, Calendar, Clock, MapPin, Plus, Check, X } from "lucide-react";
+import { ArrowLeft, Calendar, Clock, MapPin, Plus, Check, X, Mail } from "lucide-react";
 import { useState } from "react";
 import type { Relation, User as UserType, Intervention } from "@shared/schema";
 
@@ -94,6 +94,15 @@ export default function RelationDetail() {
             <span className="text-xs text-muted-foreground">Statut relation :</span>
             <StatusBadge status={relation.status} />
           </div>
+          {relation.status === "ACTIVE" && (isSenior || isJunior) && (
+            <Button
+              className="mt-4 rounded-full bg-[#dc4256] hover:bg-[#c73848] text-white"
+              onClick={() => setLocation(`/mon-espace?tab=messages&relation=${relation.id}`)}
+              data-testid="button-send-message-detail"
+            >
+              <Mail className="w-4 h-4 mr-2" /> Envoyer un message à {partner.firstName}
+            </Button>
+          )}
         </CardContent>
       </Card>
 
