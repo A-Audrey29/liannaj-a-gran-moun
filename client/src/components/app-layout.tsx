@@ -9,7 +9,7 @@ import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
-import { Menu, Bell, LogOut, X } from "lucide-react";
+import { Menu, Bell, X } from "lucide-react";
 import { useState } from "react";
 import type { Notification } from "@shared/schema";
 
@@ -109,7 +109,6 @@ function NavLinks({ authenticated, role, onClick }: { authenticated: boolean; ro
   if (!authenticated) {
     return (
       <>
-        <Link href="/" onClick={onClick} className={`text-sm font-medium hover:text-[#dc4256] transition-colors ${location === "/" ? "text-[#dc4256]" : ""}`}>ACCUEIL</Link>
         <Link href="/login" onClick={onClick}>
           <Button variant="outline" size="sm" className="rounded-full text-sm" data-testid="link-connexion">Connexion</Button>
         </Link>
@@ -122,7 +121,6 @@ function NavLinks({ authenticated, role, onClick }: { authenticated: boolean; ro
 
   return (
     <>
-      <Link href="/" onClick={onClick} className={`text-sm font-medium hover:text-[#dc4256] transition-colors ${location === "/" ? "text-[#dc4256]" : ""}`} data-testid="link-accueil">ACCUEIL</Link>
       {role !== "ADMIN" && (
         <Link href="/mon-espace" onClick={onClick} className={`text-sm font-medium hover:text-[#dc4256] transition-colors ${location === "/mon-espace" ? "text-[#dc4256]" : ""}`} data-testid="link-mon-espace">MON ESPACE</Link>
       )}
@@ -154,7 +152,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       <header className="sticky top-0 z-50 bg-white border-b border-border/50">
         <div className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
           <Link href="/" data-testid="link-home-logo">
-            <span className="font-brand text-[#dc4256] text-xl md:text-2xl">liannaj a gran moun</span>
+            <span className="font-serif font-bold tracking-tight text-[#dc4256] text-xl md:text-2xl">liannaj a gran moun</span>
           </Link>
 
           <nav className="hidden md:flex items-center gap-4">
@@ -162,14 +160,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             {isAuthenticated && (
               <>
                 <NotificationBell />
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button variant="ghost" size="icon" onClick={handleLogout} aria-label="Déconnexion" data-testid="button-logout">
-                      <LogOut className="w-5 h-5" />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>Déconnexion</TooltipContent>
-                </Tooltip>
+                <Button variant="outline" size="sm" onClick={handleLogout} className="rounded-full text-sm" data-testid="button-logout">
+                  Déconnexion
+                </Button>
               </>
             )}
           </nav>
@@ -191,8 +184,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 <div className="flex flex-col gap-4 pt-8">
                   <NavLinks authenticated={isAuthenticated} role={user?.role} onClick={() => setMobileOpen(false)} />
                   {isAuthenticated && (
-                    <Button variant="outline" onClick={() => { handleLogout(); setMobileOpen(false); }} className="mt-4" data-testid="button-logout-mobile">
-                      <LogOut className="w-4 h-4 mr-2" /> Deconnexion
+                    <Button variant="outline" onClick={() => { handleLogout(); setMobileOpen(false); }} className="mt-4 rounded-full" data-testid="button-logout-mobile">
+                      Déconnexion
                     </Button>
                   )}
                 </div>
