@@ -49,7 +49,7 @@ client/
       relation-detail.tsx # Détail relation + interventions + feedback étoiles + bouton message (ACTIVE only)
       not-found.tsx      # Page 404
     components/
-      app-layout.tsx     # Layout partagé (header brand + footer + notifications cloche)
+      app-layout.tsx     # Layout partagé (header brand + footer, pas de cloche notifications)
       auth-guard.tsx     # Protection des routes authentifiées
       messages-tab.tsx   # Onglet messagerie (liste conversations + chat, accessible uniquement relations ACTIVE)
       admin-messages-tab.tsx # Modération admin des messages (lecture intégrale + soft-delete)

@@ -1,107 +1,12 @@
 import { useAuth } from "@/hooks/use-auth";
 import { Link, useLocation } from "wouter";
-import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
-import { Menu, Bell, X } from "lucide-react";
+import { Menu } from "lucide-react";
 import { useState } from "react";
-import type { Notification } from "@shared/schema";
-
-function timeAgo(date: string | Date) {
-  const now = new Date();
-  const d = new Date(date);
-  const diff = Math.floor((now.getTime() - d.getTime()) / 1000);
-  if (diff < 60) return "A l'instant";
-  if (diff < 3600) return `Il y a ${Math.floor(diff / 60)} min`;
-  if (diff < 86400) return `Il y a ${Math.floor(diff / 3600)}h`;
-  if (diff < 604800) return `Il y a ${Math.floor(diff / 86400)}j`;
-  return d.toLocaleDateString("fr-FR");
-}
-
-function NotificationBell() {
-  const { data: countData } = useQuery<{ count: number }>({
-    queryKey: ["/api/notifications/count"],
-    refetchInterval: 30000,
-  });
-
-  const { data: notifications } = useQuery<Notification[]>({
-    queryKey: ["/api/notifications"],
-  });
-
-  const markReadMutation = useMutation({
-    mutationFn: async (id: string) => {
-      await apiRequest("PATCH", `/api/notifications/${id}/read`);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/notifications"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/notifications/count"] });
-    },
-  });
-
-  const [, setLocation] = useLocation();
-  const count = countData?.count || 0;
-  const recent = (notifications || []).slice(0, 10);
-
-  return (
-    <Popover>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <PopoverTrigger asChild>
-            <Button variant="ghost" size="icon" className="relative" aria-label="Notifications" data-testid="button-notifications">
-              <Bell className="w-5 h-5" />
-              {count > 0 && (
-                <span className="absolute -top-1 -right-1 bg-[#dc4256] text-white text-[10px] font-bold rounded-full w-5 h-5 flex items-center justify-center">
-                  {count > 9 ? "9+" : count}
-                </span>
-              )}
-            </Button>
-          </PopoverTrigger>
-        </TooltipTrigger>
-        <TooltipContent>Notifications</TooltipContent>
-      </Tooltip>
-      <PopoverContent className="w-80 p-0" align="end">
-        <div className="p-3 border-b font-semibold text-sm">Notifications</div>
-        <ScrollArea className="max-h-80">
-          {recent.length === 0 ? (
-            <div className="p-4 text-center text-sm text-muted-foreground">Aucune notification</div>
-          ) : (
-            recent.map((n) => (
-              <button
-                key={n.id}
-                className={`w-full text-left px-3 py-3 border-b last:border-0 transition-colors hover:bg-muted/50 ${!n.isRead ? "bg-secondary/30" : ""}`}
-                onClick={() => {
-                  if (!n.isRead) markReadMutation.mutate(n.id);
-                  if (n.link) setLocation(n.link);
-                }}
-                data-testid={`notification-${n.id}`}
-              >
-                <div className="flex justify-between items-start gap-2">
-                  <div>
-                    <p className="text-sm font-medium leading-tight">{n.title}</p>
-                    <p className="text-xs text-muted-foreground mt-0.5">{n.message}</p>
-                  </div>
-                  {!n.isRead && <span className="mt-1 w-2 h-2 rounded-full bg-[#dc4256] shrink-0" />}
-                </div>
-                <p className="text-[11px] text-muted-foreground mt-1">{timeAgo(n.createdAt)}</p>
-              </button>
-            ))
-          )}
-        </ScrollArea>
-        <div className="p-2 border-t">
-          <Link href="/notifications" className="block text-center text-sm text-[#dc4256] font-medium hover:underline" data-testid="link-voir-tout-notifications">
-            Voir toutes les notifications
-          </Link>
-        </div>
-      </PopoverContent>
-    </Popover>
-  );
-}
 
 function NavLinks({ authenticated, role, onClick }: { authenticated: boolean; role?: string; onClick?: () => void }) {
   const [location] = useLocation();
@@ -158,17 +63,13 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           <nav className="hidden md:flex items-center gap-4">
             <NavLinks authenticated={isAuthenticated} role={user?.role} />
             {isAuthenticated && (
-              <>
-                <NotificationBell />
-                <Button variant="outline" size="sm" onClick={handleLogout} className="rounded-full text-sm" data-testid="button-logout">
-                  Déconnexion
-                </Button>
-              </>
+              <Button variant="outline" size="sm" onClick={handleLogout} className="rounded-full text-sm" data-testid="button-logout">
+                Déconnexion
+              </Button>
             )}
           </nav>
 
           <div className="flex md:hidden items-center gap-2">
-            {isAuthenticated && <NotificationBell />}
             <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
               <Tooltip>
                 <TooltipTrigger asChild>

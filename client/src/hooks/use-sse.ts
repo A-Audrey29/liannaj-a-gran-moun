@@ -5,8 +5,6 @@ function invalidateThread(relationId?: string, includeUnread = true) {
   queryClient.invalidateQueries({ queryKey: ["/api/messages/conversations"] });
   if (includeUnread) {
     queryClient.invalidateQueries({ queryKey: ["/api/messages/unread-count"] });
-    queryClient.invalidateQueries({ queryKey: ["/api/notifications/count"] });
-    queryClient.invalidateQueries({ queryKey: ["/api/notifications"] });
   }
   if (relationId) {
     queryClient.invalidateQueries({ queryKey: ["/api/messages/conversations", relationId] });
