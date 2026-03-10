@@ -986,7 +986,6 @@ function ProfilTab({ user }: { user: AuthUser | null }) {
                 <SectionTitle>Referent & Ecole</SectionTitle>
                 <div className="space-y-1 text-sm">
                   <ProfileField label="Titre" value={user.referentTitle} />
-                  <ProfileField label="Prenom" value={user.referentFirstName} />
                   <ProfileField label="Nom" value={user.referentLastName} />
                   <ProfileField label="Email" value={user.referentEmail} />
                   <Separator className="my-3" />
