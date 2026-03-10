@@ -549,13 +549,13 @@ function DemandesTab({ relations, isLoading, user }: { relations?: RelationWithU
               ? "flex gap-4 overflow-x-auto pb-4 snap-x snap-mandatory scroll-smooth -mx-1 px-1"
               : "space-y-3"
             }>
-              {filteredSuggestions.map((s) => (
+              {filteredSuggestions.map((s) => viewMode === "list" ? (
                 <Card
                   key={s.user.id}
-                  className={`rounded-2xl border-0 shadow-sm ${viewMode === "carousel" ? "min-w-[280px] max-w-[300px] snap-start flex-shrink-0" : ""}`}
+                  className="rounded-2xl border-0 shadow-sm"
                   data-testid={`card-suggestion-${s.user.id}`}
                 >
-                  <CardContent className={viewMode === "carousel" ? "p-4 flex flex-col gap-3" : "py-4 flex flex-col gap-3"}>
+                  <CardContent className="py-4 flex flex-col gap-3">
                     <div className="flex items-start gap-3">
                       <UserAvatar user={s.user} size="lg" />
                       <div className="flex-1 min-w-0">
@@ -569,15 +569,27 @@ function DemandesTab({ relations, isLoading, user }: { relations?: RelationWithU
                           </p>
                         )}
                       </div>
-                      <button
-                        onClick={() => toggleFavoriteMutation.mutate({ juniorId: s.user.id, isFavorite: s.isFavorite })}
-                        disabled={toggleFavoriteMutation.isPending}
-                        className="p-1.5 rounded-full hover:bg-muted transition-colors flex-shrink-0"
-                        data-testid={`button-favorite-${s.user.id}`}
-                        aria-label={s.isFavorite ? "Retirer des favoris" : "Ajouter aux favoris"}
-                      >
-                        <Heart className={`w-5 h-5 transition-colors ${s.isFavorite ? "fill-[#dc4256] text-[#dc4256]" : "text-muted-foreground"}`} />
-                      </button>
+                      <div className="flex flex-col items-center gap-1.5 flex-shrink-0">
+                        <button
+                          onClick={() => toggleFavoriteMutation.mutate({ juniorId: s.user.id, isFavorite: s.isFavorite })}
+                          disabled={toggleFavoriteMutation.isPending}
+                          className="p-1.5 rounded-full hover:bg-muted transition-colors"
+                          data-testid={`button-favorite-${s.user.id}`}
+                          aria-label={s.isFavorite ? "Retirer des favoris" : "Ajouter aux favoris"}
+                        >
+                          <Heart className={`w-5 h-5 transition-colors ${s.isFavorite ? "fill-[#dc4256] text-[#dc4256]" : "text-muted-foreground"}`} />
+                        </button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="rounded-full text-[10px] px-2 py-1 h-auto text-[#dc4256] hover:text-[#c73848] hover:bg-red-50"
+                          onClick={() => createRelationMutation.mutate(s.user.id)}
+                          disabled={createRelationMutation.isPending}
+                          data-testid={`button-propose-${s.user.id}`}
+                        >
+                          <Plus className="w-3 h-3 mr-0.5" /> Proposer une rencontre
+                        </Button>
+                      </div>
                     </div>
 
                     {s.user.bio && (
@@ -591,7 +603,56 @@ function DemandesTab({ relations, isLoading, user }: { relations?: RelationWithU
                         ))}
                       </div>
                     )}
-
+                  </CardContent>
+                </Card>
+              ) : (
+                <Card
+                  key={s.user.id}
+                  className="rounded-2xl border-0 shadow-sm min-w-[220px] max-w-[240px] snap-start flex-shrink-0 overflow-hidden"
+                  data-testid={`card-suggestion-${s.user.id}`}
+                >
+                  <div className="relative w-full h-48 bg-muted">
+                    {s.user.profilePhoto ? (
+                      <img
+                        src={s.user.profilePhoto}
+                        alt={`${s.user.firstName} ${s.user.lastName}`}
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <div className="w-full h-full bg-[#e8d7fe] flex items-center justify-center">
+                        <span className="text-4xl font-bold text-[#8b5cf6]">{s.user.firstName[0]}{s.user.lastName[0]}</span>
+                      </div>
+                    )}
+                    <button
+                      onClick={() => toggleFavoriteMutation.mutate({ juniorId: s.user.id, isFavorite: s.isFavorite })}
+                      disabled={toggleFavoriteMutation.isPending}
+                      className="absolute top-2 right-2 p-1.5 rounded-full bg-white/80 hover:bg-white transition-colors shadow-sm"
+                      data-testid={`button-favorite-${s.user.id}`}
+                      aria-label={s.isFavorite ? "Retirer des favoris" : "Ajouter aux favoris"}
+                    >
+                      <Heart className={`w-4 h-4 transition-colors ${s.isFavorite ? "fill-[#dc4256] text-[#dc4256]" : "text-muted-foreground"}`} />
+                    </button>
+                    {s.isRecommended && (
+                      <Badge className="absolute top-2 left-2 bg-[#e8d7fe] text-[#8b5cf6] text-[10px] px-1.5 shadow-sm">Recommandé</Badge>
+                    )}
+                  </div>
+                  <CardContent className="p-3 flex flex-col gap-2">
+                    <p className="font-semibold text-sm">{s.user.firstName} {s.user.lastName}</p>
+                    {s.user.city && (
+                      <p className="text-xs text-muted-foreground flex items-center gap-1">
+                        <MapPin className="w-3 h-3" />{s.user.city}
+                      </p>
+                    )}
+                    {s.user.bio && (
+                      <p className="text-[11px] text-muted-foreground line-clamp-2">{s.user.bio}</p>
+                    )}
+                    {s.commonCategories.length > 0 && (
+                      <div className="flex gap-1 flex-wrap">
+                        {s.commonCategories.map((c) => (
+                          <Badge key={c} variant="outline" className="text-[9px] px-1.5 py-0 bg-[#f3eaff] border-[#e8d7fe]">{c}</Badge>
+                        ))}
+                      </div>
+                    )}
                     <Button
                       size="sm"
                       className="rounded-full bg-[#dc4256] hover:bg-[#c73848] text-white text-xs w-full mt-1"
@@ -599,7 +660,7 @@ function DemandesTab({ relations, isLoading, user }: { relations?: RelationWithU
                       disabled={createRelationMutation.isPending}
                       data-testid={`button-propose-${s.user.id}`}
                     >
-                      <Plus className="w-3 h-3 mr-1" /> Proposer
+                      <Plus className="w-3 h-3 mr-1" /> Proposer une rencontre
                     </Button>
                   </CardContent>
                 </Card>
