@@ -338,7 +338,7 @@ function RencontresTab({ relations, isLoading, user }: { relations?: RelationWit
               )}
 
               {interventions.length > 0 && (
-                <div className="border-t pt-3 pb-4" style={{ paddingLeft: "3%", paddingRight: "1rem" }}>
+                <div className="border-t pt-3 pb-4" style={{ marginLeft: "10%", paddingLeft: "1rem", paddingRight: "1rem" }}>
                   <div className="ml-4 border-l-2 border-primary/20 pl-4">
                     <div className="flex items-center justify-between mb-3">
                       <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Historique des rencontres</h4>
