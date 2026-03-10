@@ -419,7 +419,7 @@ function DemandesTab({ relations, isLoading, user }: { relations?: RelationWithU
   const { toast } = useToast();
   const isSenior = user?.role === "SENIOR";
   const [sugFilter, setSugFilter] = useState<"all" | "favorites" | "recommended">("all");
-  const [viewMode, setViewMode] = useState<"list" | "carousel">("list");
+  const [viewMode, setViewMode] = useState<"list" | "carousel">("carousel");
   const [carouselIndex, setCarouselIndex] = useState(0);
 
   const { data: suggestions, isLoading: sugLoading } = useQuery<MatchSuggestion[]>({
@@ -609,7 +609,7 @@ function DemandesTab({ relations, isLoading, user }: { relations?: RelationWithU
               </div>
             ) : (
               <div className="relative" data-testid="carousel-container">
-                <div className="flex items-center justify-center py-4" style={{ minHeight: "380px" }}>
+                <div className="flex items-center justify-center py-4" style={{ minHeight: "480px" }}>
                   {filteredSuggestions.map((s, idx) => {
                     const offset = idx - safeCarouselIndex;
                     const isActive = offset === 0;
@@ -621,14 +621,14 @@ function DemandesTab({ relations, isLoading, user }: { relations?: RelationWithU
                         key={s.user.id}
                         className="rounded-2xl border-0 shadow-lg overflow-hidden absolute transition-all duration-300 ease-in-out"
                         style={{
-                          width: isActive ? "240px" : "200px",
-                          transform: `translateX(${offset * 180}px) scale(${isActive ? 1 : 0.85})`,
+                          width: isActive ? "300px" : "250px",
+                          transform: `translateX(${offset * 220}px) scale(${isActive ? 1 : 0.85})`,
                           opacity: isActive ? 1 : 0.5,
                           zIndex: isActive ? 10 : 5,
                         }}
                         data-testid={`card-suggestion-${s.user.id}`}
                       >
-                        <div className="relative w-full h-44 bg-muted">
+                        <div className="relative w-full h-56 bg-muted">
                           {s.user.profilePhoto ? (
                             <img
                               src={s.user.profilePhoto}

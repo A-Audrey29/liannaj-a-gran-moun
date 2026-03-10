@@ -42,6 +42,7 @@ async function main() {
       address: "1 Boulevard Légitimus",
       city: "Pointe-à-Pitre",
       postalCode: "97110",
+      profilePhoto: "https://ui-avatars.com/api/?name=Admin+FEVES&background=607D8B&color=fff&size=200",
     },
   });
 
@@ -63,6 +64,7 @@ async function main() {
       bio: "Retraité passionné de jardinage, j'ai besoin d'aide pour entretenir mon jardin créole.",
       trustedPersonName: "Monique Dupont",
       trustedPersonEmail: "aidant@test.fr",
+      profilePhoto: "https://ui-avatars.com/api/?name=Jean+Dupont&background=4FC3F7&color=fff&size=200",
     },
   });
   await prisma.userCategory.create({ data: { userId: senior1.id, categoryId: jardinage.id } });
@@ -85,6 +87,7 @@ async function main() {
       bio: "Ancienne institutrice, j'adore cuisiner les plats traditionnels et partager mes recettes créoles. La lecture est ma passion.",
       trustedPersonName: "Yolande Fontaine",
       trustedPersonEmail: "famille.fontaine@test.fr",
+      profilePhoto: "https://ui-avatars.com/api/?name=Madeleine+Fontaine&background=CE93D8&color=fff&size=200",
     },
   });
   await prisma.userCategory.createMany({
@@ -112,6 +115,7 @@ async function main() {
       bio: "Ancien charpentier, j'ai toujours les mains habiles mais j'ai besoin d'un coup de main pour les gros travaux et le jardin.",
       trustedPersonName: "Lucien Blanc",
       trustedPersonEmail: "aidant.blanc@test.fr",
+      profilePhoto: "https://ui-avatars.com/api/?name=Georges+Blanc&background=81C784&color=fff&size=200",
     },
   });
   await prisma.userCategory.createMany({
@@ -139,6 +143,7 @@ async function main() {
       bio: "Je veux apprendre à utiliser mon téléphone et ma tablette. J'aime aussi les promenades le matin au bord de mer.",
       trustedPersonName: "Claudine Rousseau",
       trustedPersonEmail: "famille.rousseau@test.fr",
+      profilePhoto: "https://ui-avatars.com/api/?name=Simone+Rousseau&background=FFB74D&color=fff&size=200",
     },
   });
   await prisma.userCategory.createMany({
@@ -166,6 +171,7 @@ async function main() {
       bio: "Retraité polyvalent, j'aime cuisiner, jardiner et me promener. Cherche compagnie pour partager ces moments.",
       trustedPersonName: "André Moreau",
       trustedPersonEmail: "aidant.moreau@test.fr",
+      profilePhoto: "https://ui-avatars.com/api/?name=Rene+Moreau&background=90A4AE&color=fff&size=200",
     },
   });
   await prisma.userCategory.createMany({
@@ -196,6 +202,7 @@ async function main() {
       referentLastName: "Leroy",
       referentEmail: "prof@lycee-abymes.fr",
       bio: "Lycéenne motivée, j'aime aider les gran moun et apprendre de leur expérience. Le jardinage et le bricolage m'intéressent.",
+      profilePhoto: "https://ui-avatars.com/api/?name=Marie+Martin&background=F48FB1&color=fff&size=200",
     },
   });
   await prisma.userCategory.createMany({
@@ -225,6 +232,7 @@ async function main() {
       referentLastName: "Petit",
       referentEmail: "prof2@lycee-abymes.fr",
       bio: "Passionné d'informatique et de nouvelles technologies, je peux aider avec les smartphones et ordinateurs.",
+      profilePhoto: "https://ui-avatars.com/api/?name=Lucas+Bernard&background=64B5F6&color=fff&size=200",
     },
   });
   await prisma.userCategory.create({ data: { userId: junior2.id, categoryId: informatique.id } });
@@ -249,6 +257,7 @@ async function main() {
       referentLastName: "Cédras",
       referentEmail: "ref.lefevre@college-abymes.fr",
       bio: "J'adore la cuisine créole et le jardinage. Ma grand-mère m'a transmis l'amour des plantes et des recettes traditionnelles.",
+      profilePhoto: "https://ui-avatars.com/api/?name=Emma+Lefevre&background=A5D6A7&color=fff&size=200",
     },
   });
   await prisma.userCategory.createMany({
@@ -278,6 +287,7 @@ async function main() {
       referentLastName: "Morin",
       referentEmail: "ref.garcia@lycee-baimbridge.fr",
       bio: "Bon bricoleur et passionné de tech, je veux aider les seniors avec les travaux pratiques et l'informatique.",
+      profilePhoto: "https://ui-avatars.com/api/?name=Theo+Garcia&background=FFD54F&color=fff&size=200",
     },
   });
   await prisma.userCategory.createMany({
@@ -307,6 +317,7 @@ async function main() {
       referentLastName: "Damour",
       referentEmail: "ref.dubois@college-abymes.fr",
       bio: "J'aime lire et me promener. Très patiente, je veux tenir compagnie aux personnes âgées et partager des moments calmes.",
+      profilePhoto: "https://ui-avatars.com/api/?name=Lea+Dubois&background=EF9A9A&color=fff&size=200",
     },
   });
   await prisma.userCategory.createMany({
@@ -336,6 +347,7 @@ async function main() {
       referentLastName: "Boisvert",
       referentEmail: "ref.petit@lycee-gerville.fr",
       bio: "Polyvalent et dynamique, je peux aider en cuisine, bricolage ou accompagner en promenade. J'aime rendre service.",
+      profilePhoto: "https://ui-avatars.com/api/?name=Nathan+Petit&background=B39DDB&color=fff&size=200",
     },
   });
   await prisma.userCategory.createMany({
@@ -366,6 +378,7 @@ async function main() {
       bio: "Ancien professeur, je cherche de l'aide pour mes courses et petits travaux à la maison.",
       trustedPersonName: "Sophie Durand",
       trustedPersonEmail: "aidant2@test.fr",
+      profilePhoto: "https://ui-avatars.com/api/?name=Pierre+Durand&background=AED581&color=fff&size=200",
     },
   });
 
