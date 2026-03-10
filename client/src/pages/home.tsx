@@ -16,7 +16,7 @@ import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import StatusBadge from "@/components/status-badge";
-import { Calendar, MessageCircle, User, LayoutGrid, ChevronRight, Plus, Check, X, Pencil, Heart, Camera, Trash2, AlertTriangle, Star, Users, ClipboardCheck, Eye, EyeOff } from "lucide-react";
+import { Calendar, MessageCircle, User, LayoutGrid, ChevronRight, Plus, Check, X, Pencil, Heart, Camera, Trash2, AlertTriangle, Star, Users, ClipboardCheck, Eye, EyeOff, List, GalleryHorizontalEnd, MapPin } from "lucide-react";
 import { useState, useRef } from "react";
 import { updateProfileSchema, type UpdateProfileInput } from "@shared/schema";
 import type { Relation, User as UserType, Intervention } from "@shared/schema";
@@ -419,6 +419,7 @@ function DemandesTab({ relations, isLoading, user }: { relations?: RelationWithU
   const { toast } = useToast();
   const isSenior = user?.role === "SENIOR";
   const [sugFilter, setSugFilter] = useState<"all" | "favorites" | "recommended">("all");
+  const [viewMode, setViewMode] = useState<"list" | "carousel">("list");
 
   const { data: suggestions, isLoading: sugLoading } = useQuery<MatchSuggestion[]>({
     queryKey: ["/api/matching/suggestions"],
@@ -496,22 +497,44 @@ function DemandesTab({ relations, isLoading, user }: { relations?: RelationWithU
       {isSenior && (
         <div>
           <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-4">Suggestions de matching</h3>
-          <div className="flex gap-2 mb-4 flex-wrap">
-            {filterButtons.map((f) => (
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex gap-2 flex-wrap">
+              {filterButtons.map((f) => (
+                <button
+                  key={f.id}
+                  onClick={() => setSugFilter(f.id)}
+                  className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
+                    sugFilter === f.id
+                      ? "bg-[#dc4256] text-white"
+                      : "bg-white text-muted-foreground hover:bg-muted border"
+                  }`}
+                  data-testid={`filter-suggestions-${f.id}`}
+                >
+                  {f.id === "favorites" && <Heart className="w-3 h-3 inline mr-1" />}
+                  {f.label}
+                </button>
+              ))}
+            </div>
+            <div className="flex gap-1 border rounded-lg p-0.5" data-testid="view-mode-toggle">
               <button
-                key={f.id}
-                onClick={() => setSugFilter(f.id)}
-                className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
-                  sugFilter === f.id
-                    ? "bg-[#dc4256] text-white"
-                    : "bg-white text-muted-foreground hover:bg-muted border"
-                }`}
-                data-testid={`filter-suggestions-${f.id}`}
+                onClick={() => setViewMode("list")}
+                className={`p-1.5 rounded-md transition-colors ${viewMode === "list" ? "bg-[#dc4256] text-white" : "text-muted-foreground hover:bg-muted"}`}
+                aria-label="Vue liste"
+                aria-pressed={viewMode === "list"}
+                data-testid="view-mode-list"
               >
-                {f.id === "favorites" && <Heart className="w-3 h-3 inline mr-1" />}
-                {f.label}
+                <List className="w-4 h-4" />
               </button>
-            ))}
+              <button
+                onClick={() => setViewMode("carousel")}
+                className={`p-1.5 rounded-md transition-colors ${viewMode === "carousel" ? "bg-[#dc4256] text-white" : "text-muted-foreground hover:bg-muted"}`}
+                aria-label="Vue carrousel"
+                aria-pressed={viewMode === "carousel"}
+                data-testid="view-mode-carousel"
+              >
+                <GalleryHorizontalEnd className="w-4 h-4" />
+              </button>
+            </div>
           </div>
           {sugLoading ? (
             <div className="space-y-3"><Skeleton className="h-24 rounded-2xl" /><Skeleton className="h-24 rounded-2xl" /></div>
@@ -522,47 +545,62 @@ function DemandesTab({ relations, isLoading, user }: { relations?: RelationWithU
               </CardContent>
             </Card>
           ) : (
-            <div className="space-y-3">
+            <div className={viewMode === "carousel"
+              ? "flex gap-4 overflow-x-auto pb-4 snap-x snap-mandatory scroll-smooth -mx-1 px-1"
+              : "space-y-3"
+            }>
               {filteredSuggestions.map((s) => (
-                <Card key={s.user.id} className="rounded-2xl border-0 shadow-sm" data-testid={`card-suggestion-${s.user.id}`}>
-                  <CardContent className="flex items-center justify-between py-4">
-                    <div className="flex items-center gap-3">
-                      <UserAvatar user={s.user} />
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <p className="font-medium text-sm">{s.user.firstName} {s.user.lastName}</p>
+                <Card
+                  key={s.user.id}
+                  className={`rounded-2xl border-0 shadow-sm ${viewMode === "carousel" ? "min-w-[280px] max-w-[300px] snap-start flex-shrink-0" : ""}`}
+                  data-testid={`card-suggestion-${s.user.id}`}
+                >
+                  <CardContent className={viewMode === "carousel" ? "p-4 flex flex-col gap-3" : "py-4 flex flex-col gap-3"}>
+                    <div className="flex items-start gap-3">
+                      <UserAvatar user={s.user} size="lg" />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <p className="font-semibold text-sm">{s.user.firstName} {s.user.lastName}</p>
                           {s.isRecommended && <Badge className="bg-[#e8d7fe] text-[#8b5cf6] text-[10px] px-1.5">Recommandé</Badge>}
                         </div>
-                        <p className="text-xs text-muted-foreground">{s.user.city || ""}</p>
-                        {s.commonCategories.length > 0 && (
-                          <div className="flex gap-1 mt-1 flex-wrap">
-                            {s.commonCategories.map((c) => (
-                              <Badge key={c} variant="outline" className="text-[10px] px-1.5 py-0 bg-[#f3eaff]">{c}</Badge>
-                            ))}
-                          </div>
+                        {s.user.city && (
+                          <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
+                            <MapPin className="w-3 h-3" />{s.user.city}
+                          </p>
                         )}
                       </div>
-                    </div>
-                    <div className="flex items-center gap-2">
                       <button
                         onClick={() => toggleFavoriteMutation.mutate({ juniorId: s.user.id, isFavorite: s.isFavorite })}
                         disabled={toggleFavoriteMutation.isPending}
-                        className="p-1.5 rounded-full hover:bg-muted transition-colors"
+                        className="p-1.5 rounded-full hover:bg-muted transition-colors flex-shrink-0"
                         data-testid={`button-favorite-${s.user.id}`}
                         aria-label={s.isFavorite ? "Retirer des favoris" : "Ajouter aux favoris"}
                       >
                         <Heart className={`w-5 h-5 transition-colors ${s.isFavorite ? "fill-[#dc4256] text-[#dc4256]" : "text-muted-foreground"}`} />
                       </button>
-                      <Button
-                        size="sm"
-                        className="rounded-full bg-[#dc4256] hover:bg-[#c73848] text-white text-xs"
-                        onClick={() => createRelationMutation.mutate(s.user.id)}
-                        disabled={createRelationMutation.isPending}
-                        data-testid={`button-propose-${s.user.id}`}
-                      >
-                        <Plus className="w-3 h-3 mr-1" /> Proposer
-                      </Button>
                     </div>
+
+                    {s.user.bio && (
+                      <p className="text-xs text-muted-foreground line-clamp-2">{s.user.bio}</p>
+                    )}
+
+                    {s.commonCategories.length > 0 && (
+                      <div className="flex gap-1.5 flex-wrap">
+                        {s.commonCategories.map((c) => (
+                          <Badge key={c} variant="outline" className="text-[10px] px-2 py-0.5 bg-[#f3eaff] border-[#e8d7fe]">{c}</Badge>
+                        ))}
+                      </div>
+                    )}
+
+                    <Button
+                      size="sm"
+                      className="rounded-full bg-[#dc4256] hover:bg-[#c73848] text-white text-xs w-full mt-1"
+                      onClick={() => createRelationMutation.mutate(s.user.id)}
+                      disabled={createRelationMutation.isPending}
+                      data-testid={`button-propose-${s.user.id}`}
+                    >
+                      <Plus className="w-3 h-3 mr-1" /> Proposer
+                    </Button>
                   </CardContent>
                 </Card>
               ))}
@@ -589,19 +627,34 @@ function DemandesTab({ relations, isLoading, user }: { relations?: RelationWithU
 
               return (
                 <Card key={rel.id} className="rounded-2xl border-0 shadow-sm" data-testid={`card-demande-${rel.id}`}>
-                  <CardContent className="flex items-center justify-between py-4">
-                    <div className="flex items-center gap-3">
-                      <UserAvatar user={partner} />
-                      <div>
-                        <p className="font-medium text-sm">{partner.firstName} {partner.lastName}</p>
-                        <p className="text-xs text-muted-foreground">{partner.city || ""} - <StatusBadge status={partner.role} /></p>
+                  <CardContent className="py-4 flex flex-col gap-3">
+                    <div className="flex items-start gap-3">
+                      <UserAvatar user={partner} size="lg" />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <p className="font-semibold text-sm">{partner.firstName} {partner.lastName}</p>
+                          <StatusBadge status={partner.role} />
+                        </div>
+                        {partner.city && (
+                          <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
+                            <MapPin className="w-3 h-3" />{partner.city}
+                          </p>
+                        )}
                       </div>
+                      {!isJuniorTarget && (
+                        <Badge className="bg-amber-100 text-amber-800 text-xs flex-shrink-0">En attente</Badge>
+                      )}
                     </div>
-                    {isJuniorTarget ? (
+
+                    {partner.bio && (
+                      <p className="text-xs text-muted-foreground line-clamp-2">{partner.bio}</p>
+                    )}
+
+                    {isJuniorTarget && (
                       <div className="flex gap-2">
                         <Button
                           size="sm"
-                          className="rounded-full bg-emerald-500 hover:bg-emerald-600 text-white text-xs"
+                          className="rounded-full bg-emerald-500 hover:bg-emerald-600 text-white text-xs flex-1"
                           onClick={() => acceptMutation.mutate(rel.id)}
                           disabled={acceptMutation.isPending}
                           data-testid={`button-accept-${rel.id}`}
@@ -611,7 +664,7 @@ function DemandesTab({ relations, isLoading, user }: { relations?: RelationWithU
                         <Button
                           size="sm"
                           variant="outline"
-                          className="rounded-full text-xs"
+                          className="rounded-full text-xs flex-1"
                           onClick={() => rejectMutation.mutate(rel.id)}
                           disabled={rejectMutation.isPending}
                           data-testid={`button-reject-${rel.id}`}
@@ -619,8 +672,6 @@ function DemandesTab({ relations, isLoading, user }: { relations?: RelationWithU
                           <X className="w-3 h-3 mr-1" /> Refuser
                         </Button>
                       </div>
-                    ) : (
-                      <Badge className="bg-amber-100 text-amber-800 text-xs">En attente</Badge>
                     )}
                   </CardContent>
                 </Card>
