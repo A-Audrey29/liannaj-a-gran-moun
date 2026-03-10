@@ -16,7 +16,7 @@ import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import StatusBadge from "@/components/status-badge";
-import { Calendar, MessageCircle, User, LayoutGrid, ChevronRight, Plus, Check, X, Pencil, Heart, Camera, Trash2, AlertTriangle, Star, Users, ClipboardCheck, Eye, EyeOff, List, GalleryHorizontalEnd, MapPin } from "lucide-react";
+import { Calendar, MessageCircle, User, LayoutGrid, ChevronRight, ChevronLeft, Plus, Check, X, Pencil, Heart, Camera, Trash2, AlertTriangle, Star, Users, ClipboardCheck, Eye, EyeOff, List, GalleryHorizontalEnd, MapPin } from "lucide-react";
 import { useState, useRef } from "react";
 import { updateProfileSchema, type UpdateProfileInput } from "@shared/schema";
 import type { Relation, User as UserType, Intervention } from "@shared/schema";
@@ -420,6 +420,7 @@ function DemandesTab({ relations, isLoading, user }: { relations?: RelationWithU
   const isSenior = user?.role === "SENIOR";
   const [sugFilter, setSugFilter] = useState<"all" | "favorites" | "recommended">("all");
   const [viewMode, setViewMode] = useState<"list" | "carousel">("list");
+  const [carouselIndex, setCarouselIndex] = useState(0);
 
   const { data: suggestions, isLoading: sugLoading } = useQuery<MatchSuggestion[]>({
     queryKey: ["/api/matching/suggestions"],
@@ -486,6 +487,8 @@ function DemandesTab({ relations, isLoading, user }: { relations?: RelationWithU
     return true;
   });
 
+  const safeCarouselIndex = Math.min(carouselIndex, Math.max(0, filteredSuggestions.length - 1));
+
   const filterButtons = [
     { id: "all" as const, label: "Tous" },
     { id: "favorites" as const, label: "Favoris" },
@@ -544,129 +547,180 @@ function DemandesTab({ relations, isLoading, user }: { relations?: RelationWithU
                 {sugFilter === "favorites" ? "Aucun favori pour le moment." : sugFilter === "recommended" ? "Aucune recommandation FEVES pour le moment." : "Aucune suggestion disponible pour le moment."}
               </CardContent>
             </Card>
-          ) : (
-            <div className={viewMode === "carousel"
-              ? "flex gap-4 overflow-x-auto pb-4 snap-x snap-mandatory scroll-smooth -mx-1 px-1"
-              : "space-y-3"
-            }>
-              {filteredSuggestions.map((s) => viewMode === "list" ? (
-                <Card
-                  key={s.user.id}
-                  className="rounded-2xl border-0 shadow-sm"
-                  data-testid={`card-suggestion-${s.user.id}`}
-                >
-                  <CardContent className="py-4 flex flex-col gap-3">
-                    <div className="flex items-start gap-3">
-                      <UserAvatar user={s.user} size="lg" />
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <p className="font-semibold text-sm">{s.user.firstName} {s.user.lastName}</p>
-                          {s.isRecommended && <Badge className="bg-[#e8d7fe] text-[#8b5cf6] text-[10px] px-1.5">Recommandé</Badge>}
+          ) : viewMode === "list" ? (
+              <div className="space-y-3">
+                {filteredSuggestions.map((s) => (
+                  <Card
+                    key={s.user.id}
+                    className="rounded-2xl border-0 shadow-sm"
+                    data-testid={`card-suggestion-${s.user.id}`}
+                  >
+                    <CardContent className="py-4 flex flex-col gap-3">
+                      <div className="flex items-start gap-3">
+                        <UserAvatar user={s.user} size="lg" />
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <p className="font-semibold text-sm">{s.user.firstName} {s.user.lastName}</p>
+                            {s.isRecommended && <Badge className="bg-[#e8d7fe] text-[#8b5cf6] text-[10px] px-1.5">Recommandé</Badge>}
+                          </div>
+                          {s.user.city && (
+                            <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
+                              <MapPin className="w-3 h-3" />{s.user.city}
+                            </p>
+                          )}
                         </div>
-                        {s.user.city && (
-                          <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
-                            <MapPin className="w-3 h-3" />{s.user.city}
-                          </p>
-                        )}
+                        <div className="flex flex-col items-center gap-1.5 flex-shrink-0">
+                          <button
+                            onClick={() => toggleFavoriteMutation.mutate({ juniorId: s.user.id, isFavorite: s.isFavorite })}
+                            disabled={toggleFavoriteMutation.isPending}
+                            className="p-1.5 rounded-full hover:bg-muted transition-colors"
+                            data-testid={`button-favorite-${s.user.id}`}
+                            aria-label={s.isFavorite ? "Retirer des favoris" : "Ajouter aux favoris"}
+                          >
+                            <Heart className={`w-5 h-5 transition-colors ${s.isFavorite ? "fill-[#dc4256] text-[#dc4256]" : "text-muted-foreground"}`} />
+                          </button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="rounded-full text-[10px] px-2 py-1 h-auto text-[#dc4256] hover:text-[#c73848] hover:bg-red-50"
+                            onClick={() => createRelationMutation.mutate(s.user.id)}
+                            disabled={createRelationMutation.isPending}
+                            data-testid={`button-propose-${s.user.id}`}
+                          >
+                            <Plus className="w-3 h-3 mr-0.5" /> Proposer une rencontre
+                          </Button>
+                        </div>
                       </div>
-                      <div className="flex flex-col items-center gap-1.5 flex-shrink-0">
-                        <button
-                          onClick={() => toggleFavoriteMutation.mutate({ juniorId: s.user.id, isFavorite: s.isFavorite })}
-                          disabled={toggleFavoriteMutation.isPending}
-                          className="p-1.5 rounded-full hover:bg-muted transition-colors"
-                          data-testid={`button-favorite-${s.user.id}`}
-                          aria-label={s.isFavorite ? "Retirer des favoris" : "Ajouter aux favoris"}
-                        >
-                          <Heart className={`w-5 h-5 transition-colors ${s.isFavorite ? "fill-[#dc4256] text-[#dc4256]" : "text-muted-foreground"}`} />
-                        </button>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          className="rounded-full text-[10px] px-2 py-1 h-auto text-[#dc4256] hover:text-[#c73848] hover:bg-red-50"
-                          onClick={() => createRelationMutation.mutate(s.user.id)}
-                          disabled={createRelationMutation.isPending}
-                          data-testid={`button-propose-${s.user.id}`}
-                        >
-                          <Plus className="w-3 h-3 mr-0.5" /> Proposer une rencontre
-                        </Button>
-                      </div>
-                    </div>
 
-                    {s.user.bio && (
-                      <p className="text-xs text-muted-foreground line-clamp-2">{s.user.bio}</p>
-                    )}
+                      {s.user.bio && (
+                        <p className="text-xs text-muted-foreground line-clamp-2">{s.user.bio}</p>
+                      )}
 
-                    {s.commonCategories.length > 0 && (
-                      <div className="flex gap-1.5 flex-wrap">
-                        {s.commonCategories.map((c) => (
-                          <Badge key={c} variant="outline" className="text-[10px] px-2 py-0.5 bg-[#f3eaff] border-[#e8d7fe]">{c}</Badge>
-                        ))}
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-              ) : (
-                <Card
-                  key={s.user.id}
-                  className="rounded-2xl border-0 shadow-sm min-w-[220px] max-w-[240px] snap-start flex-shrink-0 overflow-hidden"
-                  data-testid={`card-suggestion-${s.user.id}`}
-                >
-                  <div className="relative w-full h-48 bg-muted">
-                    {s.user.profilePhoto ? (
-                      <img
-                        src={s.user.profilePhoto}
-                        alt={`${s.user.firstName} ${s.user.lastName}`}
-                        className="w-full h-full object-cover"
-                      />
-                    ) : (
-                      <div className="w-full h-full bg-[#e8d7fe] flex items-center justify-center">
-                        <span className="text-4xl font-bold text-[#8b5cf6]">{s.user.firstName[0]}{s.user.lastName[0]}</span>
-                      </div>
-                    )}
+                      {s.commonCategories.length > 0 && (
+                        <div className="flex gap-1.5 flex-wrap">
+                          {s.commonCategories.map((c) => (
+                            <Badge key={c} variant="outline" className="text-[10px] px-2 py-0.5 bg-[#f3eaff] border-[#e8d7fe]">{c}</Badge>
+                          ))}
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            ) : (
+              <div className="relative" data-testid="carousel-container">
+                <div className="flex items-center justify-center py-4" style={{ minHeight: "380px" }}>
+                  {filteredSuggestions.map((s, idx) => {
+                    const offset = idx - safeCarouselIndex;
+                    const isActive = offset === 0;
+                    const isVisible = Math.abs(offset) <= 1;
+                    if (!isVisible) return null;
+
+                    return (
+                      <Card
+                        key={s.user.id}
+                        className="rounded-2xl border-0 shadow-lg overflow-hidden absolute transition-all duration-300 ease-in-out"
+                        style={{
+                          width: isActive ? "240px" : "200px",
+                          transform: `translateX(${offset * 180}px) scale(${isActive ? 1 : 0.85})`,
+                          opacity: isActive ? 1 : 0.5,
+                          zIndex: isActive ? 10 : 5,
+                        }}
+                        data-testid={`card-suggestion-${s.user.id}`}
+                      >
+                        <div className="relative w-full h-44 bg-muted">
+                          {s.user.profilePhoto ? (
+                            <img
+                              src={s.user.profilePhoto}
+                              alt={`${s.user.firstName} ${s.user.lastName}`}
+                              className="w-full h-full object-cover"
+                            />
+                          ) : (
+                            <div className="w-full h-full bg-[#e8d7fe] flex items-center justify-center">
+                              <span className="text-4xl font-bold text-[#8b5cf6]">{s.user.firstName[0]}{s.user.lastName[0]}</span>
+                            </div>
+                          )}
+                          <button
+                            onClick={() => toggleFavoriteMutation.mutate({ juniorId: s.user.id, isFavorite: s.isFavorite })}
+                            disabled={toggleFavoriteMutation.isPending}
+                            className="absolute top-2 right-2 p-1.5 rounded-full bg-white/80 hover:bg-white transition-colors shadow-sm"
+                            data-testid={`button-favorite-${s.user.id}`}
+                            aria-label={s.isFavorite ? "Retirer des favoris" : "Ajouter aux favoris"}
+                          >
+                            <Heart className={`w-4 h-4 transition-colors ${s.isFavorite ? "fill-[#dc4256] text-[#dc4256]" : "text-muted-foreground"}`} />
+                          </button>
+                          {s.isRecommended && (
+                            <Badge className="absolute top-2 left-2 bg-[#e8d7fe] text-[#8b5cf6] text-[10px] px-1.5 shadow-sm">Recommandé</Badge>
+                          )}
+                        </div>
+                        <CardContent className="p-3 flex flex-col gap-1.5">
+                          <p className="font-semibold text-sm">{s.user.firstName} {s.user.lastName}</p>
+                          {s.user.city && (
+                            <p className="text-xs text-muted-foreground flex items-center gap-1">
+                              <MapPin className="w-3 h-3" />{s.user.city}
+                            </p>
+                          )}
+                          {s.user.bio && (
+                            <p className="text-[11px] text-muted-foreground line-clamp-2">{s.user.bio}</p>
+                          )}
+                          {s.commonCategories.length > 0 && (
+                            <div className="flex gap-1 flex-wrap">
+                              {s.commonCategories.map((c) => (
+                                <Badge key={c} variant="outline" className="text-[9px] px-1.5 py-0 bg-[#f3eaff] border-[#e8d7fe]">{c}</Badge>
+                              ))}
+                            </div>
+                          )}
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="rounded-full text-[10px] px-2 py-1 h-auto text-[#dc4256] hover:text-[#c73848] hover:bg-red-50 w-full mt-1"
+                            onClick={() => createRelationMutation.mutate(s.user.id)}
+                            disabled={createRelationMutation.isPending}
+                            data-testid={`button-propose-${s.user.id}`}
+                          >
+                            <Plus className="w-3 h-3 mr-0.5" /> Proposer une rencontre
+                          </Button>
+                        </CardContent>
+                      </Card>
+                    );
+                  })}
+                </div>
+
+                {safeCarouselIndex > 0 && (
+                  <button
+                    onClick={() => setCarouselIndex((i) => Math.max(0, i - 1))}
+                    className="absolute left-0 top-1/2 -translate-y-1/2 z-20 w-9 h-9 rounded-full bg-white/80 hover:bg-white shadow-md flex items-center justify-center transition-colors"
+                    aria-label="Précédent"
+                    data-testid="carousel-prev"
+                  >
+                    <ChevronLeft className="w-5 h-5 text-muted-foreground" />
+                  </button>
+                )}
+                {safeCarouselIndex < filteredSuggestions.length - 1 && (
+                  <button
+                    onClick={() => setCarouselIndex((i) => Math.min(filteredSuggestions.length - 1, i + 1))}
+                    className="absolute right-0 top-1/2 -translate-y-1/2 z-20 w-9 h-9 rounded-full bg-white/80 hover:bg-white shadow-md flex items-center justify-center transition-colors"
+                    aria-label="Suivant"
+                    data-testid="carousel-next"
+                  >
+                    <ChevronRight className="w-5 h-5 text-muted-foreground" />
+                  </button>
+                )}
+
+                <div className="flex justify-center gap-1.5 mt-2" data-testid="carousel-dots">
+                  {filteredSuggestions.map((_, idx) => (
                     <button
-                      onClick={() => toggleFavoriteMutation.mutate({ juniorId: s.user.id, isFavorite: s.isFavorite })}
-                      disabled={toggleFavoriteMutation.isPending}
-                      className="absolute top-2 right-2 p-1.5 rounded-full bg-white/80 hover:bg-white transition-colors shadow-sm"
-                      data-testid={`button-favorite-${s.user.id}`}
-                      aria-label={s.isFavorite ? "Retirer des favoris" : "Ajouter aux favoris"}
-                    >
-                      <Heart className={`w-4 h-4 transition-colors ${s.isFavorite ? "fill-[#dc4256] text-[#dc4256]" : "text-muted-foreground"}`} />
-                    </button>
-                    {s.isRecommended && (
-                      <Badge className="absolute top-2 left-2 bg-[#e8d7fe] text-[#8b5cf6] text-[10px] px-1.5 shadow-sm">Recommandé</Badge>
-                    )}
-                  </div>
-                  <CardContent className="p-3 flex flex-col gap-2">
-                    <p className="font-semibold text-sm">{s.user.firstName} {s.user.lastName}</p>
-                    {s.user.city && (
-                      <p className="text-xs text-muted-foreground flex items-center gap-1">
-                        <MapPin className="w-3 h-3" />{s.user.city}
-                      </p>
-                    )}
-                    {s.user.bio && (
-                      <p className="text-[11px] text-muted-foreground line-clamp-2">{s.user.bio}</p>
-                    )}
-                    {s.commonCategories.length > 0 && (
-                      <div className="flex gap-1 flex-wrap">
-                        {s.commonCategories.map((c) => (
-                          <Badge key={c} variant="outline" className="text-[9px] px-1.5 py-0 bg-[#f3eaff] border-[#e8d7fe]">{c}</Badge>
-                        ))}
-                      </div>
-                    )}
-                    <Button
-                      size="sm"
-                      className="rounded-full bg-[#dc4256] hover:bg-[#c73848] text-white text-xs w-full mt-1"
-                      onClick={() => createRelationMutation.mutate(s.user.id)}
-                      disabled={createRelationMutation.isPending}
-                      data-testid={`button-propose-${s.user.id}`}
-                    >
-                      <Plus className="w-3 h-3 mr-1" /> Proposer une rencontre
-                    </Button>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          )}
+                      key={idx}
+                      onClick={() => setCarouselIndex(idx)}
+                      className={`w-2 h-2 rounded-full transition-colors ${idx === safeCarouselIndex ? "bg-[#dc4256]" : "bg-muted-foreground/30"}`}
+                      aria-label={`Voir profil ${idx + 1}`}
+                      data-testid={`carousel-dot-${idx}`}
+                    />
+                  ))}
+                </div>
+              </div>
+            )
+          }
         </div>
       )}
 
