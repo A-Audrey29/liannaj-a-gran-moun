@@ -13,7 +13,6 @@ import {
   FormLabel,
   FormControl,
   FormMessage,
-  FormDescription,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -24,12 +23,10 @@ import { User, GraduationCap, Loader2 } from "lucide-react";
 
 const registerSchema = insertUserBaseSchema.extend({
   confirmPassword: z.string().min(6, "Confirmation requise"),
+  validatorEmail: z.string().optional().default(""),
 }).refine(
   (data) => data.password === data.confirmPassword,
   { message: "Les mots de passe ne correspondent pas", path: ["confirmPassword"] }
-).refine(
-  (data) => data.email.toLowerCase().trim() !== data.validatorEmail.toLowerCase().trim(),
-  { message: "Le validateur ne peut pas être vous-même", path: ["validatorEmail"] }
 );
 
 type RegisterForm = z.infer<typeof registerSchema>;
@@ -75,6 +72,11 @@ export default function Register() {
   const registerMutation = useMutation({
     mutationFn: async (data: RegisterForm) => {
       const { confirmPassword, ...payload } = data;
+      if (payload.role === "SENIOR") {
+        payload.validatorEmail = payload.trustedPersonEmail;
+      } else {
+        payload.validatorEmail = payload.referentEmail;
+      }
       await apiRequest("POST", "/api/auth/register", payload);
     },
     onSuccess: () => {
@@ -335,139 +337,6 @@ export default function Register() {
                 />
               </div>
 
-              {role === "JUNIOR" && (
-                <div className="space-y-4">
-                  <h3 className="text-base font-semibold" data-testid="text-section-junior">
-                    Informations Junior
-                  </h3>
-                  <FormField
-                    control={form.control}
-                    name="schoolName"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Établissement scolaire</FormLabel>
-                        <FormControl>
-                          <Input placeholder="Nom de l'école" {...field} data-testid="input-schoolName" />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={form.control}
-                    name="referentTitle"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Titre du référent</FormLabel>
-                        <FormControl>
-                          <Input placeholder="Professeur, CPE..." {...field} data-testid="input-referentTitle" />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <div className="grid grid-cols-2 gap-3">
-                    <FormField
-                      control={form.control}
-                      name="referentFirstName"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Prénom du référent</FormLabel>
-                          <FormControl>
-                            <Input placeholder="Prénom" {...field} data-testid="input-referentFirstName" />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <FormField
-                      control={form.control}
-                      name="referentLastName"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Nom du référent</FormLabel>
-                          <FormControl>
-                            <Input placeholder="Nom" {...field} data-testid="input-referentLastName" />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                  </div>
-                  <FormField
-                    control={form.control}
-                    name="referentEmail"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Email du référent</FormLabel>
-                        <FormControl>
-                          <Input type="email" placeholder="referent@ecole.fr" {...field} data-testid="input-referentEmail" />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
-              )}
-
-              {role === "SENIOR" && (
-                <div className="space-y-4">
-                  <h3 className="text-base font-semibold" data-testid="text-section-senior">
-                    Personne de confiance
-                  </h3>
-                  <div className="grid grid-cols-2 gap-3">
-                    <FormField
-                      control={form.control}
-                      name="trustedPersonName"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Nom</FormLabel>
-                          <FormControl>
-                            <Input placeholder="Nom complet" {...field} data-testid="input-trustedPersonName" />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <FormField
-                      control={form.control}
-                      name="trustedPersonEmail"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Email</FormLabel>
-                          <FormControl>
-                            <Input type="email" placeholder="email@exemple.fr" {...field} data-testid="input-trustedPersonEmail" />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                  </div>
-                </div>
-              )}
-
-              <div className="space-y-4">
-                <h3 className="text-base font-semibold" data-testid="text-section-validator">
-                  Validateur
-                </h3>
-                <FormField
-                  control={form.control}
-                  name="validatorEmail"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Email du validateur</FormLabel>
-                      <FormControl>
-                        <Input type="email" placeholder="validateur@email.fr" {...field} data-testid="input-validatorEmail" />
-                      </FormControl>
-                      <FormDescription>
-                        Email de votre aidant/professeur qui validera votre inscription
-                      </FormDescription>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
-
               <div className="space-y-4">
                 <h3 className="text-base font-semibold" data-testid="text-section-categories">
                   Catégories d'intérêt
@@ -510,6 +379,95 @@ export default function Register() {
                   />
                 )}
               </div>
+
+              {role === "SENIOR" && (
+                <div className="space-y-4">
+                  <h3 className="text-base font-semibold" data-testid="text-section-senior">
+                    Personne de confiance
+                  </h3>
+                  <div className="grid grid-cols-2 gap-3">
+                    <FormField
+                      control={form.control}
+                      name="trustedPersonName"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Nom</FormLabel>
+                          <FormControl>
+                            <Input placeholder="Nom complet" {...field} data-testid="input-trustedPersonName" />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="trustedPersonEmail"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Email</FormLabel>
+                          <FormControl>
+                            <Input type="email" placeholder="email@exemple.fr" {...field} data-testid="input-trustedPersonEmail" />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+                  <p className="text-sm text-muted-foreground" data-testid="text-senior-validation-info">
+                    Un lien sera envoyé à la personne de confiance pour valider votre inscription.
+                  </p>
+                </div>
+              )}
+
+              {role === "JUNIOR" && (
+                <div className="space-y-4">
+                  <h3 className="text-base font-semibold" data-testid="text-section-junior">
+                    Référent scolaire
+                  </h3>
+                  <FormField
+                    control={form.control}
+                    name="schoolName"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Établissement scolaire</FormLabel>
+                        <FormControl>
+                          <Input placeholder="Nom de l'école" {...field} data-testid="input-schoolName" />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="referentLastName"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Nom du référent</FormLabel>
+                        <FormControl>
+                          <Input placeholder="Nom" {...field} data-testid="input-referentLastName" />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="referentEmail"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Email du référent</FormLabel>
+                        <FormControl>
+                          <Input type="email" placeholder="referent@ecole.fr" {...field} data-testid="input-referentEmail" />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <p className="text-sm text-muted-foreground" data-testid="text-junior-validation-info">
+                    Un lien sera envoyé à votre référent scolaire pour valider votre inscription.
+                  </p>
+                </div>
+              )}
 
               <Button
                 type="submit"
