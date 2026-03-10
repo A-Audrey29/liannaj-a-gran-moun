@@ -16,7 +16,7 @@ import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import StatusBadge from "@/components/status-badge";
-import { Calendar, MessageCircle, User, LayoutGrid, ChevronRight, Plus, Check, X, Pencil, Heart, Camera, Trash2, AlertTriangle, Star, Users, ClipboardCheck } from "lucide-react";
+import { Calendar, MessageCircle, User, LayoutGrid, ChevronRight, Plus, Check, X, Pencil, Heart, Camera, Trash2, AlertTriangle, Star, Users, ClipboardCheck, Eye, EyeOff } from "lucide-react";
 import { useState, useRef } from "react";
 import { updateProfileSchema, type UpdateProfileInput } from "@shared/schema";
 import type { Relation, User as UserType, Intervention } from "@shared/schema";
@@ -331,65 +331,65 @@ function RencontresTab({ relations, isLoading, user }: { relations?: RelationWit
                 </div>
               </div>
 
-              {isExpanded && interventions.length > 0 && (
-                <div className="border-t pl-8 pr-4 pb-4">
-                  <div className="space-y-2 mt-3">
-                    <h4 className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Historique des rencontres</h4>
-                    {interventions.map((interv) => (
-                      <div
-                        key={interv.id}
-                        className="flex items-center justify-between py-2 px-3 rounded-xl bg-muted/30 text-sm"
-                        data-testid={`intervention-${interv.id}`}
-                      >
-                        <div>
-                          <p className="font-medium text-xs">
-                            {new Date(interv.scheduledDate).toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "long" })}
-                          </p>
-                          <p className="text-[10px] text-muted-foreground">
-                            {interv.durationMinutes} min{interv.location ? ` · ${interv.location}` : ""}
-                          </p>
-                        </div>
-                        <StatusBadge status={interv.status} />
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {!isExpanded && interventions.length > 0 && (
-                <div className="border-t pl-8 pr-4 py-3 text-center">
-                  <p className="text-xs text-muted-foreground">{interventions.length} rencontre{interventions.length > 1 ? "s" : ""} dans l'historique</p>
-                </div>
-              )}
-
               {interventions.length === 0 && (
-                <div className="border-t pl-8 pr-4 py-3">
+                <div className="border-t px-4 py-3">
                   <p className="text-xs text-muted-foreground text-center">Aucune rencontre planifiée</p>
                 </div>
               )}
 
               {interventions.length > 0 && (
-                <div className="pl-8 pr-4 pb-3">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="w-full text-sm font-medium"
-                    aria-expanded={isExpanded}
-                    onClick={() => {
-                      setCollapsedIds((prev) => {
-                        const next = new Set(prev);
-                        if (next.has(rel.id)) {
-                          next.delete(rel.id);
-                        } else {
-                          next.add(rel.id);
-                        }
-                        return next;
-                      });
-                    }}
-                    data-testid={`toggle-history-${rel.id}`}
-                  >
-                    {isExpanded ? "Masquer l'historique des rencontres" : "Voir l'historique des rencontres"}
-                  </Button>
+                <div className="border-t px-4 pt-3 pb-4">
+                  <div className="ml-4 border-l-2 border-primary/20 pl-4">
+                    <div className="flex items-center justify-between mb-3">
+                      <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Historique des rencontres</h4>
+                      <Button
+                        variant={isExpanded ? "outline" : "default"}
+                        size="sm"
+                        className="rounded-full text-xs gap-1.5"
+                        aria-expanded={isExpanded}
+                        onClick={() => {
+                          setCollapsedIds((prev) => {
+                            const next = new Set(prev);
+                            if (next.has(rel.id)) {
+                              next.delete(rel.id);
+                            } else {
+                              next.add(rel.id);
+                            }
+                            return next;
+                          });
+                        }}
+                        data-testid={`toggle-history-${rel.id}`}
+                      >
+                        {isExpanded ? (
+                          <><EyeOff className="w-3.5 h-3.5" /> Masquer l'historique</>
+                        ) : (
+                          <><Eye className="w-3.5 h-3.5" /> Voir l'historique ({interventions.length})</>
+                        )}
+                      </Button>
+                    </div>
+
+                    {isExpanded && (
+                      <div className="space-y-2">
+                        {interventions.map((interv) => (
+                          <div
+                            key={interv.id}
+                            className="flex items-center justify-between py-2 px-3 rounded-xl bg-muted/30 text-sm"
+                            data-testid={`intervention-${interv.id}`}
+                          >
+                            <div>
+                              <p className="font-medium text-xs">
+                                {new Date(interv.scheduledDate).toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "long" })}
+                              </p>
+                              <p className="text-[10px] text-muted-foreground">
+                                {interv.durationMinutes} min{interv.location ? ` · ${interv.location}` : ""}
+                              </p>
+                            </div>
+                            <StatusBadge status={interv.status} />
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
             </CardContent>
