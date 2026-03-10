@@ -20,6 +20,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { User, GraduationCap, Loader2 } from "lucide-react";
+import { useState } from "react";
 
 const registerSchema = insertUserBaseSchema.extend({
   confirmPassword: z.string().min(6, "Confirmation requise"),
@@ -34,6 +35,7 @@ type RegisterForm = z.infer<typeof registerSchema>;
 export default function Register() {
   const [, navigate] = useLocation();
   const { toast } = useToast();
+  const [trustedCivilite, setTrustedCivilite] = useState<"M." | "Mme" | "">("");
 
   const form = useForm<RegisterForm>({
     resolver: zodResolver(registerSchema),
@@ -385,6 +387,24 @@ export default function Register() {
                   <h3 className="text-base font-semibold" data-testid="text-section-senior">
                     Personne de confiance
                   </h3>
+                  <div className="flex items-center gap-4 mb-1">
+                    <label className="flex items-center gap-1.5 text-sm cursor-pointer">
+                      <Checkbox
+                        checked={trustedCivilite === "M."}
+                        onCheckedChange={() => setTrustedCivilite("M.")}
+                        data-testid="checkbox-trusted-mr"
+                      />
+                      M.
+                    </label>
+                    <label className="flex items-center gap-1.5 text-sm cursor-pointer">
+                      <Checkbox
+                        checked={trustedCivilite === "Mme"}
+                        onCheckedChange={() => setTrustedCivilite("Mme")}
+                        data-testid="checkbox-trusted-mme"
+                      />
+                      Mme
+                    </label>
+                  </div>
                   <div className="grid grid-cols-2 gap-3">
                     <FormField
                       control={form.control}
@@ -433,6 +453,33 @@ export default function Register() {
                         <FormControl>
                           <Input placeholder="Nom de l'école" {...field} data-testid="input-schoolName" />
                         </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="referentTitle"
+                    render={({ field }) => (
+                      <FormItem>
+                        <div className="flex items-center gap-4">
+                          <label className="flex items-center gap-1.5 text-sm cursor-pointer">
+                            <Checkbox
+                              checked={field.value === "M."}
+                              onCheckedChange={() => field.onChange("M.")}
+                              data-testid="checkbox-referent-mr"
+                            />
+                            M.
+                          </label>
+                          <label className="flex items-center gap-1.5 text-sm cursor-pointer">
+                            <Checkbox
+                              checked={field.value === "Mme"}
+                              onCheckedChange={() => field.onChange("Mme")}
+                              data-testid="checkbox-referent-mme"
+                            />
+                            Mme
+                          </label>
+                        </div>
                         <FormMessage />
                       </FormItem>
                     )}
