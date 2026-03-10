@@ -168,11 +168,13 @@ function ChatView({ conversation, userId, onBack }: {
     },
   });
 
+  const unreadFromOthers = messages.filter((m) => m.senderId !== userId && !m.isRead).length;
+
   useEffect(() => {
-    if (conversation.unreadCount > 0) {
+    if (unreadFromOthers > 0) {
       markRead.mutate();
     }
-  }, [conversation.relationId]);
+  }, [conversation.relationId, unreadFromOthers]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });

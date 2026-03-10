@@ -1,9 +1,13 @@
 import { useEffect, useRef } from "react";
 import { queryClient } from "@/lib/queryClient";
 
-function invalidateThread(relationId?: string) {
+function invalidateThread(relationId?: string, includeUnread = true) {
   queryClient.invalidateQueries({ queryKey: ["/api/messages/conversations"] });
-  queryClient.invalidateQueries({ queryKey: ["/api/messages/unread-count"] });
+  if (includeUnread) {
+    queryClient.invalidateQueries({ queryKey: ["/api/messages/unread-count"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/notifications/count"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/notifications"] });
+  }
   if (relationId) {
     queryClient.invalidateQueries({ queryKey: ["/api/messages/conversations", relationId] });
   }
@@ -31,9 +35,9 @@ export function useSSE(enabled: boolean = true) {
       es.addEventListener("message_sent", (event) => {
         try {
           const data = JSON.parse(event.data);
-          invalidateThread(data.relationId);
+          invalidateThread(data.relationId, false);
         } catch {
-          invalidateThread();
+          invalidateThread(undefined, false);
         }
       });
 

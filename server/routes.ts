@@ -1206,6 +1206,19 @@ export async function registerRoutes(
       const message = await storage.createMessage(conv.id, userId, content.trim());
 
       const recipientId = relation.seniorId === userId ? relation.juniorId : relation.seniorId;
+      const senderName = `${req.user!.firstName} ${req.user!.lastName}`;
+
+      try {
+        await storage.createNotification({
+          user: { connect: { id: recipientId } },
+          type: "NEW_MESSAGE",
+          title: `Nouveau message de ${senderName}`,
+          message: content.trim().substring(0, 100),
+          link: `/mon-espace?tab=messages&relation=${relationId}`,
+        });
+      } catch (notifErr) {
+        console.error("[MSG_NOTIF] Error creating notification:", notifErr);
+      }
 
       sendSSEEvent(recipientId, "new_message", {
         message,
@@ -1220,7 +1233,6 @@ export async function registerRoutes(
       });
 
       if (!isUserConnected(recipientId)) {
-        const senderName = `${req.user!.firstName} ${req.user!.lastName}`;
         sendPushNotification(recipientId, {
           title: `Nouveau message de ${senderName}`,
           body: content.trim().substring(0, 100),

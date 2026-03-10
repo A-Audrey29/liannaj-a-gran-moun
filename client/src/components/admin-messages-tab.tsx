@@ -59,6 +59,7 @@ function ConversationsList({ onSelect }: { onSelect: (conv: AdminConversation) =
   const [search, setSearch] = useState("");
   const { data: conversations = [], isLoading } = useQuery<AdminConversation[]>({
     queryKey: ["/api/admin/messages/conversations"],
+    refetchInterval: 15000,
   });
 
   const filtered = search.trim()
@@ -144,6 +145,7 @@ function ConversationsList({ onSelect }: { onSelect: (conv: AdminConversation) =
 function ConversationDetail({ conversation, onBack }: { conversation: AdminConversation; onBack: () => void }) {
   const { data, isLoading } = useQuery<{ conversation: any; messages: AdminMessage[] }>({
     queryKey: ["/api/admin/messages/conversations", conversation.id],
+    refetchInterval: 10000,
   });
 
   const deleteMutation = useMutation({
@@ -204,7 +206,9 @@ function ConversationDetail({ conversation, onBack }: { conversation: AdminConve
                         {senderLabel}
                       </Badge>
                       <span className="text-[11px] text-muted-foreground">{formatDate(msg.createdAt)}</span>
-                      {msg.isRead && <span className="text-[10px] text-green-600">Lu</span>}
+                      <Badge className={`text-[10px] px-1.5 py-0 ${msg.isRead ? "bg-green-100 text-green-700" : "bg-orange-100 text-orange-700"}`}>
+                        {msg.isRead ? "Lu" : "Non lu"}
+                      </Badge>
                     </div>
                     {msg.isDeleted ? (
                       <div className="flex items-center gap-2">
