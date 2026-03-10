@@ -68,7 +68,11 @@ function useDashboardCounts(relations?: RelationWithUsers[], pendingFB?: Interve
 export default function Home() {
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useState<string>("dashboard");
-  const tabs = user?.role === "ADMIN" ? ALL_TABS.filter((t) => t.id !== "profil") : ALL_TABS;
+  const tabs = user?.role === "ADMIN"
+    ? ALL_TABS.filter((t) => t.id !== "profil")
+    : user?.role === "JUNIOR"
+    ? ALL_TABS.filter((t) => t.id !== "demandes")
+    : ALL_TABS;
   const { toast } = useToast();
 
   const { data: relations, isLoading: relLoading } = useQuery<RelationWithUsers[]>({ queryKey: ["/api/relations"] });
