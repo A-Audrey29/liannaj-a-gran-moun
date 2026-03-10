@@ -278,7 +278,7 @@ function DashboardTab({ counts, isLoading, user, onSwitchTab }: { counts: Dashbo
 
 function RencontresTab({ relations, isLoading, user }: { relations?: RelationWithUsers[]; isLoading: boolean; user: any }) {
   const [, setLocation] = useLocation();
-  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [collapsedIds, setCollapsedIds] = useState<Set<string>>(new Set());
 
   if (isLoading) return <div className="space-y-4"><Skeleton className="h-24 rounded-2xl" /><Skeleton className="h-24 rounded-2xl" /></div>;
 
@@ -300,20 +300,15 @@ function RencontresTab({ relations, isLoading, user }: { relations?: RelationWit
     <div className="space-y-3">
       {activeRelations.map((rel) => {
         const partner = rel.seniorId === user?.id ? rel.junior : rel.senior;
-        const isExpanded = expandedId === rel.id;
+        const isExpanded = !collapsedIds.has(rel.id);
         const interventions = (rel.interventions || []).sort((a, b) => new Date(b.scheduledDate).getTime() - new Date(a.scheduledDate).getTime());
 
         return (
           <Card key={rel.id} className="rounded-2xl border-0 shadow-sm overflow-hidden" data-testid={`card-relation-${rel.id}`}>
             <CardContent className="p-0">
               <div
-                onClick={() => setExpandedId(isExpanded ? null : rel.id)}
-                className="w-full flex items-center justify-between py-4 px-4 hover:bg-muted/30 transition-colors text-left cursor-pointer"
-                role="button"
-                tabIndex={0}
-                aria-expanded={isExpanded}
-                onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setExpandedId(isExpanded ? null : rel.id); } }}
-                data-testid={`toggle-relation-${rel.id}`}
+                className="w-full flex items-center justify-between py-4 px-4"
+                data-testid={`header-relation-${rel.id}`}
               >
                 <div className="flex items-center gap-3">
                   <UserAvatar user={partner} />
@@ -328,42 +323,73 @@ function RencontresTab({ relations, isLoading, user }: { relations?: RelationWit
                     size="sm"
                     variant="outline"
                     className="rounded-full text-xs"
-                    onClick={(e) => { e.stopPropagation(); setLocation(`/relations/${rel.id}`); }}
+                    onClick={() => setLocation(`/relations/${rel.id}`)}
                     data-testid={`button-voir-profil-${rel.id}`}
                   >
                     Voir son profil <ChevronRight className="w-3 h-3 ml-1" />
                   </Button>
-                  <ChevronRight className={`w-4 h-4 text-muted-foreground transition-transform ${isExpanded ? "rotate-90" : ""}`} />
                 </div>
               </div>
 
-              {isExpanded && (
+              {isExpanded && interventions.length > 0 && (
                 <div className="border-t px-4 pb-4">
-
-                  {interventions.length === 0 ? (
-                    <p className="text-xs text-muted-foreground text-center py-3">Aucune rencontre planifiée</p>
-                  ) : (
-                    <div className="space-y-2">
-                      <h4 className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Rencontres</h4>
-                      {interventions.map((interv) => (
-                        <div
-                          key={interv.id}
-                          className="flex items-center justify-between py-2 px-3 rounded-xl bg-muted/30 text-sm"
-                          data-testid={`intervention-${interv.id}`}
-                        >
-                          <div>
-                            <p className="font-medium text-xs">
-                              {new Date(interv.scheduledDate).toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "long" })}
-                            </p>
-                            <p className="text-[10px] text-muted-foreground">
-                              {interv.durationMinutes} min{interv.location ? ` · ${interv.location}` : ""}
-                            </p>
-                          </div>
-                          <StatusBadge status={interv.status} />
+                  <div className="space-y-2 mt-3">
+                    <h4 className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Historique des rencontres</h4>
+                    {interventions.map((interv) => (
+                      <div
+                        key={interv.id}
+                        className="flex items-center justify-between py-2 px-3 rounded-xl bg-muted/30 text-sm"
+                        data-testid={`intervention-${interv.id}`}
+                      >
+                        <div>
+                          <p className="font-medium text-xs">
+                            {new Date(interv.scheduledDate).toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "long" })}
+                          </p>
+                          <p className="text-[10px] text-muted-foreground">
+                            {interv.durationMinutes} min{interv.location ? ` · ${interv.location}` : ""}
+                          </p>
                         </div>
-                      ))}
-                    </div>
-                  )}
+                        <StatusBadge status={interv.status} />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {!isExpanded && interventions.length > 0 && (
+                <div className="border-t px-4 py-3 text-center">
+                  <p className="text-xs text-muted-foreground">{interventions.length} rencontre{interventions.length > 1 ? "s" : ""} dans l'historique</p>
+                </div>
+              )}
+
+              {interventions.length === 0 && (
+                <div className="border-t px-4 py-3">
+                  <p className="text-xs text-muted-foreground text-center">Aucune rencontre planifiée</p>
+                </div>
+              )}
+
+              {interventions.length > 0 && (
+                <div className="px-4 pb-3">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="w-full text-sm font-medium"
+                    aria-expanded={isExpanded}
+                    onClick={() => {
+                      setCollapsedIds((prev) => {
+                        const next = new Set(prev);
+                        if (next.has(rel.id)) {
+                          next.delete(rel.id);
+                        } else {
+                          next.add(rel.id);
+                        }
+                        return next;
+                      });
+                    }}
+                    data-testid={`toggle-history-${rel.id}`}
+                  >
+                    {isExpanded ? "Masquer l'historique des rencontres" : "Voir l'historique des rencontres"}
+                  </Button>
                 </div>
               )}
             </CardContent>
