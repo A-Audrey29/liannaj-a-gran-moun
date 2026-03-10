@@ -293,7 +293,7 @@ export default function Register() {
                       <FormItem>
                         <FormLabel>Code postal</FormLabel>
                         <FormControl>
-                          <Input placeholder="75000" {...field} data-testid="input-postalCode" />
+                          <Input placeholder="ex: 97139" {...field} data-testid="input-postalCode" />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
