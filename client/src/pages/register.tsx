@@ -142,7 +142,7 @@ export default function Register() {
                             data-testid="button-role-junior"
                           >
                             <GraduationCap className="w-4 h-4" />
-                            Junior
+                            Jeune
                           </Button>
                         </div>
                       </FormControl>
@@ -409,7 +409,7 @@ export default function Register() {
                                 onCheckedChange={() => setTrustedCivilite("Mme")}
                                 data-testid="checkbox-trusted-mme"
                               />
-                              M<sup>me</sup>
+                              M<sup className="ml-[-1px]">me</sup>
                             </label>
                           </div>
                           <FormControl>
@@ -423,7 +423,7 @@ export default function Register() {
                       control={form.control}
                       name="trustedPersonEmail"
                       render={({ field }) => (
-                        <FormItem>
+                        <FormItem className="flex flex-col justify-end">
                           <FormLabel>Email</FormLabel>
                           <FormControl>
                             <Input type="email" placeholder="email@exemple.fr" {...field} data-testid="input-trustedPersonEmail" />
@@ -482,7 +482,7 @@ export default function Register() {
                                   onCheckedChange={() => titleField.onChange("Mme")}
                                   data-testid="checkbox-referent-mme"
                                 />
-                                M<sup>me</sup>
+                                M<sup className="ml-[-1px]">me</sup>
                               </label>
                             </div>
                           )}

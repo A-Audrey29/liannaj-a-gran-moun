@@ -276,7 +276,7 @@ function UsersTab() {
   const roleFilters = [
     { id: "all", label: "Tous les rôles" },
     { id: "SENIOR", label: "Seniors" },
-    { id: "JUNIOR", label: "Juniors" },
+    { id: "JUNIOR", label: "Jeunes" },
     { id: "ADMIN", label: "Admins" },
   ];
 
@@ -866,7 +866,7 @@ function RencontresTab() {
       }
       return val;
     };
-    const header = ["Senior", "Junior", "Date", "Heure", "Durée (min)", "Lieu", "Activités", "Statut", "Note Senior", "Commentaire Senior", "Note Jeune", "Commentaire Jeune"];
+    const header = ["Senior", "Jeune", "Date", "Heure", "Durée (min)", "Lieu", "Activités", "Statut", "Note Senior", "Commentaire Senior", "Note Jeune", "Commentaire Jeune"];
     const rows = filtered.map((i) => [
       csvEscape(`${i.relation.senior.firstName} ${i.relation.senior.lastName}`),
       csvEscape(`${i.relation.junior.firstName} ${i.relation.junior.lastName}`),
