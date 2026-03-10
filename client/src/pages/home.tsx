@@ -332,7 +332,7 @@ function RencontresTab({ relations, isLoading, user }: { relations?: RelationWit
               </div>
 
               {isExpanded && interventions.length > 0 && (
-                <div className="border-t px-4 pb-4">
+                <div className="border-t pl-8 pr-4 pb-4">
                   <div className="space-y-2 mt-3">
                     <h4 className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Historique des rencontres</h4>
                     {interventions.map((interv) => (
@@ -357,19 +357,19 @@ function RencontresTab({ relations, isLoading, user }: { relations?: RelationWit
               )}
 
               {!isExpanded && interventions.length > 0 && (
-                <div className="border-t px-4 py-3 text-center">
+                <div className="border-t pl-8 pr-4 py-3 text-center">
                   <p className="text-xs text-muted-foreground">{interventions.length} rencontre{interventions.length > 1 ? "s" : ""} dans l'historique</p>
                 </div>
               )}
 
               {interventions.length === 0 && (
-                <div className="border-t px-4 py-3">
+                <div className="border-t pl-8 pr-4 py-3">
                   <p className="text-xs text-muted-foreground text-center">Aucune rencontre planifiée</p>
                 </div>
               )}
 
               {interventions.length > 0 && (
-                <div className="px-4 pb-3">
+                <div className="pl-8 pr-4 pb-3">
                   <Button
                     variant="ghost"
                     size="sm"
