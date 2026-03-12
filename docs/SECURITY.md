@@ -388,6 +388,8 @@ Le champ `password` (hash bcrypt) n'apparaît dans **aucune** réponse API.
 | `multer` | 2.1.1 | Upload fichiers avec limites | `server/routes.ts:6,37-49` |
 | `file-type` | 21.3.1 | Détection MIME (magic bytes) | `server/routes.ts:10,92-99` |
 
+Exécuter `npm audit` régulièrement pour vérifier les vulnérabilités connues dans les dépendances.
+
 ## Annexe C. Guide sécurité contributeurs
 
 ### Règles obligatoires
@@ -415,4 +417,4 @@ Le champ `password` (hash bcrypt) n'apparaît dans **aucune** réponse API.
 - [ ] Validation extension (`routes.ts:40-48`)
 - [ ] Validation magic bytes `validateImageMagicBytes()` (`routes.ts:92-99`)
 - [ ] Nom UUID (`routes.ts:33`)
-- [ ] Suppression fichier en cas d'échec
+- [ ] Suppression fichier en cas d'échec ou remplacement
