@@ -32,9 +32,9 @@ type MatchSuggestion = { user: UserType; commonCategories: string[]; isRecommend
 const ALL_TABS = [
   { id: "dashboard", label: "Tableau de bord", icon: LayoutGrid },
   { id: "rencontres", label: "Mes rencontres", icon: Calendar },
-  { id: "messages", label: "Messages", icon: Mail },
+  { id: "messages", label: "Messagerie", icon: Mail },
   { id: "demandes", label: "Trouver un profil", icon: MessageCircle },
-  { id: "profil", label: "Profil", icon: User },
+  { id: "profil", label: "Mon informations", icon: User },
   { id: "aide", label: "Aide", icon: HelpCircle },
 ] as const;
 
@@ -1362,7 +1362,7 @@ function EditProfileDialog({ user, open, onOpenChange }: { user: AuthUser; open:
 // ==================== AIDE TAB ====================
 
 const REPORT_REASONS = [
-  { value: "PERSON", label: "Problème avec une personne" },
+  { value: "PERSON", label: "J'ai un problème avec une personne" },
   { value: "QUESTION", label: "J'ai une question sur l'application" },
   { value: "OTHER", label: "Autre chose" },
 ] as const;

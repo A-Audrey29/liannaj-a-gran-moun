@@ -353,7 +353,8 @@ Tous les emails envoyés par Brevo sont dans **un seul fichier** : `server/lib/e
 | Intervention proposée | `getInterventionProposedEmailHtml` | l.141 |
 | Intervention confirmée | `getInterventionConfirmedEmailHtml` | l.181 |
 | Rappel de feedback | `getFeedbackReminderEmailHtml` | l.206 |
-| Nouveau compte admin créé | `getNewAdminNotificationEmailHtml` | l.234 |
+| Nouveau signalement reçu | `getNewReportEmailHtml` | l.237 |
+| Nouveau compte admin créé | `getNewAdminNotificationEmailHtml` | l.282 |
 
 > **Note** : les numéros de ligne peuvent légèrement bouger au fil des commits. Utiliser la recherche (`Ctrl+F` ou `grep`) sur le nom de la fonction si besoin.
 

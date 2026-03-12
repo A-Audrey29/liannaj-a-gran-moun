@@ -61,6 +61,7 @@ import {
   Download,
   MessageSquare,
   Flag,
+  RefreshCw,
 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import type { User, Relation, Intervention, PaymentRecord, Notification } from "@shared/schema";
@@ -1594,8 +1595,11 @@ const REPORT_REASON_LABELS: Record<string, string> = {
 };
 
 function SignalementsTab() {
-  const { data: reports = [], isLoading } = useQuery<ReportWithUsers[]>({
+  const { data: reports = [], isLoading, refetch } = useQuery<ReportWithUsers[]>({
     queryKey: ["/api/admin/reports"],
+    staleTime: 0,
+    refetchOnMount: "always",
+    refetchOnWindowFocus: true,
   });
 
   const handleMut = useMutation({
@@ -1616,9 +1620,14 @@ function SignalementsTab() {
     <div className="space-y-5">
       <div className="flex items-center justify-between">
         <h2 className="text-xl font-bold">Signalements</h2>
-        <Badge variant="outline" data-testid="text-open-reports-count">
-          {open.length} ouvert{open.length !== 1 ? "s" : ""}
-        </Badge>
+        <div className="flex items-center gap-2">
+          <Badge variant="outline" data-testid="text-open-reports-count">
+            {open.length} ouvert{open.length !== 1 ? "s" : ""}
+          </Badge>
+          <Button variant="ghost" size="sm" onClick={() => refetch()} data-testid="button-refresh-reports">
+            <RefreshCw className="w-4 h-4" />
+          </Button>
+        </div>
       </div>
 
       {sorted.length === 0 ? (
@@ -1681,7 +1690,12 @@ export default function Admin() {
     queryKey: ["/api/admin/relations/pending-meeting"],
   });
   const { data: users = [] } = useQuery<SafeUser[]>({ queryKey: ["/api/admin/users"] });
-  const { data: reportCount } = useQuery<{ count: number }>({ queryKey: ["/api/admin/reports/count"] });
+  const { data: reportCount } = useQuery<{ count: number }>({
+    queryKey: ["/api/admin/reports/count"],
+    staleTime: 0,
+    refetchOnMount: "always",
+    refetchOnWindowFocus: true,
+  });
   const pendingUsers = users.filter((u) => u.status === "PENDING_VALIDATION").length;
 
   function getTabCount(tabId: string): number {

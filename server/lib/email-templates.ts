@@ -231,6 +231,51 @@ export function getFeedbackReminderEmailHtml(
   return emailWrapper("Rappel : donnez votre avis - FEVES", body);
 }
 
+export function getNewReportEmailHtml(
+  adminName: string,
+  reporterName: string,
+  reason: string,
+  message: string | null,
+  adminUrl?: string
+): string {
+  const reasonLabels: Record<string, string> = {
+    PERSON: "Problème avec une personne",
+    QUESTION: "Question sur l'application",
+    OTHER: "Autre chose",
+  };
+  const reasonLabel = reasonLabels[reason] ?? reason;
+  const messageSection = message
+    ? `<p style="margin:0 0 8px;color:#7c3aed;font-size:13px;font-weight:600;text-transform:uppercase;">Message</p>
+       <p style="margin:0;color:#1f1f1f;font-size:15px;font-style:italic;">"${message}"</p>`
+    : "";
+  const body = `
+    <p style="margin:0 0 18px;color:#1f1f1f;font-size:15px;line-height:1.6;">Bonjour ${adminName},</p>
+    <p style="margin:0 0 18px;color:#1f1f1f;font-size:15px;line-height:1.6;">
+      Un utilisateur vient d&rsquo;envoyer un signalement via l&rsquo;onglet Aide.
+    </p>
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 24px;background-color:#fff4f4;border-left:4px solid #dc4256;border-radius:6px;">
+      <tr>
+        <td style="padding:16px;">
+          <p style="margin:0 0 8px;color:#dc4256;font-size:13px;font-weight:600;text-transform:uppercase;">Expéditeur</p>
+          <p style="margin:0 0 16px;color:#1f1f1f;font-size:15px;font-weight:600;">${reporterName}</p>
+          <p style="margin:0 0 8px;color:#dc4256;font-size:13px;font-weight:600;text-transform:uppercase;">Type</p>
+          <p style="margin:0 0 16px;color:#1f1f1f;font-size:15px;">${reasonLabel}</p>
+          ${messageSection}
+        </td>
+      </tr>
+    </table>
+    <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 auto 28px;">
+      <tr>
+        <td align="center" style="border-radius:6px;background:linear-gradient(135deg,#dc4256,#8b5cf6);">
+          <a href="${adminUrl || '#'}" target="_blank" style="display:inline-block;padding:14px 36px;color:#ffffff;font-size:15px;font-weight:600;text-decoration:none;border-radius:6px;">
+            Voir les signalements
+          </a>
+        </td>
+      </tr>
+    </table>`;
+  return emailWrapper("Nouveau signalement - FEVES", body);
+}
+
 export function getNewAdminNotificationEmailHtml(
   adminName: string,
   userName: string,

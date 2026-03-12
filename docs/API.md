@@ -413,3 +413,5 @@ Marque un signalement comme traité (`status: "HANDLED"`).
 
 **Statuts Report** : `OPEN` (défaut) | `HANDLED`  
 **Raisons** : `PERSON` (problème avec une personne) | `QUESTION` (question sur l'app) | `OTHER` (autre)
+
+> **Email automatique** : dès qu'un signalement est soumis, un email est envoyé à **tous les admins actifs** (template `getNewReportEmailHtml` dans `server/lib/email-templates.ts`). L'email contient le nom du déclarant, le type de problème, le message libre, et un lien direct vers le panneau admin.

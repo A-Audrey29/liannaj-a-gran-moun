@@ -17,6 +17,7 @@ import {
   getInterventionProposedEmailHtml,
   getInterventionConfirmedEmailHtml,
   getFeedbackReminderEmailHtml,
+  getNewReportEmailHtml,
 } from "./lib/email-templates";
 import { insertUserSchema, createRelationSchema, insertInterventionSchema, feedbackSchema, createPaymentSchema, changePasswordSchema, createAdminSchema, insertReportSchema } from "../shared/schema";
 import { addSSEClient, sendSSEEvent, isUserConnected } from "./lib/sse";
@@ -1491,6 +1492,18 @@ export async function registerRoutes(
         message: message || "",
       });
       res.status(201).json(report);
+
+      const reporter = await storage.getUser(reporterId);
+      const reporterName = reporter ? `${reporter.firstName} ${reporter.lastName}` : "Utilisateur inconnu";
+      const adminUrl = `${process.env.BASE_URL || ""}/admin`;
+      const admins = await storage.getAdmins();
+      for (const admin of admins) {
+        sendEmail(
+          admin.email,
+          "Nouveau signalement reçu - FEVES",
+          getNewReportEmailHtml(admin.firstName, reporterName, reason, message || null, adminUrl)
+        ).catch((err) => console.error("[REPORT_EMAIL] Error sending to admin:", err));
+      }
     } catch (err) {
       console.error("[REPORT_CREATE] Error:", err);
       res.status(500).json({ message: "Erreur lors de l'envoi du signalement" });
