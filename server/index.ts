@@ -46,7 +46,9 @@ app.use(
       : false,
     referrerPolicy: { policy: "no-referrer" },
     xContentTypeOptions: true,
-    xFrameOptions: { action: "deny" },
+    xFrameOptions: process.env.NODE_ENV === "production"
+      ? { action: "deny" }
+      : false,
   }),
 );
 

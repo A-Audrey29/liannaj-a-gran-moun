@@ -32,7 +32,7 @@ Le middleware Helmet v8.1.0 (`server/index.ts:2` import, `server/index.ts:28` us
 | `Content-Security-Policy` | Production : `default-src 'self'`, `script-src 'self'`, `style-src 'self' 'unsafe-inline'`, `img-src 'self' data:`, `connect-src 'self'`, `object-src 'none'`, `frame-src 'none'`. Désactivée en dev (Vite hot-reload) | `index.ts:30-43` |
 | `Strict-Transport-Security` | Production uniquement : `max-age=31536000`, `includeSubDomains` | `index.ts:44-46` |
 | `X-Content-Type-Options` | `nosniff` — toujours actif | `index.ts:48` |
-| `X-Frame-Options` | `DENY` — empêche le clickjacking | `index.ts:49` |
+| `X-Frame-Options` | Production : `DENY` — empêche le clickjacking. Désactivé en dev (iframe Replit) | `index.ts:52-54` |
 | `Referrer-Policy` | `no-referrer` — toujours actif | `index.ts:47` |
 
 ---
