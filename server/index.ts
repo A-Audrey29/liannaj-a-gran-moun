@@ -1,4 +1,5 @@
 import express, { type Request, Response, NextFunction } from "express";
+import helmet from "helmet";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
@@ -23,7 +24,31 @@ app.use(
 );
 
 app.use(express.urlencoded({ extended: false }));
-app.use("/uploads", express.static("uploads"));
+
+app.use(
+  helmet({
+    contentSecurityPolicy: process.env.NODE_ENV === "production"
+      ? {
+          directives: {
+            defaultSrc: ["'self'"],
+            scriptSrc: ["'self'"],
+            styleSrc: ["'self'", "'unsafe-inline'"],
+            imgSrc: ["'self'", "data:"],
+            connectSrc: ["'self'"],
+            fontSrc: ["'self'"],
+            objectSrc: ["'none'"],
+            frameSrc: ["'none'"],
+          },
+        }
+      : false,
+    hsts: process.env.NODE_ENV === "production"
+      ? { maxAge: 31536000, includeSubDomains: true }
+      : false,
+    referrerPolicy: { policy: "no-referrer" },
+    xContentTypeOptions: true,
+    xFrameOptions: { action: "deny" },
+  }),
+);
 
 setupAuth(app);
 
@@ -53,7 +78,7 @@ app.use((req, res, next) => {
     const duration = Date.now() - start;
     if (path.startsWith("/api")) {
       let logLine = `${req.method} ${path} ${res.statusCode} in ${duration}ms`;
-      if (capturedJsonResponse) {
+      if (capturedJsonResponse && process.env.NODE_ENV !== "production") {
         logLine += ` :: ${JSON.stringify(capturedJsonResponse)}`;
       }
 

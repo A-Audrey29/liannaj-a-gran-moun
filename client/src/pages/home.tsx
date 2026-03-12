@@ -1,4 +1,5 @@
 import { useAuth, type AuthUser } from "@/hooks/use-auth";
+import { getPhotoUrl } from "@/lib/photo-url";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -444,7 +445,7 @@ function RencontresTab({ relations, isLoading, user, onOpenMessage }: { relation
 function UserAvatar({ user, size = "sm" }: { user: { firstName: string; lastName: string; profilePhoto?: string | null }; size?: "sm" | "md" | "lg" }) {
   const sizeClasses = { sm: "w-10 h-10 text-sm", md: "w-14 h-14 text-lg", lg: "w-16 h-16 text-xl" };
   if (user.profilePhoto) {
-    return <img src={user.profilePhoto} alt={`${user.firstName} ${user.lastName}`} className={`${sizeClasses[size]} rounded-full object-cover`} />;
+    return <img src={getPhotoUrl(user.profilePhoto)!} alt={`${user.firstName} ${user.lastName}`} className={`${sizeClasses[size]} rounded-full object-cover`} />;
   }
   return (
     <div className={`${sizeClasses[size]} rounded-full bg-[#e8d7fe] flex items-center justify-center font-bold text-[#8b5cf6]`}>
@@ -669,7 +670,7 @@ function DemandesTab({ relations, isLoading, user }: { relations?: RelationWithU
                         <div className="relative w-full h-56 bg-muted">
                           {s.user.profilePhoto ? (
                             <img
-                              src={s.user.profilePhoto}
+                              src={getPhotoUrl(s.user.profilePhoto)!}
                               alt={`${s.user.firstName} ${s.user.lastName}`}
                               className="w-full h-full object-cover"
                             />
@@ -909,7 +910,7 @@ function PhotoUpload({ user }: { user: AuthUser }) {
       />
       {user.profilePhoto ? (
         <div className="relative">
-          <img src={user.profilePhoto} alt="Photo de profil" className="w-16 h-16 rounded-full object-cover" />
+          <img src={getPhotoUrl(user.profilePhoto)!} alt="Photo de profil" className="w-16 h-16 rounded-full object-cover" />
           <button
             onClick={() => fileInputRef.current?.click()}
             className="absolute inset-0 w-16 h-16 rounded-full bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"

@@ -49,8 +49,9 @@ function formatTime(dateStr: string) {
 
 function Avatar({ photo, name, size = "md" }: { photo: string | null; name: string; size?: "md" | "lg" }) {
   const sizeClass = size === "lg" ? "w-12 h-12 text-lg" : "w-10 h-10 text-sm";
-  if (photo) {
-    return <img src={photo} alt={name} className={`${sizeClass} rounded-full object-cover`} />;
+  const photoUrl = photo ? (photo.startsWith("/uploads/") ? `/api/photos/${photo.slice("/uploads/".length)}` : photo) : undefined;
+  if (photoUrl) {
+    return <img src={photoUrl} alt={name} className={`${sizeClass} rounded-full object-cover`} />;
   }
   const initials = name.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2);
   return (

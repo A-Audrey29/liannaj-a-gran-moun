@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { getPhotoUrl } from "@/lib/photo-url";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -803,7 +804,7 @@ function ProfileDialog({ user, open, onOpenChange }: { user: SafeUser | null; op
         <DialogHeader>
           <DialogTitle className="flex items-center gap-3">
             {user.profilePhoto ? (
-              <img src={user.profilePhoto} alt={`${user.firstName} ${user.lastName}`} className="w-12 h-12 rounded-full object-cover" />
+              <img src={getPhotoUrl(user.profilePhoto)!} alt={`${user.firstName} ${user.lastName}`} className="w-12 h-12 rounded-full object-cover" />
             ) : (
               <div className="w-12 h-12 rounded-full bg-[#e8d7fe] flex items-center justify-center text-lg font-bold text-[#8b5cf6]">
                 {user.firstName[0]}{user.lastName[0]}

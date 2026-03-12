@@ -6,6 +6,8 @@ import crypto from "crypto";
 import multer from "multer";
 import path from "path";
 import fs from "fs";
+import rateLimit from "express-rate-limit";
+import { fileTypeFromFile } from "file-type";
 import { requireAuth, requireAdmin } from "./auth";
 import { storage } from "./storage";
 import { sendEmail } from "./lib/email";
@@ -51,6 +53,51 @@ function sanitizeUser(user: any) {
   return safe;
 }
 
+function sanitizeUserPublic(user: any) {
+  const {
+    password,
+    validationToken,
+    validationExpiry,
+    phone,
+    address,
+    postalCode,
+    trustedPersonName,
+    trustedPersonEmail,
+    referentEmail,
+    referentTitle,
+    referentFirstName,
+    referentLastName,
+    validatorEmail,
+    ...safe
+  } = user;
+  return safe;
+}
+
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 10,
+  message: { message: "Trop de tentatives de connexion. Réessayez dans 15 minutes." },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+const registerLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  limit: 5,
+  message: { message: "Trop d'inscriptions depuis cette adresse. Réessayez dans une heure." },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+async function validateImageMagicBytes(filePath: string): Promise<void> {
+  const type = await fileTypeFromFile(filePath);
+  const allowedMimes = ["image/jpeg", "image/png", "image/webp"];
+  if (!type || !allowedMimes.includes(type.mime)) {
+    fs.unlinkSync(filePath);
+    throw new Error("Fichier invalide : seuls les formats JPG, PNG et WebP sont acceptés.");
+  }
+}
+
 function getBaseUrl(req: any): string {
   const proto = req.headers["x-forwarded-proto"] || req.protocol || "https";
   const host = req.headers["x-forwarded-host"] || req.headers.host || "localhost:5000";
@@ -62,7 +109,7 @@ export async function registerRoutes(
   app: Express
 ): Promise<Server> {
 
-  app.post("/api/auth/register", upload.single("photo"), async (req, res) => {
+  app.post("/api/auth/register", registerLimiter, upload.single("photo"), async (req, res) => {
     try {
       const body = typeof req.body.data === "string" ? JSON.parse(req.body.data) : req.body;
       const parsed = insertUserSchema.safeParse(body);
@@ -78,6 +125,14 @@ export async function registerRoutes(
       const existing = await storage.getUserByEmail(data.email.toLowerCase().trim());
       if (existing) {
         return res.status(409).json({ message: "Cet email est déjà utilisé" });
+      }
+
+      if (req.file) {
+        try {
+          await validateImageMagicBytes(req.file.path);
+        } catch (validationErr: any) {
+          return res.status(400).json({ message: validationErr.message });
+        }
       }
 
       const hashedPassword = await bcrypt.hash(data.password, 10);
@@ -127,13 +182,20 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/auth/login", (req, res, next) => {
+  app.post("/api/auth/login", loginLimiter, (req, res, next) => {
     passport.authenticate("local", async (err: any, user: Express.User | false, info: { message: string }) => {
       if (err) {
         return res.status(500).json({ message: "Erreur interne" });
       }
       if (!user) {
         return res.status(401).json({ message: info?.message || "Identifiants incorrects" });
+      }
+      try {
+        await new Promise<void>((resolve, reject) =>
+          req.session.regenerate((sessionErr) => (sessionErr ? reject(sessionErr) : resolve()))
+        );
+      } catch {
+        return res.status(500).json({ message: "Erreur de session" });
       }
       req.logIn(user, async (loginErr) => {
         if (loginErr) {
@@ -216,6 +278,11 @@ export async function registerRoutes(
       if (!req.file) {
         return res.status(400).json({ message: "Aucun fichier envoyé" });
       }
+      try {
+        await validateImageMagicBytes(req.file.path);
+      } catch (validationErr: any) {
+        return res.status(400).json({ message: validationErr.message });
+      }
       const user = req.user!;
       if (user.profilePhoto) {
         const oldPath = path.join(process.cwd(), user.profilePhoto.replace(/^\//, ""));
@@ -251,6 +318,31 @@ export async function registerRoutes(
       console.error("[PHOTO_DELETE] Error:", err);
       res.status(500).json({ message: "Erreur lors de la suppression de la photo" });
     }
+  });
+
+  const VALID_PHOTO_FILENAME = /^[a-f0-9-]{36}\.(jpg|jpeg|png|webp)$/i;
+  const PHOTO_CONTENT_TYPES: Record<string, string> = {
+    jpg: "image/jpeg",
+    jpeg: "image/jpeg",
+    png: "image/png",
+    webp: "image/webp",
+  };
+
+  app.get("/api/photos/:filename", requireAuth, (req, res) => {
+    const { filename } = req.params;
+    if (!VALID_PHOTO_FILENAME.test(filename)) {
+      return res.status(400).json({ message: "Nom de fichier invalide" });
+    }
+    const filePath = path.join(process.cwd(), "uploads", filename);
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).json({ message: "Photo non trouvée" });
+    }
+    const ext = path.extname(filename).toLowerCase().slice(1);
+    res.setHeader("Content-Type", PHOTO_CONTENT_TYPES[ext] || "application/octet-stream");
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    res.setHeader("Cache-Control", "private, max-age=3600");
+    res.setHeader("Content-Disposition", "inline");
+    res.sendFile(filePath);
   });
 
   app.get("/api/favorites", requireAuth, async (req, res) => {
@@ -423,7 +515,7 @@ export async function registerRoutes(
         ? new Set(await storage.getFavoriteJuniorIds(user.id))
         : new Set<string>();
       const sanitized = suggestions.map((s) => ({
-        user: sanitizeUser(s.user),
+        user: sanitizeUserPublic(s.user),
         commonCategories: s.commonCategories,
         isRecommended: s.isRecommended,
         isFavorite: favoriteIds.has(s.user.id),
@@ -442,8 +534,8 @@ export async function registerRoutes(
       const relations = await storage.getRelationsByUser(req.user!.id);
       const sanitized = relations.map((r) => ({
         ...r,
-        senior: sanitizeUser(r.senior),
-        junior: sanitizeUser(r.junior),
+        senior: sanitizeUserPublic(r.senior),
+        junior: sanitizeUserPublic(r.junior),
       }));
       res.json(sanitized);
     } catch (err) {
@@ -464,8 +556,8 @@ export async function registerRoutes(
       }
       res.json({
         ...relation,
-        senior: sanitizeUser(relation.senior),
-        junior: sanitizeUser(relation.junior),
+        senior: sanitizeUserPublic(relation.senior),
+        junior: sanitizeUserPublic(relation.junior),
       });
     } catch (err) {
       console.error("[RELATION_DETAIL] Error:", err);
@@ -986,6 +1078,10 @@ export async function registerRoutes(
       const user = await storage.getUser(req.params.id);
       if (!user) return res.status(404).json({ message: "Utilisateur non trouvé" });
       if (user.role === "ADMIN") return res.status(403).json({ message: "Impossible de supprimer un administrateur" });
+      if (user.profilePhoto) {
+        const photoPath = path.join(process.cwd(), user.profilePhoto.replace(/^\//, ""));
+        if (fs.existsSync(photoPath)) fs.unlinkSync(photoPath);
+      }
       await storage.deleteUser(user.id);
       res.json({ message: "Utilisateur supprimé" });
     } catch (err) {
