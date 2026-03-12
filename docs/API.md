@@ -58,6 +58,15 @@ Supprime la photo de profil.
 - **Auth** : Oui
 - **Réponse 200** : `{ user: User }`
 
+### `GET /api/photos/:filename`
+Sert une photo de profil de manière sécurisée.
+- **Auth** : Oui
+- **Params** : `filename` — nom du fichier sécurisé (36 caractères hexadécimaux/tirets + extension : `xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx.jpg|jpeg|png|webp`)
+- **Réponse 200** : Image binaire avec `Content-Type` approprié
+- **Réponse 400** : Nom de fichier invalide (regex anti path-traversal)
+- **Réponse 404** : Photo non trouvée
+- **Notes** : Le dossier `uploads/` n'est pas servi publiquement. Côté frontend, utiliser `getPhotoUrl()` de `client/src/lib/photo-url.ts` pour convertir les chemins `/uploads/xxx` en `/api/photos/xxx`.
+
 ### `POST /api/auth/resend-validation`
 Renvoie l'email de validation pour un compte en attente.
 - **Auth** : Non

@@ -188,6 +188,16 @@ L'application est destinée à des personnes âgées, souvent peu à l'aise avec
 - `generated/prisma/` — dossier auto-généré par Prisma, ne jamais modifier manuellement
 - `drizzle.config.ts` — vestige de l'ancienne config, ne pas modifier
 
+### Photos de profil — toujours utiliser `getPhotoUrl()`
+Les photos sont stockées en base avec le chemin `/uploads/xxx.jpg`, mais le dossier `uploads/` n'est **pas** exposé publiquement. Le frontend doit utiliser `getPhotoUrl()` de `client/src/lib/photo-url.ts` pour convertir ces chemins en `/api/photos/xxx.jpg` (route authentifiée).
+
+```typescript
+import { getPhotoUrl } from "@/lib/photo-url";
+
+// Dans un composant
+<img src={getPhotoUrl(user.profilePhoto)} alt="Photo de profil" />
+```
+
 ### Toujours passer par IStorage
 Le backend ne doit jamais appeler directement le client Prisma dans `routes.ts`. Toutes les opérations base de données passent par l'interface `IStorage` dans `server/storage.ts`. Cela permet de changer la DB sous-jacente sans toucher aux routes.
 

@@ -82,7 +82,7 @@ client/src/
   components/        # Composants réutilisables
   hooks/             # Hooks React (auth, SSE, push, toast...)
   lib/               # queryClient (TanStack Query)
-uploads/             # Photos de profil uploadées (local uniquement)
+uploads/             # Photos de profil (NON servi publiquement — via /api/photos/:filename)
 docs/                # Documentation technique détaillée
 ```
 
@@ -96,6 +96,7 @@ docs/                # Documentation technique détaillée
 | [docs/DATABASE.md](docs/DATABASE.md) | Modèles Prisma, relations, enums, commandes utiles |
 | [docs/API.md](docs/API.md) | Toutes les routes API documentées |
 | [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | Déploiement sur Render pas à pas |
+| [docs/brevo-setup.md](docs/brevo-setup.md) | Configuration email Brevo |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Conventions, flux git, procédures |
 
 ---

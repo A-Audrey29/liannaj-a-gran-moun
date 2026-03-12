@@ -13,12 +13,14 @@ Navigateur
     │
     ▼
 Express (port 5000)
-    ├── /api/*         → Routes API (JSON)
-    ├── /uploads/*     → Fichiers statiques (photos profil)
-    └── /*             → Frontend React (SPA)
+    ├── /api/*              → Routes API (JSON)
+    ├── /api/photos/:filename → Photos de profil (auth requise)
+    └── /*                  → Frontend React (SPA)
             │
             └── TanStack Query → appels /api/*
 ```
+
+> **Note sécurité** : Le dossier `uploads/` n'est **pas** servi publiquement. Les photos de profil sont accessibles uniquement via `/api/photos/:filename` qui exige une session authentifiée, valide le nom de fichier (regex anti path-traversal), et renvoie les en-têtes de sécurité appropriés (`X-Content-Type-Options: nosniff`, `Cache-Control: private`).
 
 ---
 
@@ -47,8 +49,8 @@ L'authentification repose sur **Passport.js** avec la stratégie locale (email +
 
 **Flux de connexion :**
 1. `POST /api/auth/login` → Passport vérifie email/password dans la DB
-2. Si valide, une **session est créée** et stockée dans PostgreSQL (table `session`)
-3. Le navigateur reçoit un cookie de session (`connect.sid`)
+2. La session précédente est **régénérée** (`req.session.regenerate`) pour prévenir la fixation de session
+3. Le navigateur reçoit un cookie de session (`connect.sid`, `httpOnly`, `sameSite: lax`)
 4. Chaque requête authentifiée envoie ce cookie → `requireAuth` middleware valide la session
 
 **Flux d'inscription :**
@@ -60,6 +62,12 @@ L'authentification repose sur **Passport.js** avec la stratégie locale (email +
 **Middlewares d'auth :**
 - `requireAuth` — vérifie `req.isAuthenticated()`
 - `requireAdmin` — vérifie `req.user.role === "ADMIN"`
+
+**Protections :**
+- **Rate limiting** : login limité à 10 tentatives / 15 min par IP, inscription à 5 / heure
+- **Helmet** : en-têtes de sécurité HTTP (CSP stricte en production uniquement)
+- **Validation des images** : vérification des magic bytes (pas seulement l'extension) lors de l'upload
+- **Sanitization** : les données sensibles (téléphone, adresse, personnes de confiance) sont retirées des réponses inter-utilisateurs via `sanitizeUserPublic`
 
 ---
 
