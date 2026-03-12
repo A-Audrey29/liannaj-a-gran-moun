@@ -205,10 +205,12 @@ model Report {
   target     User?     @relation("Target", fields: [targetId], references: [id])
   relation   Relation? @relation(fields: [relationId], references: [id])
 
-  reason     String
-  message    String    @default("")
-  status     String    @default("OPEN")
-  createdAt  DateTime  @default(now())
+  reason      String
+  message     String    @default("")
+  status      String    @default("OPEN")
+  handledNote String?
+  handledAt   DateTime?
+  createdAt   DateTime  @default(now())
 
   @@index([status])
   @@index([reporterId])

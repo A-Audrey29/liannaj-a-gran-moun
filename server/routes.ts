@@ -1530,8 +1530,12 @@ export async function registerRoutes(
   });
 
   app.patch("/api/admin/reports/:id/handle", requireAdmin, async (req, res) => {
+    const { handledNote } = req.body;
+    if (!handledNote || typeof handledNote !== "string" || handledNote.trim().length === 0) {
+      return res.status(400).json({ message: "Un commentaire de traitement est obligatoire." });
+    }
     try {
-      const report = await storage.updateReportStatus(req.params.id, "HANDLED");
+      const report = await storage.updateReportStatus(req.params.id, "HANDLED", handledNote.trim());
       res.json(report);
     } catch (err) {
       console.error("[ADMIN_REPORT_HANDLE] Error:", err);

@@ -71,7 +71,7 @@ export interface IStorage {
   createReport(data: { reporterId: string; targetId?: string; relationId?: string; reason: string; message: string }): Promise<Report>;
   getReports(): Promise<(Report & { reporter: User; target: User | null })[]>;
   getOpenReportCount(): Promise<number>;
-  updateReportStatus(id: string, status: string): Promise<Report>;
+  updateReportStatus(id: string, status: string, handledNote: string): Promise<Report>;
 
   getAdmins(): Promise<User[]>;
 }
@@ -634,8 +634,11 @@ class DatabaseStorage implements IStorage {
     return prisma.report.count({ where: { status: "OPEN" } });
   }
 
-  async updateReportStatus(id: string, status: string): Promise<Report> {
-    return prisma.report.update({ where: { id }, data: { status } });
+  async updateReportStatus(id: string, status: string, handledNote: string): Promise<Report> {
+    return prisma.report.update({
+      where: { id },
+      data: { status, handledNote, handledAt: new Date() },
+    });
   }
 
   async getAdmins(): Promise<User[]> {

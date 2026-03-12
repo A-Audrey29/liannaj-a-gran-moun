@@ -407,9 +407,11 @@ Nombre de signalements ouverts (pour le badge dans l'onglet admin).
 - **Réponse 200** : `{ count: number }`
 
 ### `PATCH /api/admin/reports/:id/handle`
-Marque un signalement comme traité (`status: "HANDLED"`).
+Marque un signalement comme traité (`status: "HANDLED"`). Enregistre le commentaire de l'admin et la date de traitement.
 - **Auth** : Admin
-- **Réponse 200** : `Report`
+- **Body** : `{ "handledNote": "string (obligatoire, min 5 chars)" }`
+- **Réponse 200** : `Report` (avec `handledNote`, `handledAt`, `status: "HANDLED"`)
+- **Réponse 400** : si `handledNote` absent ou vide
 
 **Statuts Report** : `OPEN` (défaut) | `HANDLED`  
 **Raisons** : `PERSON` (problème avec une personne) | `QUESTION` (question sur l'app) | `OTHER` (autre)

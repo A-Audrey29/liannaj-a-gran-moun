@@ -17,8 +17,10 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -1583,6 +1585,8 @@ type ReportWithUsers = {
   reason: string;
   message: string;
   status: string;
+  handledNote: string | null;
+  handledAt: string | null;
   createdAt: string;
   reporter: SafeUser;
   target: SafeUser | null;
@@ -1595,6 +1599,9 @@ const REPORT_REASON_LABELS: Record<string, string> = {
 };
 
 function SignalementsTab() {
+  const [dialogReport, setDialogReport] = useState<ReportWithUsers | null>(null);
+  const [note, setNote] = useState("");
+
   const { data: reports = [], isLoading, refetch } = useQuery<ReportWithUsers[]>({
     queryKey: ["/api/admin/reports"],
     staleTime: 0,
@@ -1603,12 +1610,25 @@ function SignalementsTab() {
   });
 
   const handleMut = useMutation({
-    mutationFn: (id: string) => apiRequest("PATCH", `/api/admin/reports/${id}/handle`),
+    mutationFn: ({ id, handledNote }: { id: string; handledNote: string }) =>
+      apiRequest("PATCH", `/api/admin/reports/${id}/handle`, { handledNote }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/reports"] });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/reports/count"] });
+      setDialogReport(null);
+      setNote("");
     },
   });
+
+  function openDialog(r: ReportWithUsers) {
+    setNote("");
+    setDialogReport(r);
+  }
+
+  function confirmHandle() {
+    if (!dialogReport || note.trim().length < 5) return;
+    handleMut.mutate({ id: dialogReport.id, handledNote: note.trim() });
+  }
 
   if (isLoading) return <div className="flex justify-center py-12"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>;
 
@@ -1617,67 +1637,141 @@ function SignalementsTab() {
   const sorted = [...open, ...handled];
 
   return (
-    <div className="space-y-5">
-      <div className="flex items-center justify-between">
-        <h2 className="text-xl font-bold">Signalements</h2>
-        <div className="flex items-center gap-2">
-          <Badge variant="outline" data-testid="text-open-reports-count">
-            {open.length} ouvert{open.length !== 1 ? "s" : ""}
-          </Badge>
-          <Button variant="ghost" size="sm" onClick={() => refetch()} data-testid="button-refresh-reports">
-            <RefreshCw className="w-4 h-4" />
-          </Button>
+    <>
+      <div className="space-y-5">
+        <div className="flex items-center justify-between">
+          <h2 className="text-xl font-bold">Signalements</h2>
+          <div className="flex items-center gap-2">
+            <Badge variant="outline" data-testid="text-open-reports-count">
+              {open.length} ouvert{open.length !== 1 ? "s" : ""}
+            </Badge>
+            <Button variant="ghost" size="sm" onClick={() => refetch()} data-testid="button-refresh-reports">
+              <RefreshCw className="w-4 h-4" />
+            </Button>
+          </div>
         </div>
+
+        {sorted.length === 0 ? (
+          <p className="text-muted-foreground text-center py-12">Aucun signalement pour le moment.</p>
+        ) : (
+          <div className="space-y-4">
+            {sorted.map((r) => (
+              <Card key={r.id} className={r.status !== "OPEN" ? "opacity-60" : ""} data-testid={`card-report-${r.id}`}>
+                <CardContent className="pt-5 space-y-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="space-y-1.5 flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <Badge variant={r.status === "OPEN" ? "destructive" : "secondary"}>
+                          {r.status === "OPEN" ? "Ouvert" : "Traité"}
+                        </Badge>
+                        <span className="text-sm font-medium">{REPORT_REASON_LABELS[r.reason] ?? r.reason}</span>
+                      </div>
+                      <p className="text-sm text-muted-foreground">
+                        De : <strong>{r.reporter.firstName} {r.reporter.lastName}</strong>
+                        {r.target && <> — Concernant : <strong>{r.target.firstName} {r.target.lastName}</strong></>}
+                      </p>
+                      {r.message && (
+                        <p className="text-sm bg-gray-50 rounded-lg p-3 italic">"{r.message}"</p>
+                      )}
+                      <p className="text-xs text-muted-foreground">
+                        Reçu le {new Date(r.createdAt).toLocaleDateString("fr-FR", {
+                          day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit",
+                        })}
+                      </p>
+                      {r.status !== "OPEN" && r.handledNote && (
+                        <div className="mt-2 rounded-lg border border-green-200 bg-green-50 p-3 space-y-1" data-testid={`text-handled-note-${r.id}`}>
+                          <p className="text-xs font-semibold text-green-700 uppercase tracking-wide">Action réalisée</p>
+                          <p className="text-sm text-green-900">{r.handledNote}</p>
+                          {r.handledAt && (
+                            <p className="text-xs text-green-600">
+                              Traité le {new Date(r.handledAt).toLocaleDateString("fr-FR", {
+                                day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit",
+                              })}
+                            </p>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                    {r.status === "OPEN" && (
+                      <Button
+                        data-testid={`button-handle-report-${r.id}`}
+                        size="sm"
+                        variant="outline"
+                        className="flex-shrink-0"
+                        onClick={() => openDialog(r)}
+                      >
+                        <CheckCircle className="w-4 h-4 mr-1" />
+                        Traiter
+                      </Button>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        )}
       </div>
 
-      {sorted.length === 0 ? (
-        <p className="text-muted-foreground text-center py-12">Aucun signalement pour le moment.</p>
-      ) : (
-        <div className="space-y-4">
-          {sorted.map((r) => (
-            <Card key={r.id} className={r.status !== "OPEN" ? "opacity-60" : ""} data-testid={`card-report-${r.id}`}>
-              <CardContent className="pt-5 space-y-3">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="space-y-1.5 flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <Badge variant={r.status === "OPEN" ? "destructive" : "secondary"}>
-                        {r.status === "OPEN" ? "Ouvert" : "Traité"}
-                      </Badge>
-                      <span className="text-sm font-medium">{REPORT_REASON_LABELS[r.reason] ?? r.reason}</span>
-                    </div>
-                    <p className="text-sm text-muted-foreground">
-                      De : <strong>{r.reporter.firstName} {r.reporter.lastName}</strong>
-                      {r.target && <> — Concernant : <strong>{r.target.firstName} {r.target.lastName}</strong></>}
-                    </p>
-                    {r.message && (
-                      <p className="text-sm bg-gray-50 rounded-lg p-3">{r.message}</p>
-                    )}
-                    <p className="text-xs text-muted-foreground">
-                      {new Date(r.createdAt).toLocaleDateString("fr-FR", {
-                        day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit",
-                      })}
-                    </p>
-                  </div>
-                  {r.status === "OPEN" && (
-                    <Button
-                      data-testid={`button-handle-report-${r.id}`}
-                      size="sm"
-                      variant="outline"
-                      className="flex-shrink-0"
-                      onClick={() => handleMut.mutate(r.id)}
-                      disabled={handleMut.isPending}
-                    >
-                      <CheckCircle className="w-4 h-4 mr-1" />
-                      Traiter
-                    </Button>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      )}
-    </div>
+      <Dialog open={!!dialogReport} onOpenChange={(v) => { if (!v) { setDialogReport(null); setNote(""); } }}>
+        <DialogContent className="max-w-lg" data-testid="dialog-handle-report">
+          <DialogHeader>
+            <DialogTitle>Traiter ce signalement</DialogTitle>
+            <DialogDescription>
+              Décrivez l'action que vous avez réalisée pour résoudre ce signalement. Ce commentaire sera conservé dans l'historique.
+            </DialogDescription>
+          </DialogHeader>
+
+          {dialogReport && (
+            <div className="rounded-lg border bg-gray-50 p-3 text-sm space-y-1">
+              <p><span className="font-semibold">Type :</span> {REPORT_REASON_LABELS[dialogReport.reason] ?? dialogReport.reason}</p>
+              <p><span className="font-semibold">De :</span> {dialogReport.reporter.firstName} {dialogReport.reporter.lastName}</p>
+              {dialogReport.target && (
+                <p><span className="font-semibold">Concernant :</span> {dialogReport.target.firstName} {dialogReport.target.lastName}</p>
+              )}
+              {dialogReport.message && (
+                <p className="italic text-muted-foreground">"{dialogReport.message}"</p>
+              )}
+            </div>
+          )}
+
+          <div className="space-y-2">
+            <Label htmlFor="handled-note" className="font-semibold">
+              Action réalisée <span className="text-destructive">*</span>
+            </Label>
+            <Textarea
+              id="handled-note"
+              data-testid="input-handled-note"
+              placeholder="Ex : J'ai contacté l'utilisateur par téléphone, la situation a été clarifiée. Le profil a été suspendu en attente de vérification."
+              rows={4}
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              className="resize-none"
+            />
+            {note.length > 0 && note.trim().length < 5 && (
+              <p className="text-xs text-destructive">Veuillez saisir au moins 5 caractères.</p>
+            )}
+          </div>
+
+          <DialogFooter className="gap-2">
+            <Button
+              variant="outline"
+              onClick={() => { setDialogReport(null); setNote(""); }}
+              data-testid="button-cancel-handle"
+            >
+              Annuler
+            </Button>
+            <Button
+              onClick={confirmHandle}
+              disabled={note.trim().length < 5 || handleMut.isPending}
+              data-testid="button-confirm-handle"
+            >
+              {handleMut.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <CheckCircle className="w-4 h-4 mr-1" />}
+              Confirmer le traitement
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
 

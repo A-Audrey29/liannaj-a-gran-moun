@@ -121,7 +121,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             </div>
           </div>
           <div className="mt-8 pt-4 border-t text-center text-xs text-muted-foreground">
-            Selfie Me 2026
+            SELFIE ME 2026
           </div>
         </div>
       </footer>
