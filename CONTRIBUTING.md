@@ -280,6 +280,85 @@ import MaPage from "@/pages/ma-page";
 
 ---
 
+## Où modifier les textes
+
+Chaque page ou onglet correspond à une fonction précise dans un fichier. Voici la carte complète.
+
+### Pages publiques (avant connexion)
+
+| Ce que l'utilisateur voit | Fichier | Ligne de départ |
+|---|---|---|
+| Page d'accueil (hero, boutons) | `client/src/pages/landing.tsx` | `function Landing` l.9 |
+| Connexion | `client/src/pages/login.tsx` | `function Login` |
+| Inscription (formulaire complet) | `client/src/pages/register.tsx` | `function Register` |
+| Attente de validation | `client/src/pages/registration-pending.tsx` | `function RegistrationPending` |
+| Succès validation email | `client/src/pages/validation-success.tsx` | `function ValidationSuccess` |
+| Erreur validation email | `client/src/pages/validation-error.tsx` | `function ValidationError` |
+| Page 404 | `client/src/pages/not-found.tsx` | `function NotFound` |
+
+### Navigation et en-tête
+
+| Ce que l'utilisateur voit | Fichier |
+|---|---|
+| Nom de l'app, liens du menu, bouton déconnexion | `client/src/components/app-layout.tsx` |
+
+### Espace utilisateur — onglets de `home.tsx`
+
+Tout l'espace connecté (Senior/Jeune) est dans **un seul fichier** : `client/src/pages/home.tsx`.  
+Chercher la fonction correspondant à l'onglet :
+
+| Onglet affiché | Fonction dans `home.tsx` | Ligne |
+|---|---|---|
+| Tableau de bord | `function DashboardTab` | l.202 |
+| Mes rencontres | `function RencontresTab` | l.310 |
+| Messages | `client/src/components/messages-tab.tsx` | — |
+| Trouver un profil | `function DemandesTab` | l.459 |
+| Profil (affichage + édition) | `function ProfilTab` | l.952 |
+| Aide / Signaler un problème | `function AideTab` | l.1370 |
+| Noms des onglets eux-mêmes | Constante `ALL_TABS` | l.35 |
+
+### Espace admin — onglets de `admin.tsx`
+
+Tout le panneau admin est dans **un seul fichier** : `client/src/pages/admin.tsx`.
+
+| Onglet affiché | Fonction dans `admin.tsx` | Ligne |
+|---|---|---|
+| Utilisateurs | `function UsersTab` | l.225 |
+| Relations | `function RelationsTab` | l.458 |
+| Cadrage (1re rencontre) | `function CadrageTab` | l.612 |
+| Rencontres | `function RencontresTab` | l.838 |
+| Messagerie | `client/src/components/admin-messages-tab.tsx` | — |
+| Paiements | `function PaiementsTab` | l.1176 |
+| Signalements | `function SignalementsTab` | l.1596 |
+| Notifications | `function NotificationsAdminTab` | l.1058 |
+| Mon compte | `function MonCompteTab` | l.1340 |
+| Créer un admin | `function CreerAdminTab` | l.1490 |
+| Noms des onglets eux-mêmes | Constante `ADMIN_TABS` | l.77 |
+
+### Autres pages connectées
+
+| Ce que l'utilisateur voit | Fichier |
+|---|---|
+| Fiche détail d'une relation | `client/src/pages/relation-detail.tsx` |
+| Liste des notifications | `client/src/pages/notifications.tsx` |
+
+### Emails transactionnels
+
+Tous les emails envoyés par Brevo sont dans **un seul fichier** : `server/lib/email-templates.ts`.
+
+| Email | Fonction | Ligne |
+|---|---|---|
+| Validation du compte (lien token) | `getValidationEmailHtml` | l.1 |
+| Demande de mise en relation acceptée | `getRelationAcceptedEmailHtml` | l.116 |
+| Intervention proposée | `getInterventionProposedEmailHtml` | l.141 |
+| Intervention confirmée | `getInterventionConfirmedEmailHtml` | l.181 |
+| Rappel de feedback | `getFeedbackReminderEmailHtml` | l.206 |
+| Nouveau compte admin créé | `getNewAdminNotificationEmailHtml` | l.234 |
+
+> **Note** : les numéros de ligne peuvent légèrement bouger au fil des commits. Utiliser la recherche (`Ctrl+F` ou `grep`) sur le nom de la fonction si besoin.
+
+---
+
 ## Besoin d'aide ?
 
 - **Architecture générale** : `docs/ARCHITECTURE.md`
