@@ -25,6 +25,13 @@ app.use(
 
 app.use(express.urlencoded({ extended: false }));
 
+// En-têtes de sécurité HTTP via Helmet.
+// Trois directives sont limitées à la production (NODE_ENV === "production") :
+//   - contentSecurityPolicy : désactivée en dev car Vite hot-reload injecte des scripts inline
+//   - hsts : inutile en dev (pas de HTTPS local)
+//   - xFrameOptions : désactivée en dev car tout IDE/prévisualisation locale
+//     (Replit, VS Code Live Preview, etc.) affiche l'app dans un iframe.
+//     En production (Render), l'app n'est jamais dans un iframe → DENY protège du clickjacking.
 app.use(
   helmet({
     contentSecurityPolicy: process.env.NODE_ENV === "production"

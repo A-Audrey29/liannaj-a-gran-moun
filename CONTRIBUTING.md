@@ -188,6 +188,20 @@ L'application est destinée à des personnes âgées, souvent peu à l'aise avec
 - `generated/prisma/` — dossier auto-généré par Prisma, ne jamais modifier manuellement
 - `drizzle.config.ts` — vestige de l'ancienne config, ne pas modifier
 
+### En-têtes de sécurité Helmet — comportement dev vs prod
+
+Trois en-têtes HTTP sont **désactivés en développement** (`NODE_ENV !== "production"`) et actifs uniquement en production (Render) :
+
+| En-tête | Dev (Replit, VS Code, local…) | Production (Render) |
+|---|---|---|
+| `Content-Security-Policy` | Désactivé (Vite hot-reload incompatible) | Activé, strict |
+| `Strict-Transport-Security` | Désactivé (pas de HTTPS local) | Activé |
+| `X-Frame-Options` | Désactivé (les IDE affichent l'app dans un iframe) | `DENY` |
+
+**Migration hors Replit** : aucun impact. Que vous développiez sous VS Code, WebStorm ou autre, `NODE_ENV` n'est jamais `"production"` en local — le comportement est identique à Replit.
+
+Voir `server/index.ts:31-63` pour le code commenté.
+
 ### Photos de profil — toujours utiliser `getPhotoUrl()`
 Les photos sont stockées en base avec le chemin `/uploads/xxx.jpg`, mais le dossier `uploads/` n'est **pas** exposé publiquement. Le frontend doit utiliser `getPhotoUrl()` de `client/src/lib/photo-url.ts` pour convertir ces chemins en `/api/photos/xxx.jpg` (route authentifiée).
 

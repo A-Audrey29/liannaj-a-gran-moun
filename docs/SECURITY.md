@@ -32,7 +32,7 @@ Le middleware Helmet v8.1.0 (`server/index.ts:2` import, `server/index.ts:28` us
 | `Content-Security-Policy` | Production : `default-src 'self'`, `script-src 'self'`, `style-src 'self' 'unsafe-inline'`, `img-src 'self' data:`, `connect-src 'self'`, `object-src 'none'`, `frame-src 'none'`. Désactivée en dev (Vite hot-reload) | `index.ts:30-43` |
 | `Strict-Transport-Security` | Production uniquement : `max-age=31536000`, `includeSubDomains` | `index.ts:44-46` |
 | `X-Content-Type-Options` | `nosniff` — toujours actif | `index.ts:48` |
-| `X-Frame-Options` | Production : `DENY` — empêche le clickjacking. Désactivé en dev (iframe Replit) | `index.ts:52-54` |
+| `X-Frame-Options` | Production : `DENY` — empêche le clickjacking. Désactivé en dev (tout IDE affiche l'app dans un iframe : Replit, VS Code Live Preview, etc.) | `index.ts:59-61` |
 | `Referrer-Policy` | `no-referrer` — toujours actif | `index.ts:47` |
 
 ---
@@ -369,6 +369,7 @@ Le champ `password` (hash bcrypt) n'apparaît dans **aucune** réponse API.
 | CSP désactivée en dev | Vite hot-reload injecte scripts inline | `index.ts:30-43` |
 | Password min 6 chars | UX seniors. bcrypt 10 rounds compense | `schema.ts:122`, `routes.ts:138` |
 | Rate limiting IP only | Volume faible attendu | `routes.ts:76-90` |
+| `xFrameOptions` désactivé en dev | Tout IDE affiche l'app dans un iframe (Replit, VS Code Live Preview…). En prod : `DENY` actif. Aucun impact pour un dev local hors Replit | `index.ts:59-61` |
 | Photos auth-only | Matching affiche photos avant relation | `routes.ts:331` |
 | `createTableIfMissing` | Simplifie déploiement | `auth.ts:77` |
 | Pas de CORS | Même domaine frontend/backend | `index.ts:108-113` |
