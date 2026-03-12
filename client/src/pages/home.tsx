@@ -17,7 +17,7 @@ import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import StatusBadge from "@/components/status-badge";
-import { Calendar, MessageCircle, Mail, User, LayoutGrid, ChevronRight, ChevronLeft, Plus, Check, X, Pencil, Heart, Camera, Trash2, AlertTriangle, Star, Users, ClipboardCheck, Eye, EyeOff, List, GalleryHorizontalEnd, MapPin, Lock } from "lucide-react";
+import { Calendar, MessageCircle, Mail, User, LayoutGrid, ChevronRight, ChevronLeft, Plus, Check, X, Pencil, Heart, Camera, Trash2, AlertTriangle, Star, Users, ClipboardCheck, Eye, EyeOff, List, GalleryHorizontalEnd, MapPin, Lock, HelpCircle, Loader2 } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 import { updateProfileSchema, type UpdateProfileInput, changePasswordSchema, type ChangePasswordInput } from "@shared/schema";
 import type { Relation, User as UserType, Intervention } from "@shared/schema";
@@ -35,6 +35,7 @@ const ALL_TABS = [
   { id: "messages", label: "Messages", icon: Mail },
   { id: "demandes", label: "Trouver un profil", icon: MessageCircle },
   { id: "profil", label: "Profil", icon: User },
+  { id: "aide", label: "Aide", icon: HelpCircle },
 ] as const;
 
 type InterventionWithPartner = Intervention & { partnerName: string; relationId: string };
@@ -77,7 +78,7 @@ export default function Home() {
   const [openRelationId, setOpenRelationId] = useState<string | null>(null);
   const isNotAdmin = user?.role !== "ADMIN";
   const tabs = user?.role === "ADMIN"
-    ? ALL_TABS.filter((t) => t.id !== "profil" && t.id !== "messages")
+    ? ALL_TABS.filter((t) => t.id !== "profil" && t.id !== "messages" && t.id !== "aide")
     : user?.role === "JUNIOR"
     ? ALL_TABS.filter((t) => t.id !== "demandes")
     : ALL_TABS;
@@ -170,6 +171,7 @@ export default function Home() {
       {activeTab === "messages" && <MessagesTab user={user} openRelationId={openRelationId} />}
       {activeTab === "demandes" && <DemandesTab relations={relations} isLoading={relLoading} user={user} />}
       {activeTab === "profil" && <ProfilTab user={user} />}
+      {activeTab === "aide" && <AideTab user={user} relations={relations} />}
     </div>
   );
 }
@@ -1354,5 +1356,150 @@ function EditProfileDialog({ user, open, onOpenChange }: { user: AuthUser; open:
         </Form>
       </DialogContent>
     </Dialog>
+  );
+}
+
+// ==================== AIDE TAB ====================
+
+const REPORT_REASONS = [
+  { value: "PERSON", label: "Problème avec une personne" },
+  { value: "QUESTION", label: "J'ai une question sur l'application" },
+  { value: "OTHER", label: "Autre chose" },
+] as const;
+
+function AideTab({ user, relations }: { user: AuthUser | null; relations?: RelationWithUsers[] }) {
+  const { toast } = useToast();
+  const [reason, setReason] = useState<"PERSON" | "QUESTION" | "OTHER" | "">("");
+  const [relationId, setRelationId] = useState<string>("");
+  const [message, setMessage] = useState<string>("");
+  const [sent, setSent] = useState(false);
+
+  const activeRelations = (relations || []).filter(
+    (r) => r.status === "ACTIVE" || r.status === "PENDING_FIRST_MEETING"
+  );
+
+  const mutation = useMutation({
+    mutationFn: () =>
+      apiRequest("POST", "/api/reports", {
+        reason,
+        relationId: reason === "PERSON" && relationId ? relationId : undefined,
+        message: message || undefined,
+      }),
+    onSuccess: () => setSent(true),
+    onError: () =>
+      toast({ title: "Erreur", description: "Impossible d'envoyer le signalement.", variant: "destructive" }),
+  });
+
+  const canSubmit = reason !== "" && (reason !== "PERSON" || relationId !== "");
+
+  if (sent) {
+    return (
+      <div className="max-w-lg mx-auto py-16 text-center space-y-5">
+        <div className="w-16 h-16 rounded-full bg-green-100 flex items-center justify-center mx-auto">
+          <Check className="w-8 h-8 text-green-600" />
+        </div>
+        <h2 className="text-2xl font-semibold">Message envoyé</h2>
+        <p className="text-muted-foreground text-lg">Nous avons bien reçu votre message.</p>
+        <Button
+          variant="outline"
+          className="mt-2 rounded-full"
+          data-testid="button-send-another"
+          onClick={() => { setSent(false); setReason(""); setRelationId(""); setMessage(""); }}
+        >
+          Envoyer un autre message
+        </Button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="max-w-lg mx-auto space-y-5">
+      <h2 className="text-2xl font-bold">🚨 Signaler un problème</h2>
+
+      <Card>
+        <CardContent className="pt-6 space-y-3">
+          <p className="text-lg font-semibold mb-2">Quel est votre problème ?</p>
+          {REPORT_REASONS.map((opt) => (
+            <button
+              key={opt.value}
+              data-testid={`radio-reason-${opt.value.toLowerCase()}`}
+              onClick={() => { setReason(opt.value); setRelationId(""); }}
+              className={`w-full flex items-center gap-3 px-4 py-4 rounded-xl border-2 text-left text-base transition-colors ${
+                reason === opt.value
+                  ? "border-[#dc4256] bg-red-50"
+                  : "border-gray-200 hover:border-gray-300 bg-white"
+              }`}
+            >
+              <span className={`w-5 h-5 rounded-full border-2 flex-shrink-0 flex items-center justify-center ${
+                reason === opt.value ? "border-[#dc4256]" : "border-gray-400"
+              }`}>
+                {reason === opt.value && <span className="w-2.5 h-2.5 rounded-full bg-[#dc4256]" />}
+              </span>
+              {opt.label}
+            </button>
+          ))}
+        </CardContent>
+      </Card>
+
+      {reason === "PERSON" && (
+        <Card>
+          <CardContent className="pt-6 space-y-3">
+            <p className="text-lg font-semibold mb-2">Avec qui ?</p>
+            {activeRelations.length === 0 ? (
+              <p className="text-muted-foreground text-base">Vous n'avez pas de relation active pour le moment.</p>
+            ) : (
+              activeRelations.map((r) => {
+                const partner = r.seniorId === user?.id ? r.junior : r.senior;
+                return (
+                  <button
+                    key={r.id}
+                    data-testid={`radio-relation-${r.id}`}
+                    onClick={() => setRelationId(r.id)}
+                    className={`w-full flex items-center gap-3 px-4 py-4 rounded-xl border-2 text-left text-base transition-colors ${
+                      relationId === r.id
+                        ? "border-[#dc4256] bg-red-50"
+                        : "border-gray-200 hover:border-gray-300 bg-white"
+                    }`}
+                  >
+                    <span className={`w-5 h-5 rounded-full border-2 flex-shrink-0 flex items-center justify-center ${
+                      relationId === r.id ? "border-[#dc4256]" : "border-gray-400"
+                    }`}>
+                      {relationId === r.id && <span className="w-2.5 h-2.5 rounded-full bg-[#dc4256]" />}
+                    </span>
+                    {partner.firstName} {partner.lastName} — {partner.role === "JUNIOR" ? "Jeune" : "Senior"}
+                  </button>
+                );
+              })
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      <Card>
+        <CardContent className="pt-6">
+          <p className="text-lg font-semibold mb-2">
+            Précisions <span className="text-muted-foreground font-normal text-base">(facultatif)</span>
+          </p>
+          <Textarea
+            data-testid="input-report-message"
+            placeholder="Décrivez ce qui s'est passé..."
+            value={message}
+            onChange={(e) => setMessage(e.target.value)}
+            className="min-h-[120px] text-base"
+            maxLength={2000}
+          />
+        </CardContent>
+      </Card>
+
+      <Button
+        data-testid="button-submit-report"
+        className="w-full h-14 text-lg bg-[#dc4256] hover:bg-[#c73848]"
+        onClick={() => mutation.mutate()}
+        disabled={!canSubmit || mutation.isPending}
+      >
+        {mutation.isPending && <Loader2 className="w-5 h-5 animate-spin mr-2" />}
+        Envoyer
+      </Button>
+    </div>
   );
 }

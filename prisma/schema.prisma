@@ -198,18 +198,20 @@ model PaymentRecord {
 model Report {
   id         String    @id @default(cuid())
   reporterId String
-  targetId   String
+  targetId   String?
   relationId String?
 
   reporter   User      @relation("Reporter", fields: [reporterId], references: [id])
-  target     User      @relation("Target", fields: [targetId], references: [id])
+  target     User?     @relation("Target", fields: [targetId], references: [id])
   relation   Relation? @relation(fields: [relationId], references: [id])
 
-  message    String
+  reason     String
+  message    String    @default("")
   status     String    @default("OPEN")
   createdAt  DateTime  @default(now())
 
   @@index([status])
+  @@index([reporterId])
 }
 
 model Notification {

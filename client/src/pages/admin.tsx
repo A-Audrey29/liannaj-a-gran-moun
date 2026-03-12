@@ -6,6 +6,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useLocation } from "wouter";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
@@ -59,6 +60,7 @@ import {
   ChevronsUpDown,
   Download,
   MessageSquare,
+  Flag,
 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import type { User, Relation, Intervention, PaymentRecord, Notification } from "@shared/schema";
@@ -77,6 +79,7 @@ const ADMIN_TABS = [
   { id: "cadrage", label: "Cadrage", icon: Shield },
   { id: "messagerie", label: "Messagerie", icon: MessageSquare },
   { id: "paiements", label: "Paiements", icon: CreditCard },
+  { id: "signalements", label: "Signalements", icon: Flag },
   { id: "notifications", label: "Notifications", icon: Bell },
   { id: "mon-compte", label: "Mon compte", icon: UserCog },
   { id: "creer-admin", label: "Créer un admin", icon: UserPlus },
@@ -1572,6 +1575,103 @@ function CreerAdminTab() {
   );
 }
 
+// ==================== SIGNALEMENTS TAB ====================
+
+type ReportWithUsers = {
+  id: string;
+  reason: string;
+  message: string;
+  status: string;
+  createdAt: string;
+  reporter: SafeUser;
+  target: SafeUser | null;
+};
+
+const REPORT_REASON_LABELS: Record<string, string> = {
+  PERSON: "Problème avec une personne",
+  QUESTION: "Question sur l'application",
+  OTHER: "Autre chose",
+};
+
+function SignalementsTab() {
+  const { data: reports = [], isLoading } = useQuery<ReportWithUsers[]>({
+    queryKey: ["/api/admin/reports"],
+  });
+
+  const handleMut = useMutation({
+    mutationFn: (id: string) => apiRequest("PATCH", `/api/admin/reports/${id}/handle`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/reports"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/reports/count"] });
+    },
+  });
+
+  if (isLoading) return <div className="flex justify-center py-12"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>;
+
+  const open = reports.filter((r) => r.status === "OPEN");
+  const handled = reports.filter((r) => r.status !== "OPEN");
+  const sorted = [...open, ...handled];
+
+  return (
+    <div className="space-y-5">
+      <div className="flex items-center justify-between">
+        <h2 className="text-xl font-bold">Signalements</h2>
+        <Badge variant="outline" data-testid="text-open-reports-count">
+          {open.length} ouvert{open.length !== 1 ? "s" : ""}
+        </Badge>
+      </div>
+
+      {sorted.length === 0 ? (
+        <p className="text-muted-foreground text-center py-12">Aucun signalement pour le moment.</p>
+      ) : (
+        <div className="space-y-4">
+          {sorted.map((r) => (
+            <Card key={r.id} className={r.status !== "OPEN" ? "opacity-60" : ""} data-testid={`card-report-${r.id}`}>
+              <CardContent className="pt-5 space-y-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="space-y-1.5 flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <Badge variant={r.status === "OPEN" ? "destructive" : "secondary"}>
+                        {r.status === "OPEN" ? "Ouvert" : "Traité"}
+                      </Badge>
+                      <span className="text-sm font-medium">{REPORT_REASON_LABELS[r.reason] ?? r.reason}</span>
+                    </div>
+                    <p className="text-sm text-muted-foreground">
+                      De : <strong>{r.reporter.firstName} {r.reporter.lastName}</strong>
+                      {r.target && <> — Concernant : <strong>{r.target.firstName} {r.target.lastName}</strong></>}
+                    </p>
+                    {r.message && (
+                      <p className="text-sm bg-gray-50 rounded-lg p-3">{r.message}</p>
+                    )}
+                    <p className="text-xs text-muted-foreground">
+                      {new Date(r.createdAt).toLocaleDateString("fr-FR", {
+                        day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit",
+                      })}
+                    </p>
+                  </div>
+                  {r.status === "OPEN" && (
+                    <Button
+                      data-testid={`button-handle-report-${r.id}`}
+                      size="sm"
+                      variant="outline"
+                      className="flex-shrink-0"
+                      onClick={() => handleMut.mutate(r.id)}
+                      disabled={handleMut.isPending}
+                    >
+                      <CheckCircle className="w-4 h-4 mr-1" />
+                      Traiter
+                    </Button>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ==================== MAIN ADMIN PAGE ====================
 
 export default function Admin() {
@@ -1581,11 +1681,13 @@ export default function Admin() {
     queryKey: ["/api/admin/relations/pending-meeting"],
   });
   const { data: users = [] } = useQuery<SafeUser[]>({ queryKey: ["/api/admin/users"] });
+  const { data: reportCount } = useQuery<{ count: number }>({ queryKey: ["/api/admin/reports/count"] });
   const pendingUsers = users.filter((u) => u.status === "PENDING_VALIDATION").length;
 
   function getTabCount(tabId: string): number {
     if (tabId === "cadrage") return pendingMeetings.length;
     if (tabId === "utilisateurs") return pendingUsers;
+    if (tabId === "signalements") return reportCount?.count ?? 0;
     return 0;
   }
 
@@ -1625,6 +1727,7 @@ export default function Admin() {
       {activeTab === "cadrage" && <CadrageTab />}
       {activeTab === "messagerie" && <MessagerieAdminTab />}
       {activeTab === "paiements" && <PaiementsTab />}
+      {activeTab === "signalements" && <SignalementsTab />}
       {activeTab === "notifications" && <NotificationsAdminTab />}
       {activeTab === "mon-compte" && <MonCompteTab />}
       {activeTab === "creer-admin" && <CreerAdminTab />}

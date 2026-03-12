@@ -1,5 +1,5 @@
 import { prisma } from "./prisma";
-import type { User, Category, UserCategory, Relation, Intervention, AdminRecommendation, Notification, PaymentRecord, Favorite, Conversation, Message, PushSubscription, Prisma } from "../generated/prisma/client.ts";
+import type { User, Category, UserCategory, Relation, Intervention, AdminRecommendation, Notification, PaymentRecord, Favorite, Conversation, Message, PushSubscription, Report, Prisma } from "../generated/prisma/client.ts";
 
 export interface IStorage {
   getUser(id: string): Promise<User | null>;
@@ -67,6 +67,11 @@ export interface IStorage {
   createPushSubscription(userId: string, endpoint: string, p256dh: string, auth: string): Promise<PushSubscription>;
   getPushSubscriptions(userId: string): Promise<PushSubscription[]>;
   deletePushSubscription(endpoint: string): Promise<void>;
+
+  createReport(data: { reporterId: string; targetId?: string; relationId?: string; reason: string; message: string }): Promise<Report>;
+  getReports(): Promise<(Report & { reporter: User; target: User | null })[]>;
+  getOpenReportCount(): Promise<number>;
+  updateReportStatus(id: string, status: string): Promise<Report>;
 }
 
 class DatabaseStorage implements IStorage {
@@ -610,6 +615,25 @@ class DatabaseStorage implements IStorage {
 
   async deletePushSubscription(endpoint: string): Promise<void> {
     await prisma.pushSubscription.deleteMany({ where: { endpoint } });
+  }
+
+  async createReport(data: { reporterId: string; targetId?: string; relationId?: string; reason: string; message: string }): Promise<Report> {
+    return prisma.report.create({ data });
+  }
+
+  async getReports(): Promise<(Report & { reporter: User; target: User | null })[]> {
+    return prisma.report.findMany({
+      include: { reporter: true, target: true },
+      orderBy: { createdAt: "desc" },
+    }) as any;
+  }
+
+  async getOpenReportCount(): Promise<number> {
+    return prisma.report.count({ where: { status: "OPEN" } });
+  }
+
+  async updateReportStatus(id: string, status: string): Promise<Report> {
+    return prisma.report.update({ where: { id }, data: { status } });
   }
 }
 

@@ -1,0 +1,90 @@
+# Design Final Simplifié
+
+---
+
+## Page "Signaler un problème"
+
+```
+┌──────────────────────────────────────────────────────────────────┐
+│                                                                  │
+│   🚨 Signaler un problème                                        │
+│                                                                  │
+├──────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│   Quel est votre problème ?                                      │
+│                                                                  │
+│   ┌────────────────────────────────────────────────────────┐     │
+│   │  ○ Problème avec une personne                          │     │
+│   └────────────────────────────────────────────────────────┘     │
+│   ┌────────────────────────────────────────────────────────┐     │
+│   │  ○ J'ai une question sur l'application                 │     │
+│   └────────────────────────────────────────────────────────┘     │
+│   ┌────────────────────────────────────────────────────────┐     │
+│   │  ○ Autre chose                                         │     │
+│   └────────────────────────────────────────────────────────┘     │
+│                                                                  │
+├──────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│   Avec qui ? (si problème avec une personne)                     │
+│   ┌────────────────────────────────────────────────────────┐     │
+│   │  ☐ Marie Dupont — Junior                               │     │
+│   │  ☐ Pierre Martin — Junior                              │     │
+│   └────────────────────────────────────────────────────────┘     │
+│                                                                  │
+├──────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│   Précisions (facultatif)                                        │
+│   ┌────────────────────────────────────────────────────────┐     │
+│   │  Décrivez ce qui s'est passé...                        │     │
+│   └────────────────────────────────────────────────────────┘     │
+│                                                                  │
+├──────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│   ┌────────────────────────────────────────────────────────┐     │
+│   │                    ENvoyer                              │     │
+│   └────────────────────────────────────────────────────────┘     │
+│                                                                  │
+└──────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## Modifications apportées
+
+| Avant | Après |
+|-------|-------|
+| "L'application ne marche pas" | "J'ai une question sur l'application" |
+| "Problème de sécurité ou confidentialité" | Supprimé |
+
+**"J'ai une question sur l'application"** = positif, non pessimiste, ouvert.
+
+---
+
+## Spécifications pour Replit
+
+```
+FONCTIONNALITÉ — Signaler un problème
+
+PLACEMENT :
+- 6ème onglet "Aide" dans la navigation
+
+PAGE — 3 sections :
+
+Section 1 — "Quel est votre problème ?" (radio, 1 choix)
+○ Problème avec une personne
+○ J'ai une question sur l'application
+○ Autre chose
+
+Section 2 — "Avec qui ?" (conditionnelle)
+- Affichée SEULEMENT si "Problème avec une personne" est coché
+- Liste des relations actives (1 choix max)
+
+Section 3 — "Précisions (facultatif)"
+- Zone de texte, toujours visible
+
+BOUTON :
+- "Envoyer" pleine largeur
+
+CONFIRMATION :
+- "Nous avons bien reçu votre message."
+```

@@ -221,6 +221,28 @@ export const createAdminSchema = z.object({
   lastName: z.string().min(1, "Nom requis"),
 });
 
+export type ReportReason = "PERSON" | "QUESTION" | "OTHER";
+export type ReportStatus = "OPEN" | "HANDLED";
+
+export interface Report {
+  id: string;
+  reporterId: string;
+  targetId: string | null;
+  relationId: string | null;
+  reason: ReportReason;
+  message: string;
+  status: ReportStatus;
+  createdAt: Date;
+}
+
+export const insertReportSchema = z.object({
+  reason: z.enum(["PERSON", "QUESTION", "OTHER"]),
+  relationId: z.string().optional(),
+  message: z.string().max(2000).optional(),
+});
+
+export type InsertReport = z.infer<typeof insertReportSchema>;
+
 export type LoginInput = z.infer<typeof loginSchema>;
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type InsertIntervention = z.infer<typeof insertInterventionSchema>;

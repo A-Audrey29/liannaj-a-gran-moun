@@ -18,7 +18,7 @@ import {
   getInterventionConfirmedEmailHtml,
   getFeedbackReminderEmailHtml,
 } from "./lib/email-templates";
-import { insertUserSchema, createRelationSchema, insertInterventionSchema, feedbackSchema, createPaymentSchema, changePasswordSchema, createAdminSchema } from "../shared/schema";
+import { insertUserSchema, createRelationSchema, insertInterventionSchema, feedbackSchema, createPaymentSchema, changePasswordSchema, createAdminSchema, insertReportSchema } from "../shared/schema";
 import { addSSEClient, sendSSEEvent, isUserConnected } from "./lib/sse";
 import { sendPushNotification, getVapidPublicKey } from "./lib/push";
 
@@ -1460,6 +1460,68 @@ export async function registerRoutes(
       res.json(message);
     } catch (err) {
       console.error("[ADMIN_MSG_DELETE] Error:", err);
+      res.status(500).json({ message: "Erreur" });
+    }
+  });
+
+  // ─── Signalements ──────────────────────────────────────────────────────────
+
+  app.post("/api/reports", requireAuth, async (req, res) => {
+    const parsed = insertReportSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: "Données invalides", errors: parsed.error.flatten() });
+
+    const { reason, relationId, message } = parsed.data;
+    const reporterId = req.user!.id;
+
+    let targetId: string | undefined;
+    if (reason === "PERSON" && relationId) {
+      const relation = await storage.getRelation(relationId);
+      if (!relation || (relation.seniorId !== reporterId && relation.juniorId !== reporterId)) {
+        return res.status(400).json({ message: "Relation invalide" });
+      }
+      targetId = relation.seniorId === reporterId ? relation.juniorId : relation.seniorId;
+    }
+
+    try {
+      const report = await storage.createReport({
+        reporterId,
+        targetId,
+        relationId,
+        reason,
+        message: message || "",
+      });
+      res.status(201).json(report);
+    } catch (err) {
+      console.error("[REPORT_CREATE] Error:", err);
+      res.status(500).json({ message: "Erreur lors de l'envoi du signalement" });
+    }
+  });
+
+  app.get("/api/admin/reports", requireAdmin, async (_req, res) => {
+    try {
+      const reports = await storage.getReports();
+      res.json(reports);
+    } catch (err) {
+      console.error("[ADMIN_REPORTS] Error:", err);
+      res.status(500).json({ message: "Erreur" });
+    }
+  });
+
+  app.get("/api/admin/reports/count", requireAdmin, async (_req, res) => {
+    try {
+      const count = await storage.getOpenReportCount();
+      res.json({ count });
+    } catch (err) {
+      res.status(500).json({ message: "Erreur" });
+    }
+  });
+
+  app.patch("/api/admin/reports/:id/handle", requireAdmin, async (req, res) => {
+    try {
+      const report = await storage.updateReportStatus(req.params.id, "HANDLED");
+      res.json(report);
+    } catch (err) {
+      console.error("[ADMIN_REPORT_HANDLE] Error:", err);
       res.status(500).json({ message: "Erreur" });
     }
   });

@@ -377,3 +377,39 @@ Messages d'une conversation (inclut les messages supprimés).
 Supprime un message (soft delete — le message reste en base avec `isDeleted: true`).
 - **Auth** : Admin
 - **Réponse 200** : `{ message: string }`
+
+---
+
+## Signalements
+
+### `POST /api/reports`
+Crée un signalement depuis l'onglet "Aide" (Senior ou Junior).
+- **Auth** : Oui
+- **Body** :
+  ```json
+  {
+    "reason": "PERSON" | "QUESTION" | "OTHER",
+    "relationId": "string (optionnel, si reason=PERSON)",
+    "message": "string (optionnel, max 2000 chars)"
+  }
+  ```
+- **Logique** : Si `reason=PERSON` et `relationId` fourni, le `targetId` est déduit automatiquement (l'autre participant de la relation).
+- **Réponse 201** : `Report`
+
+### `GET /api/admin/reports`
+Liste tous les signalements avec le reporter et la personne signalée.
+- **Auth** : Admin
+- **Réponse 200** : `(Report & { reporter: User; target: User | null })[]` — ordonnés du plus récent au plus ancien, OPEN en premier.
+
+### `GET /api/admin/reports/count`
+Nombre de signalements ouverts (pour le badge dans l'onglet admin).
+- **Auth** : Admin
+- **Réponse 200** : `{ count: number }`
+
+### `PATCH /api/admin/reports/:id/handle`
+Marque un signalement comme traité (`status: "HANDLED"`).
+- **Auth** : Admin
+- **Réponse 200** : `Report`
+
+**Statuts Report** : `OPEN` (défaut) | `HANDLED`  
+**Raisons** : `PERSON` (problème avec une personne) | `QUESTION` (question sur l'app) | `OTHER` (autre)
