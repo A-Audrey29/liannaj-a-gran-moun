@@ -540,7 +540,7 @@ function RelationsTab() {
           >
             {f.label}
             {f.id === "PENDING" && pendingCount > 0 && (
-              <span className="ml-1.5 bg-amber-500 text-white text-[10px] px-1.5 py-0.5 rounded-full font-semibold">
+              <span className="ml-1.5 bg-[#dc4256] text-white text-[10px] px-1.5 py-0.5 rounded-full font-semibold">
                 {pendingCount}
               </span>
             )}
