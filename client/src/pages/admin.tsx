@@ -64,6 +64,7 @@ import {
   MessageSquare,
   Flag,
   RefreshCw,
+  AlertTriangle,
 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import type { User, Relation, Intervention, PaymentRecord, Notification } from "@shared/schema";
@@ -501,8 +502,24 @@ function RelationsTab() {
     return <div className="flex justify-center py-12"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>;
   }
 
+  const pendingCount = relations.filter((r) => r.status === "PENDING").length;
+
   return (
     <div>
+      {pendingCount > 0 && (
+        <button
+          onClick={() => setFilter("PENDING")}
+          className="w-full flex items-center gap-3 px-4 py-3 rounded-xl bg-amber-50 border border-amber-300 text-left hover:bg-amber-100 transition-colors mb-4"
+          data-testid="banner-pending-relations"
+        >
+          <AlertTriangle className="w-5 h-5 text-amber-500 shrink-0" />
+          <span className="text-sm font-semibold text-amber-800 flex-1">
+            {pendingCount} nouvelle{pendingCount > 1 ? "s" : ""} demande{pendingCount > 1 ? "s" : ""} de relation en attente de traitement
+          </span>
+          <span className="text-xs text-amber-600 whitespace-nowrap">Voir →</span>
+        </button>
+      )}
+
       <UserCombobox
         users={allUsers}
         selectedUserId={searchUserId}
@@ -522,6 +539,11 @@ function RelationsTab() {
             data-testid={`filter-relations-${f.id}`}
           >
             {f.label}
+            {f.id === "PENDING" && pendingCount > 0 && (
+              <span className="ml-1.5 bg-amber-500 text-white text-[10px] px-1.5 py-0.5 rounded-full font-semibold">
+                {pendingCount}
+              </span>
+            )}
           </button>
         ))}
       </div>
@@ -1783,6 +1805,11 @@ export default function Admin() {
   const { data: pendingMeetings = [] } = useQuery<RelationWithUsers[]>({
     queryKey: ["/api/admin/relations/pending-meeting"],
   });
+  const { data: allRelations = [] } = useQuery<RelationWithUsers[]>({
+    queryKey: ["/api/admin/relations"],
+    staleTime: 0,
+    refetchOnWindowFocus: true,
+  });
   const { data: users = [] } = useQuery<SafeUser[]>({ queryKey: ["/api/admin/users"] });
   const { data: reportCount } = useQuery<{ count: number }>({
     queryKey: ["/api/admin/reports/count"],
@@ -1791,11 +1818,13 @@ export default function Admin() {
     refetchOnWindowFocus: true,
   });
   const pendingUsers = users.filter((u) => u.status === "PENDING_VALIDATION").length;
+  const pendingRelations = allRelations.filter((r) => r.status === "PENDING").length;
 
   function getTabCount(tabId: string): number {
     if (tabId === "cadrage") return pendingMeetings.length;
     if (tabId === "utilisateurs") return pendingUsers;
     if (tabId === "signalements") return reportCount?.count ?? 0;
+    if (tabId === "relations") return pendingRelations;
     return 0;
   }
 
