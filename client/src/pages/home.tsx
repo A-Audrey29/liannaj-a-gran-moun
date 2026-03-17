@@ -80,7 +80,9 @@ export default function Home() {
   const tabs = user?.role === "ADMIN"
     ? ALL_TABS.filter((t) => t.id !== "profil" && t.id !== "messages" && t.id !== "aide")
     : user?.role === "JUNIOR"
-    ? ALL_TABS.filter((t) => t.id !== "demandes" && t.id !== "aide")
+    ? ALL_TABS.filter((t) => t.id !== "aide").map((t) =>
+        t.id === "demandes" ? { ...t, label: "Demandes reçues" } : t
+      )
     : ALL_TABS.filter((t) => t.id !== "aide");
   const { toast } = useToast();
 
@@ -269,13 +271,13 @@ function DashboardTab({ counts, isLoading, user, onSwitchTab }: { counts: Dashbo
         {isJunior ? (
           <>
             <DashboardCard
-              icon={ClipboardCheck}
-              count={counts.proposedInterventions.length}
-              label="À confirmer"
-              detail={proposedDetail}
-              onClick={() => onSwitchTab("rencontres")}
-              highlight={counts.proposedInterventions.length > 0 ? "orange" : undefined}
-              testId="card-a-confirmer"
+              icon={MessageCircle}
+              count={counts.pendingDemandes.length}
+              label="Demandes reçues"
+              detail={counts.pendingDemandes.length > 0 ? `${counts.pendingDemandes.length} en attente` : "Aucune"}
+              onClick={() => onSwitchTab("demandes")}
+              highlight={counts.pendingDemandes.length > 0 ? "orange" : undefined}
+              testId="card-demandes-recues"
             />
             <DashboardCard
               icon={Users}
