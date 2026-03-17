@@ -80,8 +80,8 @@ export default function Home() {
   const tabs = user?.role === "ADMIN"
     ? ALL_TABS.filter((t) => t.id !== "profil" && t.id !== "messages" && t.id !== "aide")
     : user?.role === "JUNIOR"
-    ? ALL_TABS.filter((t) => t.id !== "demandes")
-    : ALL_TABS;
+    ? ALL_TABS.filter((t) => t.id !== "demandes" && t.id !== "aide")
+    : ALL_TABS.filter((t) => t.id !== "aide");
   const { toast } = useToast();
 
   useEffect(() => {
@@ -138,7 +138,21 @@ export default function Home() {
         </div>
       )}
 
-      <h1 className="text-2xl md:text-3xl font-bold mb-6" data-testid="text-mon-espace">Bonjour {user?.firstName}</h1>
+      <div className="flex items-center justify-between mb-6">
+        <h1 className="text-2xl md:text-3xl font-bold" data-testid="text-mon-espace">Bonjour {user?.firstName}</h1>
+        {isNotAdmin && (
+          <button
+            onClick={() => setActiveTab("aide")}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-full text-sm font-medium transition-colors ${
+              activeTab === "aide" ? "bg-[#dc4256] text-white" : "bg-white text-muted-foreground hover:bg-muted"
+            }`}
+            data-testid="tab-aide"
+          >
+            <HelpCircle className="w-4 h-4" />
+            Aide
+          </button>
+        )}
+      </div>
 
       <div className="flex flex-wrap gap-2 mb-8">
         {tabs.map((tab) => {
