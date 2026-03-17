@@ -1800,7 +1800,14 @@ function SignalementsTab() {
 // ==================== MAIN ADMIN PAGE ====================
 
 export default function Admin() {
-  const [activeTab, setActiveTab] = useState<string>("utilisateurs");
+  const [activeTab, setActiveTabState] = useState<string>(() => {
+    return sessionStorage.getItem("feves_admin_tab") ?? "utilisateurs";
+  });
+
+  function setActiveTab(tab: string) {
+    setActiveTabState(tab);
+    sessionStorage.setItem("feves_admin_tab", tab);
+  }
 
   const { data: pendingMeetings = [] } = useQuery<RelationWithUsers[]>({
     queryKey: ["/api/admin/relations/pending-meeting"],

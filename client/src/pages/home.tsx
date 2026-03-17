@@ -74,7 +74,7 @@ function useDashboardCounts(relations?: RelationWithUsers[], pendingFB?: Interve
 
 export default function Home() {
   const { user } = useAuth();
-  const [activeTab, setActiveTab] = useState<string>("dashboard");
+  const [activeTab, setActiveTabState] = useState<string>("dashboard");
   const [openRelationId, setOpenRelationId] = useState<string | null>(null);
   const isNotAdmin = user?.role !== "ADMIN";
   const tabs = user?.role === "ADMIN"
@@ -84,11 +84,22 @@ export default function Home() {
     : ALL_TABS.filter((t) => t.id !== "aide");
   const { toast } = useToast();
 
+  function setActiveTab(tab: string) {
+    setActiveTabState(tab);
+    sessionStorage.setItem("feves_active_tab", tab);
+  }
+
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const tab = params.get("tab");
     const relation = params.get("relation");
-    if (tab) setActiveTab(tab);
+    if (tab) {
+      setActiveTabState(tab);
+      sessionStorage.setItem("feves_active_tab", tab);
+    } else {
+      const saved = sessionStorage.getItem("feves_active_tab");
+      if (saved) setActiveTabState(saved);
+    }
     if (relation) setOpenRelationId(relation);
     if (tab || relation) {
       window.history.replaceState({}, "", window.location.pathname);
