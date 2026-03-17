@@ -140,7 +140,7 @@ export default function Home() {
 
       <h1 className="text-2xl md:text-3xl font-bold mb-6" data-testid="text-mon-espace">Bonjour {user?.firstName}</h1>
 
-      <div className="flex gap-1 mb-8 overflow-x-auto pb-2">
+      <div className="flex flex-wrap gap-2 mb-8">
         {tabs.map((tab) => {
           const isActive = activeTab === tab.id;
           const Icon = tab.icon;
