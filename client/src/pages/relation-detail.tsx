@@ -16,9 +16,34 @@ import StatusBadge from "@/components/status-badge";
 import StarRating from "@/components/star-rating";
 import { ArrowLeft, Calendar, Clock, MapPin, Plus, Check, X, Mail } from "lucide-react";
 import { useState } from "react";
+import { getPhotoUrl } from "@/lib/photo-url";
 import type { Relation, User as UserType, Intervention } from "@shared/schema";
 
 type RelationDetail = Relation & { senior: UserType; junior: UserType; interventions: Intervention[] };
+
+function ParticipantCard({ user: u, label }: { user: UserType; label: string }) {
+  const photoSrc = getPhotoUrl(u.profilePhoto);
+  return (
+    <div className="flex items-start gap-3 bg-muted/40 rounded-xl p-4 border">
+      <div className="shrink-0">
+        {photoSrc ? (
+          <img src={photoSrc} alt={u.firstName} className="w-14 h-14 rounded-full object-cover" />
+        ) : (
+          <div className="w-14 h-14 rounded-full bg-[#e8d7fe] flex items-center justify-center text-lg font-bold text-[#8b5cf6]">
+            {u.firstName[0]}{u.lastName[0]}
+          </div>
+        )}
+      </div>
+      <div className="min-w-0">
+        <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-0.5">{label}</div>
+        <div className="font-semibold text-sm">{u.firstName} {u.lastName}</div>
+        {u.city && <div className="text-xs text-muted-foreground">{u.city}</div>}
+        {u.bio && <p className="text-xs text-muted-foreground mt-1 line-clamp-3">{u.bio}</p>}
+        {u.desiredActivity && <p className="text-xs text-muted-foreground mt-1 italic">"{u.desiredActivity}"</p>}
+      </div>
+    </div>
+  );
+}
 
 export default function RelationDetail() {
   const params = useParams<{ id: string }>();
@@ -63,10 +88,12 @@ export default function RelationDetail() {
     );
   }
 
+  const isAdmin = user?.role === "ADMIN";
   const partner = relation.seniorId === user?.id ? relation.junior : relation.senior;
   const isSenior = relation.seniorId === user?.id;
   const isJunior = relation.juniorId === user?.id;
   const canPropose = isSenior && relation.status === "ACTIVE";
+  const canProposeFirst = isAdmin && relation.status === "PENDING_FIRST_MEETING";
   const sortedInterventions = [...relation.interventions].sort((a, b) => new Date(b.scheduledDate).getTime() - new Date(a.scheduledDate).getTime());
 
   return (
@@ -75,40 +102,56 @@ export default function RelationDetail() {
         <ArrowLeft className="w-4 h-4" /> Retour
       </button>
 
-      <Card className="rounded-2xl border-0 shadow-sm mb-6">
-        <CardContent className="py-6">
-          <div className="flex items-center gap-4 mb-4">
-            <div className="w-14 h-14 rounded-full bg-[#e8d7fe] flex items-center justify-center text-lg font-bold text-[#8b5cf6]">
-              {partner.firstName[0]}{partner.lastName[0]}
+      {isAdmin ? (
+        <Card className="rounded-2xl border-0 shadow-sm mb-6">
+          <CardContent className="py-6">
+            <div className="flex items-center gap-2 mb-4">
+              <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Statut relation :</span>
+              <StatusBadge status={relation.status} />
             </div>
-            <div>
-              <h2 className="text-lg font-bold">{partner.firstName} {partner.lastName}</h2>
-              <div className="flex items-center gap-2 mt-1">
-                <StatusBadge status={partner.role} />
-                <span className="text-xs text-muted-foreground">{partner.city || ""}</span>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <ParticipantCard user={relation.senior} label="Sénior" />
+              <ParticipantCard user={relation.junior} label="Jeune" />
+            </div>
+          </CardContent>
+        </Card>
+      ) : (
+        <Card className="rounded-2xl border-0 shadow-sm mb-6">
+          <CardContent className="py-6">
+            <div className="flex items-center gap-4 mb-4">
+              <div className="w-14 h-14 rounded-full bg-[#e8d7fe] flex items-center justify-center text-lg font-bold text-[#8b5cf6]">
+                {partner.firstName[0]}{partner.lastName[0]}
+              </div>
+              <div>
+                <h2 className="text-lg font-bold">{partner.firstName} {partner.lastName}</h2>
+                <div className="flex items-center gap-2 mt-1">
+                  <StatusBadge status={partner.role} />
+                  <span className="text-xs text-muted-foreground">{partner.city || ""}</span>
+                </div>
               </div>
             </div>
-          </div>
-          {partner.bio && <p className="text-sm text-muted-foreground mb-3">{partner.bio}</p>}
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-muted-foreground">Statut relation :</span>
-            <StatusBadge status={relation.status} />
-          </div>
-          {relation.status === "ACTIVE" && (isSenior || isJunior) && (
-            <Button
-              className="mt-4 rounded-full bg-[#dc4256] hover:bg-[#c73848] text-white"
-              onClick={() => setLocation(`/mon-espace?tab=messages&relation=${relation.id}`)}
-              data-testid="button-send-message-detail"
-            >
-              <Mail className="w-4 h-4 mr-2" /> Envoyer un message à {partner.firstName}
-            </Button>
-          )}
-        </CardContent>
-      </Card>
+            {partner.bio && <p className="text-sm text-muted-foreground mb-3">{partner.bio}</p>}
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-muted-foreground">Statut relation :</span>
+              <StatusBadge status={relation.status} />
+            </div>
+            {relation.status === "ACTIVE" && (isSenior || isJunior) && (
+              <Button
+                className="mt-4 rounded-full bg-[#dc4256] hover:bg-[#c73848] text-white"
+                onClick={() => setLocation(`/mon-espace?tab=messages&relation=${relation.id}`)}
+                data-testid="button-send-message-detail"
+              >
+                <Mail className="w-4 h-4 mr-2" /> Envoyer un message à {partner.firstName}
+              </Button>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Interventions</h3>
-        {canPropose && <NewInterventionDialog relationId={relation.id} />}
+        {canPropose && <NewInterventionDialog relationId={relation.id} isFirst={false} />}
+        {canProposeFirst && <NewInterventionDialog relationId={relation.id} isFirst={true} />}
       </div>
 
       {sortedInterventions.length === 0 ? (
@@ -250,7 +293,7 @@ function InterventionCard({ intervention, relation, user }: { intervention: Inte
   );
 }
 
-function NewInterventionDialog({ relationId }: { relationId: string }) {
+function NewInterventionDialog({ relationId, isFirst }: { relationId: string; isFirst: boolean }) {
   const { toast } = useToast();
   const [open, setOpen] = useState(false);
   const [date, setDate] = useState("");
@@ -269,7 +312,7 @@ function NewInterventionDialog({ relationId }: { relationId: string }) {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/relations", relationId] });
-      toast({ title: "Intervention proposee !" });
+      toast({ title: isFirst ? "1ère rencontre proposée !" : "Intervention proposée !" });
       setOpen(false);
       setDate("");
       setDuration("120");
@@ -283,12 +326,12 @@ function NewInterventionDialog({ relationId }: { relationId: string }) {
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         <Button size="sm" className="rounded-full bg-[#dc4256] hover:bg-[#c73848] text-white text-xs" data-testid="button-new-intervention">
-          <Plus className="w-3 h-3 mr-1" /> Proposer une rencontre
+          <Plus className="w-3 h-3 mr-1" /> {isFirst ? "Proposer la 1ère rencontre" : "Proposer une rencontre"}
         </Button>
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Proposer une rencontre</DialogTitle>
+          <DialogTitle>{isFirst ? "Organiser la 1ère rencontre" : "Proposer une rencontre"}</DialogTitle>
         </DialogHeader>
         <div className="space-y-4">
           <div>
