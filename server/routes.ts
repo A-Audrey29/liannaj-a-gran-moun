@@ -74,9 +74,11 @@ function sanitizeUserPublic(user: any) {
   return safe;
 }
 
+const isDev = process.env.NODE_ENV !== "production";
+
 const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  limit: 10,
+  limit: isDev ? 1000 : 10,
   message: { message: "Trop de tentatives de connexion. Réessayez dans 15 minutes." },
   standardHeaders: true,
   legacyHeaders: false,
@@ -84,7 +86,7 @@ const loginLimiter = rateLimit({
 
 const registerLimiter = rateLimit({
   windowMs: 60 * 60 * 1000,
-  limit: 5,
+  limit: isDev ? 1000 : 5,
   message: { message: "Trop d'inscriptions depuis cette adresse. Réessayez dans une heure." },
   standardHeaders: true,
   legacyHeaders: false,

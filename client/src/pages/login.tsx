@@ -41,7 +41,13 @@ export default function LoginPage() {
     },
     onError: (error: Error) => {
       const message = error.message || "";
-      if (message.includes("403") || message.toLowerCase().includes("attente") || message.toLowerCase().includes("pending")) {
+      if (message.includes("429") || message.toLowerCase().includes("trop de tentatives")) {
+        toast({
+          variant: "destructive",
+          title: "Trop de tentatives",
+          description: "Vous avez effectué trop de tentatives de connexion. Réessayez dans 15 minutes.",
+        });
+      } else if (message.includes("403") || message.toLowerCase().includes("attente") || message.toLowerCase().includes("pending")) {
         toast({
           variant: "destructive",
           title: "Compte en attente de validation",
