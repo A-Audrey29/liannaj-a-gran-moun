@@ -253,13 +253,13 @@ function DashboardTab({ counts, isLoading, user, onSwitchTab }: { counts: Dashbo
               testId="card-a-confirmer"
             />
             <DashboardCard
-              icon={MessageCircle}
-              count={counts.pendingDemandes.length}
-              label="Demandes reçues"
-              detail={pendingDetail}
-              onClick={() => onSwitchTab("demandes")}
-              highlight={counts.pendingDemandes.length > 0 ? "red" : undefined}
-              testId="card-demandes"
+              icon={Users}
+              count={counts.activeRelations.length}
+              label="Relations actives"
+              detail={activeDetail}
+              onClick={() => onSwitchTab("rencontres")}
+              highlight="purple"
+              testId="card-relations-actives"
             />
           </>
         ) : (
