@@ -337,6 +337,18 @@ function DashboardTab({ counts, isLoading, user, onSwitchTab }: { counts: Dashbo
 function RencontresTab({ relations, isLoading, user, onOpenMessage }: { relations?: RelationWithUsers[]; isLoading: boolean; user: any; onOpenMessage: (relationId: string) => void }) {
   const [, setLocation] = useLocation();
   const [collapsedIds, setCollapsedIds] = useState<Set<string>>(new Set());
+  const { toast } = useToast();
+
+  const confirmMutation = useMutation({
+    mutationFn: async (interventionId: string) => {
+      await apiRequest("PATCH", `/api/interventions/${interventionId}/confirm`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/relations"] });
+      toast({ title: "Rencontre confirmée !", description: "Le sénior et l'équipe FEVES ont été notifiés." });
+    },
+    onError: () => toast({ title: "Erreur", description: "Impossible de confirmer la rencontre.", variant: "destructive" }),
+  });
 
   if (isLoading) return <div className="space-y-4"><Skeleton className="h-24 rounded-2xl" /><Skeleton className="h-24 rounded-2xl" /></div>;
 
@@ -439,24 +451,58 @@ function RencontresTab({ relations, isLoading, user, onOpenMessage }: { relation
                       </div>
 
                       {isExpanded && (
-                        <div className="space-y-2">
-                          {interventions.map((interv) => (
-                            <div
-                              key={interv.id}
-                              className="flex items-center justify-between py-2 px-3 rounded-xl bg-muted/30 text-sm"
-                              data-testid={`intervention-${interv.id}`}
-                            >
-                              <div>
-                                <p className="font-medium text-xs">
-                                  {new Date(interv.scheduledDate).toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "long" })}
-                                </p>
-                                <p className="text-[10px] text-muted-foreground">
-                                  {interv.durationMinutes} min{interv.location ? ` · ${interv.location}` : ""}
-                                </p>
+                        <div className="space-y-3">
+                          {interventions.map((interv) => {
+                            const isJunior = user?.role === "JUNIOR";
+                            const isProposed = interv.status === "PROPOSED";
+                            const tasks: string[] = interv.tasks || [];
+                            return (
+                              <div
+                                key={interv.id}
+                                className={`py-3 px-3 rounded-xl text-sm ${isProposed && isJunior ? "bg-orange-50 border border-orange-200" : "bg-muted/30"}`}
+                                data-testid={`intervention-${interv.id}`}
+                              >
+                                <div className="flex items-start justify-between gap-2">
+                                  <div className="flex-1 min-w-0">
+                                    <p className="font-semibold text-xs">
+                                      {new Date(interv.scheduledDate).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })}
+                                    </p>
+                                    <p className="text-[11px] text-muted-foreground mt-0.5">
+                                      {interv.durationMinutes} min{interv.location ? ` · 📍 ${interv.location}` : ""}
+                                    </p>
+                                    {tasks.length > 0 && (
+                                      <div className="mt-1.5">
+                                        <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-1">Activités prévues</p>
+                                        <div className="flex flex-wrap gap-1">
+                                          {tasks.map((task, i) => (
+                                            <span key={i} className="inline-block bg-primary/10 text-primary text-[10px] px-2 py-0.5 rounded-full">
+                                              {task}
+                                            </span>
+                                          ))}
+                                        </div>
+                                      </div>
+                                    )}
+                                  </div>
+                                  <StatusBadge status={interv.status} />
+                                </div>
+                                {isProposed && isJunior && (
+                                  <div className="mt-3 pt-2 border-t border-orange-200">
+                                    <p className="text-[11px] text-orange-700 mb-2">Cette rencontre attend votre confirmation.</p>
+                                    <Button
+                                      size="sm"
+                                      className="w-full bg-[#dc4256] hover:bg-[#c73848] text-white text-xs"
+                                      onClick={() => confirmMutation.mutate(interv.id)}
+                                      disabled={confirmMutation.isPending}
+                                      data-testid={`button-confirm-intervention-${interv.id}`}
+                                    >
+                                      <Check className="w-3.5 h-3.5 mr-1.5" />
+                                      {confirmMutation.isPending ? "Confirmation..." : "Confirmer la rencontre"}
+                                    </Button>
+                                  </div>
+                                )}
                               </div>
-                              <StatusBadge status={interv.status} />
-                            </div>
-                          ))}
+                            );
+                          })}
                         </div>
                       )}
                     </div>
