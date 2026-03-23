@@ -13,10 +13,10 @@ export default function Landing() {
         <div className="max-w-6xl mx-auto px-4 flex flex-col md:flex-row items-center gap-8">
           <div className="flex-1 text-center md:text-left">
             <h1 className="text-3xl md:text-5xl font-bold text-[#dc4256] leading-tight mb-6" data-testid="text-hero-title">
-              DES RENCONTRES EN TOUTE CONFIANCE.
+              GRAN É JENN MOUN.
             </h1>
             <p className="text-muted-foreground text-base md:text-lg mb-8 max-w-lg">
-              Lorem ipsum dolor sit amet. Cum ducimus opta sed quo nihil est praesentium galisum qui fugit aperiam et exercitationem quas est accusamus.
+              Une expérience d’entraide intergénérationnelle fondée sur la confiance, les liens tissés et la solidarité engagée.
             </p>
             <Link href="/register">
               <Button size="lg" className="rounded-full bg-[#dc4256] hover:bg-[#c73848] text-white px-8 text-base" data-testid="button-hero-register">
@@ -45,12 +45,16 @@ export default function Landing() {
             </div>
           </div>
           <div className="flex-1">
-            <h2 className="text-2xl md:text-4xl font-bold text-[#dc4256] mb-4" data-testid="text-section-confiance">CONFIANCE</h2>
+            <h2 className="text-2xl md:text-4xl font-bold text-[#dc4256] mb-4" data-testid="text-section-confiance">JAN OU KA RANJÉ KABANN AW SÉ JAN OU KA DÒMI</h2>
             <p className="text-muted-foreground mb-4">
-              Lorem ipsum dolor sit amet. Cum ducimus opta sed quo nihil est praesentium galisum qui fugit aperiam et accusamus.
+              Une confiance qui se construit et se partage
             </p>
             <p className="text-muted-foreground">
-              Lorem ipsum dolor sit amet. Cum ducimus opta sed quo nihil est praesentium galisum qui fugit aperiam et exercitationem.
+              Chaque relation LYANNAJ repose sur un cadre clair, encadré par un enseignant référent garant des échanges.
+              
+              Les jeunes suivent une formation qui développe l'écoute, le respect et l'attention à la personne. Leur posture est adaptée au rythme de l'aîné — sans jamais se substituer à un service de soins.
+              
+              La relation est réciproque : le jeune apporte énergie et regard neuf, l'aîné transmet expérience et présence. Chacun contribue à la qualité du lien.
             </p>
           </div>
         </div>
