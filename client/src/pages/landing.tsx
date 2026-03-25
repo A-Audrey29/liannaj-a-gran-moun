@@ -4,6 +4,7 @@ import seniorImg from "@assets/seniorF_1772976732165.png";
 import jeuneImg from "@assets/jeuneF_1772976732187.png";
 import mainsImg from "@assets/mainsConfiance_1772976732191.png";
 import rireImg from "@assets/seniorJeuneHRire_1772976732193.png";
+import cgrrLogo from "@assets/logo_CGRR_1774262532462.png";
 import { User, GraduationCap, Heart } from "lucide-react";
 
 export default function Landing() {
@@ -104,9 +105,15 @@ export default function Landing() {
             </div>
           </div>
           <div className="flex-1">
-            <h2 className="text-2xl md:text-4xl font-bold text-[#dc4256] mb-4" data-testid="text-section-rencontre">RENCONTRE</h2>
+            <h2 className="text-2xl md:text-4xl font-bold text-[#dc4256] mb-4" data-testid="text-section-rencontre">PRAN TI BAN LA SIZÉ</h2>
+            <p className="text-muted-foreground mb-4">
+              Prenez place — la première rencontre, c'est nous qui l'organisons.
+            </p>
             <p className="text-muted-foreground">
-              Lorem ipsum dolor sit amet. Cum ducimus opta sed quo nihil est praesentium galisum qui fugit aperiam et exercitationem quas est accusamus.
+              - Une première rencontre en présentiel, encadrée, dans un lieu neutre et sécurisant.
+              - Les rencontres suivantes sont programmées selon le rythme et les besoins de chacun.
+              - Pas de précipitation : le lien se construit à votre rythme, en toute tranquillité.
+              - Un référent présent à chaque étape, pour vous et pour votre famille.
             </p>
           </div>
         </div>
@@ -120,7 +127,10 @@ export default function Landing() {
             </div>
           </div>
           <div className="flex-1">
-            <h2 className="text-2xl md:text-4xl font-bold text-[#dc4256] mb-4" data-testid="text-section-discussion">DISCUSSION</h2>
+            <h2 className="text-2xl md:text-4xl font-bold text-[#dc4256] mb-4" data-testid="text-section-discussion">PAWÒL KA FÈ CHIMEN</h2>
+            <p className="text-muted-foreground mb-4">
+              Les mots font leur chemin — un espace pour échanger en confiance.
+            </p>
             <p className="text-muted-foreground">
               Lorem ipsum dolor sit amet. Cum ducimus opta sed quo nihil est praesentium galisum qui fugit aperiam et exercitationem quas est accusamus.
             </p>
@@ -150,6 +160,18 @@ export default function Landing() {
           </div>
         </div>
       </section>
+
+      <footer className="py-10 bg-[#f3eaff] border-t border-[#c9a4e8]/30">
+        <div className="max-w-4xl mx-auto px-4 flex flex-col items-center gap-4 text-center">
+          <p className="text-sm text-muted-foreground font-medium">Cette plateforme est financée par :</p>
+          <img
+            src={cgrrLogo}
+            alt="CGRR Agirc-Arrco — Retraite complémentaire"
+            className="h-20 w-auto object-contain"
+            data-testid="img-logo-financeur"
+          />
+        </div>
+      </footer>
     </div>
   );
 }
