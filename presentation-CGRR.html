@@ -19,184 +19,98 @@
     flex-direction: column;
     justify-content: center;
     align-items: center;
-    padding: 60px;
+    padding: 40px 60px;
     position: relative;
   }
   .slide.active { display: flex; }
-  .slide-number {
-    position: absolute;
-    bottom: 30px;
-    right: 40px;
-    font-size: 14px;
-    color: rgba(255,255,255,0.3);
-  }
   h1 {
-    font-size: 3.5rem;
+    font-size: 3rem;
     font-weight: 800;
     color: #dc4256;
-    margin-bottom: 20px;
+    margin-bottom: 12px;
     text-align: center;
   }
   h2 {
-    font-size: 2.5rem;
+    font-size: 2rem;
     font-weight: 700;
     color: #e8d7fe;
-    margin-bottom: 30px;
+    margin-bottom: 20px;
     text-align: center;
   }
-  h3 {
-    font-size: 1.5rem;
-    color: #dc4256;
-    margin-bottom: 15px;
-  }
   p {
-    font-size: 1.3rem;
-    line-height: 1.6;
+    font-size: 1.2rem;
+    line-height: 1.5;
     max-width: 900px;
     text-align: center;
     color: #e0e0e0;
   }
   .subtitle {
-    font-size: 1.5rem;
+    font-size: 1.3rem;
     color: #c9a4e8;
-    margin-bottom: 40px;
-    text-align: center;
-  }
-  .grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 40px;
-    max-width: 1000px;
-    width: 100%;
-  }
-  .grid-3 {
-    display: grid;
-    grid-template-columns: 1fr 1fr 1fr;
-    gap: 30px;
-    max-width: 1100px;
-    width: 100%;
-  }
-  .card {
-    background: rgba(255,255,255,0.05);
-    border: 1px solid rgba(255,255,255,0.1);
-    border-radius: 16px;
-    padding: 30px;
-    text-align: center;
-  }
-  .card h4 {
-    font-size: 1.2rem;
-    color: #dc4256;
-    margin-bottom: 12px;
-  }
-  .card p {
-    font-size: 1rem;
-    color: #bbb;
-  }
-  .logo {
-    width: 200px;
     margin-bottom: 30px;
   }
-  .footer-text {
+  .screenshot {
+    max-width: 85vw;
+    max-height: 65vh;
+    border-radius: 12px;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+    border: 2px solid rgba(255,255,255,0.1);
+  }
+  .slide-number {
     position: absolute;
-    bottom: 40px;
-    font-size: 0.9rem;
-    color: rgba(255,255,255,0.4);
-  }
-  .stats {
-    display: flex;
-    gap: 60px;
-    justify-content: center;
-    margin-top: 40px;
-  }
-  .stat {
-    text-align: center;
-  }
-  .stat-number {
-    font-size: 3rem;
-    font-weight: 800;
-    color: #dc4256;
-  }
-  .stat-label {
-    font-size: 1rem;
-    color: #c9a4e8;
-    margin-top: 8px;
-  }
-  .flow {
-    display: flex;
-    align-items: center;
-    gap: 20px;
-    justify-content: center;
-    margin-top: 40px;
-  }
-  .flow-step {
-    background: rgba(220,66,86,0.15);
-    border: 2px solid #dc4256;
-    border-radius: 12px;
-    padding: 20px 25px;
-    text-align: center;
-    min-width: 160px;
-  }
-  .flow-step strong {
-    color: #dc4256;
-    font-size: 1.1rem;
-  }
-  .flow-step p {
-    font-size: 0.85rem;
-    color: #bbb;
-    margin-top: 6px;
-  }
-  .arrow {
-    font-size: 2rem;
-    color: #dc4256;
-  }
-  .highlight-box {
-    background: rgba(220,66,86,0.1);
-    border-left: 4px solid #dc4256;
-    padding: 20px 30px;
-    border-radius: 0 12px 12px 0;
-    max-width: 800px;
-    margin-top: 30px;
-  }
-  .highlight-box p {
-    text-align: left;
-    font-size: 1.1rem;
-  }
-  .next-steps {
-    display: flex;
-    flex-direction: column;
-    gap: 15px;
-    max-width: 700px;
-    width: 100%;
-    margin-top: 30px;
-  }
-  .step-item {
-    display: flex;
-    align-items: center;
-    gap: 20px;
-    background: rgba(255,255,255,0.05);
-    padding: 18px 25px;
-    border-radius: 12px;
-    border-left: 4px solid #c9a4e8;
-  }
-  .step-num {
-    font-size: 1.5rem;
-    font-weight: 800;
-    color: #dc4256;
-    min-width: 40px;
-  }
-  .step-text {
-    font-size: 1.1rem;
-    color: #e0e0e0;
+    bottom: 25px;
+    right: 35px;
+    font-size: 13px;
+    color: rgba(255,255,255,0.25);
   }
   .nav-hint {
     position: absolute;
-    bottom: 30px;
-    left: 40px;
+    bottom: 25px;
+    left: 35px;
     font-size: 12px;
-    color: rgba(255,255,255,0.3);
+    color: rgba(255,255,255,0.25);
   }
-  .cgrr-logo {
-    width: 280px;
+  .caption {
+    margin-top: 20px;
+    font-size: 1rem;
+    color: #c9a4e8;
+    max-width: 700px;
+  }
+  .two-col {
+    display: flex;
+    gap: 40px;
+    align-items: center;
+    justify-content: center;
+    max-width: 1100px;
+  }
+  .two-col .text {
+    text-align: left;
+    flex: 1;
+  }
+  .two-col .text h3 {
+    font-size: 1.4rem;
+    color: #dc4256;
+    margin-bottom: 12px;
+  }
+  .two-col .text p {
+    text-align: left;
+    font-size: 1.05rem;
+    color: #ccc;
+  }
+  .two-col img {
+    flex: 1;
+    max-width: 55vw;
+    max-height: 55vh;
+    border-radius: 12px;
+    box-shadow: 0 15px 40px rgba(0,0,0,0.4);
+  }
+  .tagline {
+    font-size: 1.5rem;
+    color: #c9a4e8;
+    margin-bottom: 40px;
+  }
+  .logo-cgrr {
+    width: 220px;
     margin-top: 30px;
   }
 </style>
@@ -205,287 +119,133 @@
 
 <!-- Slide 1: Titre -->
 <div class="slide active">
-  <h1 style="font-size: 4rem; margin-bottom: 10px;">liannaj a gran moun</h1>
-  <p class="subtitle">Une plateforme de mise en relation intergénérationnelle en Guadeloupe</p>
-  <div style="display: flex; gap: 30px; margin-top: 30px;">
-    <div class="card" style="min-width: 200px;">
-      <h4>Seniors</h4>
-      <p>Partager, être accompagnés</p>
-    </div>
-    <div class="card" style="min-width: 200px;">
-      <h4>Jeunes</h4>
-      <p>Apprendre, créer du lien</p>
-    </div>
-    <div class="card" style="min-width: 200px;">
-      <h4>Aidants</h4>
-      <p>Trouver du soutien</p>
-    </div>
-  </div>
-  <p class="footer-text">Présentation au financeur CGRR — Juin 2026</p>
-  <div class="slide-number">1 / 10</div>
-  <div class="nav-hint">← → pour naviguer</div>
+  <h1 style="font-size: 4rem;">liannaj a gran moun</h1>
+  <p class="tagline">Plateforme de mise en relation seniors/jeunes en Guadeloupe</p>
+  <p style="font-size: 1rem; color: #888;">Démonstration au financeur CGRR — Juin 2026</p>
+  <div class="slide-number">1 / 7</div>
+  <div class="nav-hint">→ ← ou clic pour naviguer</div>
 </div>
 
-<!-- Slide 2: Le problème -->
+<!-- Slide 2: Page d'accueil -->
 <div class="slide">
-  <h2>Le problème</h2>
-  <p style="font-size: 1.4rem;">En Guadeloupe, de nombreux seniors vivent en isolement social.<br>Les jeunes manquent d'espaces de rencontre intergénérationnelle.</p>
-  <div class="stats">
-    <div class="stat">
-      <div class="stat-number">30%</div>
-      <div class="stat-label">de seniors se sentent isolés</div>
-    </div>
-    <div class="stat">
-      <div class="stat-number">1/2</div>
-      <div class="stat-label">des jeunes recherchent du sens</div>
-    </div>
-    <div class="stat">
-      <div class="stat-number">0</div>
-      <div class="stat-label">solution locale adaptée</div>
-    </div>
-  </div>
-  <div class="highlight-box">
-    <p><strong>L'objectif :</strong> Créer des liens durables, encadrés et de confiance entre générations, sur le territoire guadeloupéen.</p>
-  </div>
-  <div class="slide-number">2 / 10</div>
-  <div class="nav-hint">← → pour naviguer</div>
+  <h2>Page d'accueil publique</h2>
+  <img class="screenshot" src="screenshots/01-landing.jpg" alt="Page d'accueil">
+  <p class="caption">Tout visiteur découvre le projet, le logo CGRR en footer, et peut s'inscrire en 2 clics.</p>
+  <div class="slide-number">2 / 7</div>
+  <div class="nav-hint">→ ← ou clic pour naviguer</div>
 </div>
 
-<!-- Slide 3: La solution -->
+<!-- Slide 3: Inscription -->
 <div class="slide">
-  <h2>La solution : FEVES</h2>
-  <p>Une application web et mobile qui met en relation des seniors et des jeunes pour des activités sociales partagées.</p>
-  <div class="grid" style="margin-top: 40px;">
-    <div class="card">
-      <h4>🎯 Matching intelligent</h4>
-      <p>Propositions basées sur la ville, les centres d'intérêt et les recommandations de l'équipe FEVES.</p>
-    </div>
-    <div class="card">
-      <h4>🛡️ Encadrement complet</h4>
-      <p>Référent enseignant, validation, première rencontre encadrée, suivi continu.</p>
-    </div>
-    <div class="card">
-      <h4>📱 Accessible</h4>
-      <p>Interface pensée pour les seniors : grandes polices, labels explicites, parcours simples.</p>
-    </div>
-    <div class="card">
-      <h4>🤝 Réciproque</h4>
-      <p>Le jeune apporte énergie et regard neuf. Le senior transmet expérience et présence.</p>
-    </div>
-  </div>
-  <div class="slide-number">3 / 10</div>
-  <div class="nav-hint">← → pour naviguer</div>
+  <h2>Inscription Senior ou Jeune</h2>
+  <img class="screenshot" src="screenshots/03-register.jpg" alt="Inscription">
+  <p class="caption">Formulaire complet adapté au profil : Senior (aidant, centres d'intérêt) ou Jeune (référent, école). Validation obligatoire avant activation.</p>
+  <div class="slide-number">3 / 7</div>
+  <div class="nav-hint">→ ← ou clic pour naviguer</div>
 </div>
 
-<!-- Slide 4: Le flux -->
+<!-- Slide 4: Connexion -->
 <div class="slide">
-  <h2>Comment ça marche</h2>
-  <div class="flow">
-    <div class="flow-step">
-      <strong>1. Inscription</strong>
-      <p>Senior ou jeune<br>+ référent</p>
-    </div>
-    <div class="arrow">→</div>
-    <div class="flow-step">
-      <strong>2. Validation</strong>
-      <p>Par l'admin<br>ou le référent</p>
-    </div>
-    <div class="arrow">→</div>
-    <div class="flow-step">
-      <strong>3. Matching</strong>
-      <p>Suggestions<br>compatibles</p>
-    </div>
-    <div class="arrow">→</div>
-    <div class="flow-step">
-      <strong>4. Cadrage</strong>
-      <p>1ère rencontre<br>organisée</p>
-    </div>
-    <div class="arrow">→</div>
-    <div class="flow-step">
-      <strong>5. Lien</strong>
-      <p>Rencontres<br>autonomes</p>
-    </div>
-  </div>
-  <div class="highlight-box" style="margin-top: 50px;">
-    <p><strong>⚡ Chaque étape est notifiée</strong> par email et notification in-app. Les deux parties (senior, jeune) et l'admin sont informés en temps réel.</p>
-  </div>
-  <div class="slide-number">4 / 10</div>
-  <div class="nav-hint">← → pour naviguer</div>
+  <h2>Connexion & comptes de test</h2>
+  <img class="screenshot" src="screenshots/02-login.jpg" alt="Connexion">
+  <p class="caption">Raccourcis de test visibles en développement. En production, les seniors utilisent leur email et mot de passe.</p>
+  <div class="slide-number">4 / 7</div>
+  <div class="nav-hint">→ ← ou clic pour naviguer</div>
 </div>
 
-<!-- Slide 5: Les publics -->
+<!-- Slide 5: Espace Senior -->
 <div class="slide">
-  <h2>Les publics accompagnés</h2>
-  <div class="grid-3">
-    <div class="card">
-      <h4>👴 Senior</h4>
-      <p>Personne âgée souhaitant partager son expérience et recevoir un coup de main du quotidien (informatique, courses, jardinage...).</p>
+  <h2>Espace Senior — Jean Dupont</h2>
+  <div class="two-col">
+    <div class="text">
+      <h3>Tableau de bord</h3>
+      <p>
+        • <strong>Demandes envoyées</strong> : suivi des demandes en attente de réponse du jeune.<br>
+        • <strong>Relations actives</strong> : liens confirmés avec interventions planifiées.<br>
+        • <strong>Prochaine rencontre</strong> : date, lieu, activités prévues.<br>
+        • <strong>Feedback à donner</strong> : alerte après chaque rencontre.<br>
+        • <strong>Messagerie</strong> : échange en temps réel avec le partenaire.
+      </p>
     </div>
-    <div class="card">
-      <h4>🎓 Jeune</h4>
-      <p>Élève ou étudiant formé à l'écoute et au respect, qui souhaite apprendre auprès des aînés et créer du lien social.</p>
-    </div>
-    <div class="card">
-      <h4>❤️ Aidant</h4>
-      <p>Proche ou professionnel aidant un senior. Il peut superviser, suivre les rencontres et signaler des problèmes.</p>
-    </div>
-  </div>
-  <div class="stats" style="margin-top: 50px;">
-    <div class="stat">
-      <div class="stat-number">3</div>
-      <div class="stat-label">profils distincts</div>
-    </div>
-    <div class="stat">
-      <div class="stat-number">1</div>
-      <div class="stat-label">référent par jeune</div>
-    </div>
-    <div class="stat">
-      <div class="stat-number">∞</div>
-      <div class="stat-label">possibilités de lien</div>
+    <div class="text">
+      <h3>Trouver un profil</h3>
+      <p>
+        • Suggestions de jeunes selon la ville et les intérêts communs.<br>
+        • Favoris et recommandations de l'équipe FEVES.<br>
+        • Envoi de demande en 1 clic avec notification au jeune.
+      </p>
     </div>
   </div>
-  <div class="slide-number">5 / 10</div>
-  <div class="nav-hint">← → pour naviguer</div>
+  <div class="slide-number">5 / 7</div>
+  <div class="nav-hint">→ ← ou clic pour naviguer</div>
 </div>
 
-<!-- Slide 6: La plateforme -->
+<!-- Slide 6: Espace Admin -->
 <div class="slide">
-  <h2>Vue de la plateforme</h2>
-  <div class="grid">
-    <div class="card">
-      <h4>📋 Tableau de bord Senior</h4>
-      <p>Demandes envoyées, relations actives, prochaine rencontre, feedback à donner.</p>
+  <h2>Espace Administrateur</h2>
+  <div class="two-col">
+    <div class="text">
+      <h3>8 onglets de gestion</h3>
+      <p>
+        <strong>1. Utilisateurs</strong> — Validation, suspension, profils.<br>
+        <strong>2. Relations</strong> — Toutes les relations, filtres par statut.<br>
+        <strong>3. Cadrage</strong> — Organiser la 1ère rencontre (date, lieu, activités).<br>
+        <strong>4. Rencontres</strong> — Historique, validation "réalisée", feedback.<br>
+        <strong>5. Messagerie</strong> — Contact direct avec tous les utilisateurs.<br>
+        <strong>6. Signalements</strong> — Alertes, traitement, notes.<br>
+        <strong>7. Paiements</strong> — Suivi des rémunérations.<br>
+        <strong>8. Mon compte</strong> — Paramètres admin.
+      </p>
     </div>
-    <div class="card">
-      <h4>📋 Tableau de bord Junior</h4>
-      <p>Demandes reçues, relations actives, propositions à confirmer, messagerie.</p>
-    </div>
-    <div class="card">
-      <h4>⚙️ Espace Admin</h4>
-      <p>Utilisateurs, relations, cadrage (1ère rencontre), paiements, signalements, messagerie.</p>
-    </div>
-    <div class="card">
-      <h4>🔔 Notifications</h4>
-      <p>Emails transactionnels (Brevo) + notifications push (PWA) + badge en temps réel.</p>
+    <div class="text">
+      <h3>Flux de cadrage</h3>
+      <p>
+        Quand un jeune accepte une demande, la relation passe en <strong>"1ère rencontre"</strong>.<br><br>
+        L'admin clique <strong>"Organiser"</strong> → choisit la date, le lieu, les activités → le jeune reçoit une proposition à confirmer → le sénior est notifié → la rencontre a lieu → l'admin valide "réalisée" → les deux donnent leur feedback.
+      </p>
     </div>
   </div>
-  <div class="slide-number">6 / 10</div>
-  <div class="nav-hint">← → pour naviguer</div>
+  <div class="slide-number">6 / 7</div>
+  <div class="nav-hint">→ ← ou clic pour naviguer</div>
 </div>
 
-<!-- Slide 7: Sécurité -->
+<!-- Slide 7: Merci + CGRR -->
 <div class="slide">
-  <h2>Sécurité & encadrement</h2>
-  <div class="grid">
-    <div class="card">
-      <h4>✅ Validation obligatoire</h4>
-      <p>Tout nouvel inscrit est "En attente de validation" tant qu'un admin ou un référent n'a pas confirmé son identité.</p>
-    </div>
-    <div class="card">
-      <h4>🛡️ 1ère rencontre encadrée</h4>
-      <p>L'admin organise la première rencontre en présentiel, dans un lieu neutre. Le junior doit confirmer.</p>
-    </div>
-    <div class="card">
-      <h4>📣 Signalements</h4>
-      <p>Question, problème, autre : tout utilisateur peut signaler. L'admin reçoit une alerte et une note de traitement.</p>
-    </div>
-    <div class="card">
-      <h4>🔒 Données protégées</h4>
-      <p>Sessions sécurisées, photos protégées, rate limiting, helmet CSP/HSTS, validation fichier (magic bytes).</p>
-    </div>
-  </div>
-  <div class="slide-number">7 / 10</div>
-  <div class="nav-hint">← → pour naviguer</div>
-</div>
-
-<!-- Slide 8: Impact & feuille de route -->
-<div class="slide">
-  <h2>Impact & prochaines étapes</h2>
-  <div class="grid">
-    <div class="card">
-      <h4>📊 Impact mesuré</h4>
-      <p>Feedback par rencontre (étoiles), nombre de relations actives, durée moyenne des liens, signalements traités.</p>
-    </div>
-    <div class="card">
-      <h4>🗓️ Feuille de route</h4>
-      <p>Q3 2026 : PWA notifications push. Q4 2026 : application mobile. 2027 : déploiement sur l'ensemble des communes.</p>
-    </div>
-  </div>
-  <div class="next-steps">
-    <div class="step-item">
-      <div class="step-num">1</div>
-      <div class="step-text">Pilote avec 10 binômes seniors/jeunes (juin-août 2026)</div>
-    </div>
-    <div class="step-item">
-      <div class="step-num">2</div>
-      <div class="step-text">Formation des référents enseignants (septembre 2026)</div>
-    </div>
-    <div class="step-item">
-      <div class="step-num">3</div>
-      <div class="step-text">Ouverture à 50 nouveaux binômes (octobre-décembre 2026)</div>
-    </div>
-    <div class="step-item">
-      <div class="step-num">4</div>
-      <div class="step-text">Évaluation et ajustement avec la CGRR (janvier 2027)</div>
-    </div>
-  </div>
-  <div class="slide-number">8 / 10</div>
-  <div class="nav-hint">← → pour naviguer</div>
-</div>
-
-<!-- Slide 9: Partenariat CGRR -->
-<div class="slide">
-  <h2>Partenariat CGRR</h2>
-  <p style="font-size: 1.3rem; margin-bottom: 30px;">Cette plateforme est financée par la CGRR Agirc-Arrco.<br>Merci pour votre confiance et votre soutien au lien social en Guadeloupe.</p>
-  <div style="background: rgba(255,255,255,0.08); border-radius: 20px; padding: 40px; max-width: 700px; text-align: center; margin-top: 20px;">
-    <div style="font-size: 1.5rem; font-weight: 700; color: #e8d7fe; margin-bottom: 15px;">CGRR Agirc-Arrco</div>
-    <div style="font-size: 1.1rem; color: #c9a4e8;">Retraite complémentaire</div>
-    <div style="font-size: 1rem; color: #bbb; margin-top: 15px;">Financement de la phase de développement et de déploiement pilote</div>
-  </div>
-  <div class="slide-number">9 / 10</div>
-  <div class="nav-hint">← → pour naviguer</div>
-</div>
-
-<!-- Slide 10: Merci -->
-<div class="slide">
-  <h1 style="font-size: 5rem; margin-bottom: 30px;">Mèsi anpil !</h1>
-  <p class="subtitle">Merci beaucoup pour votre attention</p>
-  <div style="margin-top: 40px; text-align: center;">
-    <p style="font-size: 1.2rem; color: #c9a4e8;">liannaj a gran moun</p>
-    <p style="font-size: 1rem; color: #bbb; margin-top: 10px;">FEVES — Guadeloupe, 2026</p>
-  </div>
-  <div class="slide-number">10 / 10</div>
-  <div class="nav-hint">← → pour naviguer</div>
+  <h1 style="font-size: 4rem; margin-bottom: 20px;">Mèsi anpil !</h1>
+  <p style="font-size: 1.3rem; color: #c9a4e8; margin-bottom: 40px;">Merci à la CGRR Agirc-Arrco pour son soutien</p>
+  <p style="font-size: 1rem; color: #888;">liannaj a gran moun — FEVES — Guadeloupe, 2026</p>
+  <div class="slide-number">7 / 7</div>
+  <div class="nav-hint">→ ← ou clic pour naviguer</div>
 </div>
 
 <script>
   let current = 0;
   const slides = document.querySelectorAll('.slide');
-  
+
   function showSlide(n) {
     slides.forEach(s => s.classList.remove('active'));
     slides[n].classList.add('active');
   }
-  
+
   document.addEventListener('keydown', (e) => {
-    if (e.key === 'ArrowRight' || e.key === ' ') {
+    if (e.key === 'ArrowRight' || e.key === ' ' || e.key === 'PageDown') {
       current = Math.min(current + 1, slides.length - 1);
       showSlide(current);
-    } else if (e.key === 'ArrowLeft') {
+    } else if (e.key === 'ArrowLeft' || e.key === 'PageUp') {
       current = Math.max(current - 1, 0);
       showSlide(current);
-    } else if (e.key === 'Escape') {
-      document.exitFullscreen?.();
     }
   });
-  
+
   document.addEventListener('click', (e) => {
-    if (e.clientX > window.innerWidth / 2) {
-      current = Math.min(current + 1, slides.length - 1);
-    } else {
-      current = Math.max(current - 1, 0);
+    if (e.target.tagName === 'IMG' || e.target.closest('.slide') === slides[current]) {
+      if (e.clientX > window.innerWidth / 2) {
+        current = Math.min(current + 1, slides.length - 1);
+      } else {
+        current = Math.max(current - 1, 0);
+      }
+      showSlide(current);
     }
-    showSlide(current);
   });
 </script>
 </body>
