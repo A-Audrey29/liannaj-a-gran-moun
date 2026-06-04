@@ -707,6 +707,7 @@ function CadrageTab() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/relations/pending-meeting"] });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/relations"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/relations"] });
       setDialogOpen(false);
       setSelectedRelation(null);
       setFormData({ scheduledDate: "", durationMinutes: 120, location: "", tasks: "" });
