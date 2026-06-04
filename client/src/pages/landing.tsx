@@ -132,7 +132,10 @@ export default function Landing() {
               Les mots font leur chemin — un espace pour échanger en confiance.
             </p>
             <p className="text-muted-foreground">
-              Lorem ipsum dolor sit amet. Cum ducimus opta sed quo nihil est praesentium galisum qui fugit aperiam et exercitationem quas est accusamus.
+              Un espace personnel sur la plateforme, propre à chaque utilisateur.
+              L'aîné est accompagné par un aidant familial ou une personne de confiance.
+              Le jeune est suivi par son enseignant référent.
+              Un tuteur-modérateur assure la supervision, en ligne et en présentiel.
             </p>
           </div>
         </div>

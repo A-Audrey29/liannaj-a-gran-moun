@@ -1107,6 +1107,37 @@ export async function registerRoutes(
     }
   });
 
+  app.patch("/api/admin/relations/:id/advance", requireAdmin, async (req, res) => {
+    try {
+      const relation = await storage.getRelation(req.params.id);
+      if (!relation) return res.status(404).json({ message: "Relation non trouvée" });
+      if (relation.status !== "PENDING") {
+        return res.status(400).json({ message: "Seules les relations en attente peuvent être avancées" });
+      }
+      const updated = await storage.updateRelationStatus(relation.id, "PENDING_FIRST_MEETING");
+
+      await storage.createNotification({
+        user: { connect: { id: relation.seniorId } },
+        type: "RELATION_REQUEST",
+        title: "Demande acceptée",
+        message: "Un administrateur FEVES a validé l'accord du jeune. La première rencontre va être organisée.",
+        link: `/relations/${relation.id}`,
+      });
+      await storage.createNotification({
+        user: { connect: { id: relation.juniorId } },
+        type: "RELATION_REQUEST",
+        title: "Relation confirmée",
+        message: "Un administrateur FEVES a confirmé votre participation. La première rencontre va être organisée.",
+        link: `/relations/${relation.id}`,
+      });
+
+      res.json(updated);
+    } catch (err) {
+      console.error("[ADMIN_ADVANCE_RELATION] Error:", err);
+      res.status(500).json({ message: "Erreur" });
+    }
+  });
+
   app.get("/api/admin/relations/pending-meeting", requireAdmin, async (_req, res) => {
     try {
       const relations = await storage.getAllRelationsByStatus("PENDING_FIRST_MEETING");

@@ -14,7 +14,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import StatusBadge from "@/components/status-badge";
 import StarRating from "@/components/star-rating";
-import { ArrowLeft, Calendar, Clock, MapPin, Plus, Check, X, Mail } from "lucide-react";
+import { ArrowLeft, Calendar, Clock, MapPin, Plus, Check, X, Mail, CheckCheck } from "lucide-react";
 import { useState } from "react";
 import { getPhotoUrl } from "@/lib/photo-url";
 import type { Relation, User as UserType, Intervention } from "@shared/schema";
@@ -42,6 +42,43 @@ function ParticipantCard({ user: u, label }: { user: UserType; label: string }) 
         {u.desiredActivity && <p className="text-xs text-muted-foreground mt-1 italic">"{u.desiredActivity}"</p>}
       </div>
     </div>
+  );
+}
+
+function AdvanceButton({ relationId, seniorName, juniorName }: { relationId: string; seniorName: string; juniorName: string }) {
+  const { toast } = useToast();
+  const advanceMut = useMutation({
+    mutationFn: () => apiRequest("PATCH", `/api/admin/relations/${relationId}/advance`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/relations", relationId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/relations"] });
+      toast({ title: "Relation avancée", description: "La relation est maintenant en attente de cadrage." });
+    },
+    onError: () => toast({ title: "Erreur", variant: "destructive" }),
+  });
+
+  return (
+    <AlertDialog>
+      <AlertDialogTrigger asChild>
+        <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-white" data-testid="button-advance-relation">
+          <CheckCheck className="w-3.5 h-3.5 mr-1.5" /> Valider l'accord du jeune
+        </Button>
+      </AlertDialogTrigger>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Valider l'accord du jeune ?</AlertDialogTitle>
+          <AlertDialogDescription>
+            Vous confirmez que <strong>{juniorName}</strong> a accepté la demande de <strong>{seniorName}</strong> (accord verbal, téléphone, en personne). La relation passera en phase de cadrage pour organiser la 1ère rencontre.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Annuler</AlertDialogCancel>
+          <AlertDialogAction onClick={() => advanceMut.mutate()} className="bg-emerald-600 hover:bg-emerald-700" disabled={advanceMut.isPending}>
+            Confirmer
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   );
 }
 
@@ -94,6 +131,7 @@ export default function RelationDetail() {
   const isJunior = relation.juniorId === user?.id;
   const canPropose = isSenior && relation.status === "ACTIVE";
   const canProposeFirst = isAdmin && relation.status === "PENDING_FIRST_MEETING";
+  const canAdvance = isAdmin && relation.status === "PENDING";
   const sortedInterventions = [...relation.interventions].sort((a, b) => new Date(b.scheduledDate).getTime() - new Date(a.scheduledDate).getTime());
 
   return (
@@ -105,10 +143,18 @@ export default function RelationDetail() {
       {isAdmin ? (
         <Card className="rounded-2xl border-0 shadow-sm mb-6">
           <CardContent className="py-6">
-            <div className="flex items-center gap-2 mb-4">
-              <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Statut relation :</span>
-              <StatusBadge status={relation.status} />
+            <div className="flex items-center justify-between gap-2 mb-4 flex-wrap">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Statut relation :</span>
+                <StatusBadge status={relation.status} />
+              </div>
+              {canAdvance && <AdvanceButton relationId={relation.id} seniorName={relation.senior.firstName} juniorName={relation.junior.firstName} />}
             </div>
+            {canAdvance && (
+              <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-4">
+                Le jeune n'a pas encore accepté via l'application. Si l'accord a été obtenu autrement (téléphone, en personne), vous pouvez valider manuellement.
+              </p>
+            )}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <ParticipantCard user={relation.senior} label="Sénior" />
               <ParticipantCard user={relation.junior} label="Jeune" />

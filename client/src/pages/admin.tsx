@@ -65,6 +65,7 @@ import {
   Flag,
   RefreshCw,
   AlertTriangle,
+  CheckCheck,
 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import type { User, Relation, Intervention, PaymentRecord, Notification } from "@shared/schema";
@@ -459,6 +460,52 @@ function UsersTab() {
 
 // ==================== RELATIONS ====================
 
+function AdvanceRelationButton({ relationId, seniorName, juniorName }: { relationId: string; seniorName: string; juniorName: string }) {
+  const { toast } = useToast();
+  const advanceMut = useMutation({
+    mutationFn: () => apiRequest("PATCH", `/api/admin/relations/${relationId}/advance`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/relations"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/relations/pending-meeting"] });
+      toast({ title: "Relation avancée", description: "La relation est maintenant en attente de cadrage." });
+    },
+    onError: () => toast({ title: "Erreur", variant: "destructive" }),
+  });
+
+  return (
+    <AlertDialog>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <AlertDialogTrigger asChild>
+            <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-white" data-testid={`btn-advance-relation-${relationId}`}>
+              <CheckCheck className="w-3.5 h-3.5 mr-1" /> Valider l'accord
+            </Button>
+          </AlertDialogTrigger>
+        </TooltipTrigger>
+        <TooltipContent>Le jeune a accepté verbalement — passer en cadrage</TooltipContent>
+      </Tooltip>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Valider l'accord du jeune ?</AlertDialogTitle>
+          <AlertDialogDescription>
+            Vous confirmez que <strong>{juniorName}</strong> a accepté la demande de <strong>{seniorName}</strong> (accord verbal, téléphone, etc.). La relation passera en phase de cadrage pour organiser la 1ère rencontre.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Annuler</AlertDialogCancel>
+          <AlertDialogAction
+            onClick={() => advanceMut.mutate()}
+            className="bg-emerald-600 hover:bg-emerald-700"
+            disabled={advanceMut.isPending}
+          >
+            Confirmer
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+}
+
 function RelationsTab() {
   const { toast } = useToast();
   const [, navigate] = useLocation();
@@ -584,6 +631,9 @@ function RelationsTab() {
             >
               <Eye className="w-3.5 h-3.5 mr-1" />Voir
             </Button>
+            {r.status === "PENDING" && (
+              <AdvanceRelationButton relationId={r.id} seniorName={r.senior.firstName} juniorName={r.junior.firstName} />
+            )}
             {r.status !== "CLOSED" && (
               <AlertDialog>
                 <Tooltip>
