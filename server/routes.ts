@@ -1576,5 +1576,164 @@ export async function registerRoutes(
     }
   });
 
+  // ==================== ADMIN — RÉFÉRENTS SÉNIORS ====================
+
+  app.get("/api/admin/seniors/active", requireAdmin, async (_req, res) => {
+    try {
+      const seniors = await storage.getSeniorsByStatus("ACTIVE");
+      res.json(seniors.map(sanitizeUser));
+    } catch (err) {
+      res.status(500).json({ message: "Erreur" });
+    }
+  });
+
+  app.post("/api/admin/referents", requireAdmin, async (req, res) => {
+    try {
+      const { createReferentSchema } = await import("../shared/schema");
+      const parsed = createReferentSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: "Données invalides", errors: parsed.error.flatten().fieldErrors });
+      }
+      const { email, password, firstName, lastName, linkedSeniorId, phone } = parsed.data;
+
+      const existing = await storage.getUserByEmail(email.toLowerCase().trim());
+      if (existing) return res.status(409).json({ message: "Cet email est déjà utilisé" });
+
+      const senior = await storage.getUser(linkedSeniorId);
+      if (!senior || senior.role !== "SENIOR") return res.status(400).json({ message: "Sénior invalide" });
+
+      const hashedPassword = await bcrypt.hash(password, 10);
+      const referent = await storage.createUser({
+        email: email.toLowerCase().trim(),
+        password: hashedPassword,
+        firstName,
+        lastName,
+        role: "REFERENT_SENIOR",
+        status: "ACTIVE",
+        phone: phone || null,
+        linkedSeniorId,
+        profilePhoto: `https://ui-avatars.com/api/?name=${encodeURIComponent(firstName + "+" + lastName)}&background=8b5cf6&color=fff&size=200`,
+      });
+
+      res.status(201).json(sanitizeUser(referent));
+    } catch (err) {
+      console.error("[ADMIN_CREATE_REFERENT] Error:", err);
+      res.status(500).json({ message: "Erreur lors de la création du référent" });
+    }
+  });
+
+  // ==================== RÉFÉRENT SÉNIOR ====================
+
+  function requireReferent(req: any, res: any, next: any) {
+    if (!req.isAuthenticated()) return res.status(401).json({ message: "Non authentifié" });
+    if (req.user?.role !== "REFERENT_SENIOR") return res.status(403).json({ message: "Accès réservé aux référents séniors" });
+    next();
+  }
+
+  app.get("/api/referent/senior", requireReferent, async (req, res) => {
+    try {
+      const linkedSeniorId = (req.user as any).linkedSeniorId;
+      if (!linkedSeniorId) return res.status(404).json({ message: "Aucun sénior lié" });
+      const senior = await storage.getUser(linkedSeniorId);
+      if (!senior) return res.status(404).json({ message: "Sénior non trouvé" });
+      res.json(sanitizeUserPublic(senior));
+    } catch (err) {
+      res.status(500).json({ message: "Erreur" });
+    }
+  });
+
+  app.get("/api/referent/relations", requireReferent, async (req, res) => {
+    try {
+      const linkedSeniorId = (req.user as any).linkedSeniorId;
+      if (!linkedSeniorId) return res.status(404).json({ message: "Aucun sénior lié" });
+      const relations = await storage.getRelationsBySeniorId(linkedSeniorId);
+      res.json(relations.map((r) => ({
+        ...r,
+        senior: sanitizeUserPublic(r.senior),
+        junior: sanitizeUserPublic(r.junior),
+      })));
+    } catch (err) {
+      console.error("[REFERENT_RELATIONS] Error:", err);
+      res.status(500).json({ message: "Erreur" });
+    }
+  });
+
+  app.post("/api/referent/interventions", requireReferent, async (req, res) => {
+    try {
+      const { referentInterventionSchema } = await import("../shared/schema");
+      const parsed = referentInterventionSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: "Données invalides", errors: parsed.error.flatten().fieldErrors });
+      }
+
+      const linkedSeniorId = (req.user as any).linkedSeniorId;
+      if (!linkedSeniorId) return res.status(403).json({ message: "Aucun sénior lié" });
+
+      const relation = await storage.getRelationWithUsers(parsed.data.relationId);
+      if (!relation) return res.status(404).json({ message: "Relation non trouvée" });
+      if (relation.seniorId !== linkedSeniorId) return res.status(403).json({ message: "Cette relation n'appartient pas à votre sénior" });
+      if (relation.status !== "ACTIVE") return res.status(400).json({ message: "La relation doit être active pour planifier une intervention" });
+
+      const intervention = await storage.createIntervention({
+        relationId: parsed.data.relationId,
+        scheduledDate: new Date(parsed.data.scheduledDate),
+        durationMinutes: parsed.data.durationMinutes,
+        location: parsed.data.location,
+        tasks: parsed.data.tasks,
+      });
+
+      const referentUser = req.user as any;
+      const senderName = `${referentUser.firstName} ${referentUser.lastName} (référent de ${relation.senior.firstName} ${relation.senior.lastName})`;
+      await storage.createNotification({
+        user: { connect: { id: relation.juniorId } },
+        type: "INTERVENTION_PROPOSED",
+        title: "Nouvelle intervention proposée",
+        message: `${senderName} propose une intervention le ${new Date(parsed.data.scheduledDate).toLocaleDateString("fr-FR")}.`,
+        link: null,
+      });
+      sendSSEEvent(relation.juniorId, "invalidate", { queryKey: ["/api/relations"] });
+
+      res.status(201).json(intervention);
+    } catch (err) {
+      console.error("[REFERENT_INTERVENTION] Error:", err);
+      res.status(500).json({ message: "Erreur lors de la création de l'intervention" });
+    }
+  });
+
+  app.post("/api/referent/contact-admin", requireReferent, async (req, res) => {
+    try {
+      const { referentContactSchema } = await import("../shared/schema");
+      const parsed = referentContactSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: "Données invalides", errors: parsed.error.flatten().fieldErrors });
+      }
+
+      const user = req.user as any;
+      const { subject, message } = parsed.data;
+
+      await storage.createReport({
+        reporterId: user.id,
+        reason: "OTHER",
+        message: `[Contact référent — ${subject}]\n\n${message}`,
+      });
+
+      const admins = await storage.getAdmins();
+      const senderName = `${user.firstName} ${user.lastName}`;
+      const baseUrl = process.env.BASE_URL || getBaseUrl(req);
+      for (const admin of admins) {
+        sendEmail({
+          to: admin.email,
+          subject: `FEVES — Message du référent sénior ${senderName} : ${subject}`,
+          htmlContent: `<h2 style="color:#8b5cf6">Message du référent sénior</h2><p><strong>De :</strong> ${senderName} (${user.email})</p><p><strong>Sujet :</strong> ${subject}</p><hr><p>${message.replace(/\n/g, "<br>")}</p><hr><p><a href="${baseUrl}/admin">Voir dans l'espace admin</a></p>`,
+        }).catch(console.error);
+      }
+
+      res.json({ message: "Votre message a été envoyé à l'équipe FEVES." });
+    } catch (err) {
+      console.error("[REFERENT_CONTACT] Error:", err);
+      res.status(500).json({ message: "Erreur lors de l'envoi du message" });
+    }
+  });
+
   return httpServer;
 }

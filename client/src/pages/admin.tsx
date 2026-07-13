@@ -88,6 +88,7 @@ const ADMIN_TABS = [
   { id: "notifications", label: "Notifications", icon: Bell },
   { id: "mon-compte", label: "Mon compte", icon: UserCog },
   { id: "creer-admin", label: "Créer un admin", icon: UserPlus },
+  { id: "creer-referent", label: "Créer un référent", icon: Users },
 ] as const;
 
 const STATUS_COLORS: Record<string, string> = {
@@ -128,6 +129,7 @@ const ROLE_COLORS: Record<string, string> = {
   ADMIN: "bg-purple-100 text-purple-800",
   SENIOR: "bg-blue-100 text-blue-800",
   JUNIOR: "bg-teal-100 text-teal-800",
+  REFERENT_SENIOR: "bg-violet-100 text-violet-800",
 };
 
 function formatDate(d: string | Date) {
@@ -1651,6 +1653,141 @@ function CreerAdminTab() {
   );
 }
 
+// ==================== CRÉER RÉFÉRENT TAB ====================
+
+function CreerReferentTab() {
+  const { toast } = useToast();
+  const [formData, setFormData] = useState({
+    email: "",
+    password: "",
+    firstName: "",
+    lastName: "",
+    phone: "",
+    linkedSeniorId: "",
+  });
+
+  const { data: seniors = [], isLoading: seniorsLoading } = useQuery<SafeUser[]>({
+    queryKey: ["/api/admin/seniors/active"],
+    staleTime: 0,
+  });
+
+  const createMut = useMutation({
+    mutationFn: (data: typeof formData) => apiRequest("POST", "/api/admin/referents", data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
+      setFormData({ email: "", password: "", firstName: "", lastName: "", phone: "", linkedSeniorId: "" });
+      toast({ title: "Compte référent créé avec succès" });
+    },
+    onError: async (err: any) => {
+      const msg = err.message?.includes("409") ? "Cet email est déjà utilisé" : "Erreur lors de la création";
+      toast({ title: "Erreur", description: msg, variant: "destructive" });
+    },
+  });
+
+  function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!formData.email || !formData.password || !formData.firstName || !formData.lastName || !formData.linkedSeniorId) return;
+    if (formData.password.length < 6) {
+      toast({ title: "Erreur", description: "Le mot de passe doit faire au moins 6 caractères", variant: "destructive" });
+      return;
+    }
+    createMut.mutate(formData);
+  }
+
+  return (
+    <div className="max-w-md">
+      <h3 className="text-lg font-semibold mb-1">Créer un compte référent sénior</h3>
+      <p className="text-sm text-muted-foreground mb-4">
+        Le référent peut suivre les demandes du sénior lié, demander des prestations et contacter l'équipe.
+        Le compte est immédiatement actif, aucune validation par email n'est nécessaire.
+      </p>
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <div>
+          <Label htmlFor="ref-senior">Sénior lié <span className="text-destructive">*</span></Label>
+          <Select
+            value={formData.linkedSeniorId}
+            onValueChange={(v) => setFormData({ ...formData, linkedSeniorId: v })}
+          >
+            <SelectTrigger id="ref-senior" data-testid="select-ref-senior">
+              <SelectValue placeholder={seniorsLoading ? "Chargement..." : "Choisir un sénior..."} />
+            </SelectTrigger>
+            <SelectContent>
+              {seniors.filter((u) => u.role === "SENIOR").map((s) => (
+                <SelectItem key={s.id} value={s.id} data-testid={`option-senior-${s.id}`}>
+                  {s.firstName} {s.lastName} — {s.city || "sans ville"}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <Label htmlFor="ref-firstname">Prénom <span className="text-destructive">*</span></Label>
+            <Input
+              id="ref-firstname"
+              value={formData.firstName}
+              onChange={(e) => setFormData({ ...formData, firstName: e.target.value })}
+              required
+              data-testid="input-ref-firstname"
+            />
+          </div>
+          <div>
+            <Label htmlFor="ref-lastname">Nom <span className="text-destructive">*</span></Label>
+            <Input
+              id="ref-lastname"
+              value={formData.lastName}
+              onChange={(e) => setFormData({ ...formData, lastName: e.target.value })}
+              required
+              data-testid="input-ref-lastname"
+            />
+          </div>
+        </div>
+        <div>
+          <Label htmlFor="ref-email">Email <span className="text-destructive">*</span></Label>
+          <Input
+            id="ref-email"
+            type="email"
+            value={formData.email}
+            onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+            required
+            data-testid="input-ref-email"
+          />
+        </div>
+        <div>
+          <Label htmlFor="ref-phone">Téléphone</Label>
+          <Input
+            id="ref-phone"
+            value={formData.phone}
+            onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+            placeholder="0690..."
+            data-testid="input-ref-phone"
+          />
+        </div>
+        <div>
+          <Label htmlFor="ref-password">Mot de passe <span className="text-destructive">*</span></Label>
+          <Input
+            id="ref-password"
+            type="password"
+            value={formData.password}
+            onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+            required
+            data-testid="input-ref-password"
+          />
+        </div>
+        <Button
+          type="submit"
+          className="bg-[#8b5cf6] hover:bg-[#7c3aed]"
+          disabled={createMut.isPending || !formData.linkedSeniorId}
+          data-testid="btn-create-referent"
+        >
+          {createMut.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <UserPlus className="w-4 h-4 mr-1" />}
+          Créer le compte référent
+        </Button>
+      </form>
+    </div>
+  );
+}
+
 // ==================== SIGNALEMENTS TAB ====================
 
 type ReportWithUsers = {
@@ -1926,6 +2063,7 @@ export default function Admin() {
       {activeTab === "notifications" && <NotificationsAdminTab />}
       {activeTab === "mon-compte" && <MonCompteTab />}
       {activeTab === "creer-admin" && <CreerAdminTab />}
+      {activeTab === "creer-referent" && <CreerReferentTab />}
     </div>
   );
 }

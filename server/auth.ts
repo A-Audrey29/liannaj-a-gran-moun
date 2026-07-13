@@ -32,6 +32,7 @@ declare global {
       referentEmail: string | null;
       trustedPersonName: string | null;
       trustedPersonEmail: string | null;
+      linkedSeniorId: string | null;
       profilePhoto: string | null;
     }
   }
@@ -59,6 +60,7 @@ function mapUserToSession(user: any): Express.User {
     referentEmail: user.referentEmail,
     trustedPersonName: user.trustedPersonName,
     trustedPersonEmail: user.trustedPersonEmail,
+    linkedSeniorId: user.linkedSeniorId ?? null,
     profilePhoto: user.profilePhoto,
   };
 }

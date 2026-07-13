@@ -16,6 +16,7 @@ import ValidationError from "@/pages/validation-error";
 import RelationDetail from "@/pages/relation-detail";
 import Notifications from "@/pages/notifications";
 import NotFound from "@/pages/not-found";
+import ReferentHome from "@/pages/referent";
 import { useAuth } from "@/hooks/use-auth";
 
 function AdminGuard({ children }: { children: React.ReactNode }) {
@@ -40,6 +41,9 @@ function Router() {
         <Route path="/registration-pending" component={RegistrationPending} />
         <Route path="/validation-success" component={ValidationSuccess} />
         <Route path="/validation-error" component={ValidationError} />
+        <Route path="/espace-referent">
+          <AuthGuard><ReferentHome /></AuthGuard>
+        </Route>
         <Route path="/notifications">
           <AuthGuard><Notifications /></AuthGuard>
         </Route>

@@ -74,6 +74,8 @@ export interface IStorage {
   updateReportStatus(id: string, status: string, handledNote: string): Promise<Report>;
 
   getAdmins(): Promise<User[]>;
+  getRelationsBySeniorId(seniorId: string): Promise<(Relation & { senior: User; junior: User; interventions: Intervention[] })[]>;
+  getSeniorsByStatus(status: string): Promise<User[]>;
 }
 
 class DatabaseStorage implements IStorage {
@@ -643,6 +645,21 @@ class DatabaseStorage implements IStorage {
 
   async getAdmins(): Promise<User[]> {
     return prisma.user.findMany({ where: { role: "ADMIN", status: "ACTIVE" } });
+  }
+
+  async getRelationsBySeniorId(seniorId: string): Promise<(Relation & { senior: User; junior: User; interventions: Intervention[] })[]> {
+    return prisma.relation.findMany({
+      where: { seniorId },
+      include: { senior: true, junior: true, interventions: { orderBy: { scheduledDate: "desc" } } },
+      orderBy: { createdAt: "desc" },
+    });
+  }
+
+  async getSeniorsByStatus(status: string): Promise<User[]> {
+    return prisma.user.findMany({
+      where: { role: "SENIOR", status: status as any },
+      orderBy: [{ lastName: "asc" }, { firstName: "asc" }],
+    });
   }
 }
 

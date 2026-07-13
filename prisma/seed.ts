@@ -572,8 +572,23 @@ async function main() {
     ],
   });
 
+  await prisma.user.create({
+    data: {
+      email: "referent@test.fr",
+      password: hashedPassword,
+      role: "REFERENT_SENIOR",
+      status: "ACTIVE",
+      firstName: "Monique",
+      lastName: "Dupont",
+      phone: "0690020202",
+      linkedSeniorId: senior1.id,
+      profilePhoto: "https://ui-avatars.com/api/?name=Monique+Dupont&background=8b5cf6&color=fff&size=200",
+    },
+  });
+
   console.log("✅ Seed complet (Guadeloupe) :");
   console.log("   - 1 Admin (Pointe-à-Pitre)");
+  console.log("   - 1 Référent sénior : referent@test.fr (lié à Jean Dupont)");
   console.log("   - 6 Seniors : 5 actifs (Les Abymes) + 1 pending (Pointe-à-Pitre)");
   console.log("   - 6 Juniors actifs (Les Abymes)");
   console.log("   - 6 Catégories : Bricolage, Jardinage, Informatique, Cuisine, Lecture, Promenade");

@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export type Role = "ADMIN" | "SENIOR" | "JUNIOR";
+export type Role = "ADMIN" | "SENIOR" | "JUNIOR" | "REFERENT_SENIOR";
 export type UserStatus = "PENDING_VALIDATION" | "ACTIVE" | "SUSPENDED" | "BANNED";
 export type RelationStatus = "PENDING" | "PENDING_FIRST_MEETING" | "ACTIVE" | "PAUSED" | "CLOSED";
 export type InterventionStatus = "PROPOSED" | "CONFIRMED" | "CANCELLED" | "DONE" | "COMPLETED_PENDING_FEEDBACK" | "COMPLETED";
@@ -28,6 +28,7 @@ export interface User {
   referentEmail: string | null;
   trustedPersonName: string | null;
   trustedPersonEmail: string | null;
+  linkedSeniorId: string | null;
   validatorEmail: string | null;
   validationToken: string | null;
   validationExpiry: Date | null;
@@ -220,6 +221,32 @@ export const createAdminSchema = z.object({
   firstName: z.string().min(1, "Prénom requis"),
   lastName: z.string().min(1, "Nom requis"),
 });
+
+export const createReferentSchema = z.object({
+  email: z.string().email("Email invalide"),
+  password: z.string().min(6, "Le mot de passe doit faire au moins 6 caractères"),
+  firstName: z.string().min(1, "Prénom requis"),
+  lastName: z.string().min(1, "Nom requis"),
+  linkedSeniorId: z.string().min(1, "Sénior lié requis"),
+  phone: z.preprocess((val) => (val === "" ? undefined : val), z.string().optional()),
+});
+
+export const referentInterventionSchema = z.object({
+  relationId: z.string().min(1, "Relation requise"),
+  scheduledDate: z.string().min(1, "Date requise"),
+  durationMinutes: z.number().min(30).max(480).default(120),
+  location: z.string().optional(),
+  tasks: z.array(z.string()).default([]),
+});
+
+export const referentContactSchema = z.object({
+  subject: z.string().min(1, "Sujet requis").max(200),
+  message: z.string().min(10, "Message trop court").max(2000),
+});
+
+export type CreateReferentInput = z.infer<typeof createReferentSchema>;
+export type ReferentInterventionInput = z.infer<typeof referentInterventionSchema>;
+export type ReferentContactInput = z.infer<typeof referentContactSchema>;
 
 export type ReportReason = "PERSON" | "QUESTION" | "OTHER";
 export type ReportStatus = "OPEN" | "HANDLED";

@@ -11,6 +11,7 @@ enum Role {
   ADMIN
   SENIOR
   JUNIOR
+  REFERENT_SENIOR
 }
 
 enum UserStatus {
@@ -72,6 +73,10 @@ model User {
 
   trustedPersonName   String?
   trustedPersonEmail  String?
+
+  linkedSeniorId      String?
+  linkedSenior        User?      @relation("ReferentSeniorLink", fields: [linkedSeniorId], references: [id], onDelete: SetNull)
+  referentAccounts    User[]     @relation("ReferentSeniorLink")
 
   validatorEmail      String?
   validationToken     String?    @unique

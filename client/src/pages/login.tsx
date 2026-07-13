@@ -37,7 +37,8 @@ export default function LoginPage() {
     },
     onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
-      setLocation(data?.user?.role === "ADMIN" ? "/admin" : "/mon-espace");
+      const role = data?.user?.role;
+      setLocation(role === "ADMIN" ? "/admin" : role === "REFERENT_SENIOR" ? "/espace-referent" : "/mon-espace");
     },
     onError: (error: Error) => {
       const message = error.message || "";
@@ -158,6 +159,7 @@ export default function LoginPage() {
             { label: "Admin", email: "admin@feves.fr" },
             { label: "Senior", email: "senior@test.fr" },
             { label: "Jeune", email: "junior@test.fr" },
+            { label: "Référent", email: "referent@test.fr" },
           ].map((account) => (
             <button
               key={account.email}
