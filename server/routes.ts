@@ -76,6 +76,9 @@ function sanitizeUserPublic(user: any) {
 
 const isDev = process.env.NODE_ENV !== "production";
 
+// Durée de validité du lien de validation d'inscription (7 jours).
+const VALIDATION_TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+
 const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   limit: isDev ? 1000 : 10,
@@ -140,6 +143,7 @@ export async function registerRoutes(
 
       const hashedPassword = await bcrypt.hash(data.password, 10);
       const validationToken = crypto.randomUUID();
+      const validationExpiry = new Date(Date.now() + VALIDATION_TOKEN_TTL_MS);
 
       const { categoryIds, birthDate, ...userData } = data;
 
@@ -153,6 +157,7 @@ export async function registerRoutes(
         status: "PENDING_VALIDATION",
         role: userData.role,
         validationToken,
+        validationExpiry,
         ...(profilePhoto ? { profilePhoto } : {}),
       });
 
@@ -421,26 +426,50 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/validate", async (req, res) => {
+  // GET = simple redirection vers la page de confirmation côté client, SANS
+  // effet de bord. Indispensable : les scanners antivirus / proxys de messagerie
+  // préchargent les liens des emails ; si ce GET validait le compte, le token
+  // serait consommé avant que le référent ne clique → inscription cassée.
+  // La validation réelle se fait via POST /api/validate (action humaine).
+  app.get("/api/validate", (req, res) => {
+    const token = typeof req.query.token === "string" ? req.query.token : "";
+    if (!token) {
+      return res.redirect("/validation-error?reason=invalid");
+    }
+    return res.redirect(`/validate?token=${encodeURIComponent(token)}`);
+  });
+
+  app.post("/api/validate", async (req, res) => {
     try {
-      const token = req.query.token as string;
+      const token = typeof req.body.token === "string" ? req.body.token : "";
       if (!token) {
-        return res.redirect("/validation-error?reason=invalid");
+        return res.status(400).json({ message: "Token manquant", reason: "invalid" });
       }
 
       const user = await storage.getUserByValidationToken(token);
       if (!user) {
-        return res.redirect("/validation-error?reason=invalid");
+        return res.status(404).json({ message: "Lien invalide ou déjà utilisé", reason: "invalid" });
+      }
+
+      // Déjà validé (token consommé mais utilisateur actif) : idempotent.
+      if (user.status === "ACTIVE") {
+        return res.json({ message: "Compte déjà validé" });
+      }
+
+      if (user.validationExpiry && user.validationExpiry.getTime() < Date.now()) {
+        return res.status(410).json({ message: "Lien expiré", reason: "expired" });
       }
 
       await storage.updateUser(user.id, {
         status: "ACTIVE",
         validationToken: null,
+        validationExpiry: null,
       });
 
-      return res.redirect("/validation-success");
+      return res.json({ message: "Compte validé" });
     } catch (err) {
-      return res.redirect("/validation-error?reason=invalid");
+      console.error("[VALIDATE] Error:", err);
+      return res.status(500).json({ message: "Erreur lors de la validation", reason: "invalid" });
     }
   });
 
@@ -481,6 +510,7 @@ export async function registerRoutes(
 
         await storage.updateUser(user.id, {
           validationToken: newToken,
+          validationExpiry: new Date(Date.now() + VALIDATION_TOKEN_TTL_MS),
         });
 
         const baseUrl = process.env.BASE_URL || `${req.protocol}://${req.get("host")}`;
@@ -1055,7 +1085,7 @@ export async function registerRoutes(
       if (user.status !== "PENDING_VALIDATION") {
         return res.status(400).json({ message: "Cet utilisateur n'est pas en attente de validation" });
       }
-      const updated = await storage.updateUser(user.id, { status: "ACTIVE", validationToken: null });
+      const updated = await storage.updateUser(user.id, { status: "ACTIVE", validationToken: null, validationExpiry: null });
       res.json(sanitizeUser(updated));
     } catch (err) {
       console.error("[ADMIN_VALIDATE] Error:", err);
