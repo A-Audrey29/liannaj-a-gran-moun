@@ -1,3 +1,4 @@
+import "dotenv/config";
 import express, { type Request, Response, NextFunction } from "express";
 import helmet from "helmet";
 import { registerRoutes } from "./routes";
@@ -8,6 +9,15 @@ import { checkAndSendFeedbackReminders } from "./lib/feedback-reminder";
 
 const app = express();
 const httpServer = createServer(app);
+
+// Render (comme la plupart des PaaS) place l'app derrière un reverse proxy qui
+// termine le TLS et réécrit l'IP source. Sans "trust proxy", Express ignore les
+// en-têtes X-Forwarded-* : req.protocol reste "http" (→ le cookie de session
+// `secure` n'est jamais posé → login cassé en prod) et req.ip vaut l'IP du proxy
+// (→ le rate limiter partage un seul seau entre tous les clients).
+// Valeur `1` = on ne fait confiance qu'à UN seul hop (le proxy Render). `true`
+// ferait confiance à tout X-Forwarded-For, spoofable → contournement du rate limit.
+app.set("trust proxy", 1);
 
 declare module "http" {
   interface IncomingMessage {
@@ -126,7 +136,6 @@ app.use((req, res, next) => {
     {
       port,
       host: "0.0.0.0",
-      reusePort: true,
     },
     () => {
       log(`serving on port ${port}`);
