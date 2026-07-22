@@ -11,6 +11,7 @@ import Admin from "@/pages/admin";
 import Login from "@/pages/login";
 import Register from "@/pages/register";
 import RegistrationPending from "@/pages/registration-pending";
+import Validate from "@/pages/validate";
 import ValidationSuccess from "@/pages/validation-success";
 import ValidationError from "@/pages/validation-error";
 import RelationDetail from "@/pages/relation-detail";
@@ -39,6 +40,7 @@ function Router() {
         <Route path="/login" component={Login} />
         <Route path="/register" component={Register} />
         <Route path="/registration-pending" component={RegistrationPending} />
+        <Route path="/validate" component={Validate} />
         <Route path="/validation-success" component={ValidationSuccess} />
         <Route path="/validation-error" component={ValidationError} />
         <Route path="/espace-referent">

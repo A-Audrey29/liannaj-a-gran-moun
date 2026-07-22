@@ -2,12 +2,11 @@ import { storage } from "../storage";
 import { sendEmail } from "./email";
 import { getFeedbackReminderEmailHtml } from "./email-templates";
 
+// Ce rappel tourne dans un cron (pas de req disponible), donc on ne peut pas
+// dériver l'URL depuis la requête comme getBaseUrl(req) ailleurs. On lit BASE_URL
+// (défini dans .env / la config Render), avec un fallback localhost pour le dev.
 function getAppBaseUrl(): string {
-  return process.env.REPLIT_DEPLOYMENT_URL
-    ? `https://${process.env.REPLIT_DEPLOYMENT_URL}`
-    : process.env.REPL_SLUG
-      ? `https://${process.env.REPL_SLUG}.${process.env.REPL_OWNER}.repl.co`
-      : "https://localhost:5000";
+  return process.env.BASE_URL || "http://localhost:5000";
 }
 
 export async function checkAndSendFeedbackReminders() {

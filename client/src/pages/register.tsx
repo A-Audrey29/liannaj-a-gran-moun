@@ -97,10 +97,14 @@ export default function Register() {
   const registerMutation = useMutation({
     mutationFn: async (data: RegisterForm) => {
       const { confirmPassword, ...payload } = data;
+      // validatorEmail est requis (string) côté backend ; trustedPersonEmail /
+      // referentEmail sont optionnels (string | undefined). Fallback "" pour
+      // rester typé string — un champ vide sera rejeté par la validation Zod
+      // serveur avec un message explicite.
       if (payload.role === "SENIOR") {
-        payload.validatorEmail = payload.trustedPersonEmail;
+        payload.validatorEmail = payload.trustedPersonEmail ?? "";
       } else {
-        payload.validatorEmail = payload.referentEmail;
+        payload.validatorEmail = payload.referentEmail ?? "";
       }
       const formData = new FormData();
       formData.append("data", JSON.stringify(payload));
