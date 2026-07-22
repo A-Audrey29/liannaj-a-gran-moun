@@ -1531,11 +1531,14 @@ export async function registerRoutes(
       const adminUrl = `${process.env.BASE_URL || ""}/admin`;
       const admins = await storage.getAdmins();
       for (const admin of admins) {
-        sendEmail(
-          admin.email,
-          "Nouveau signalement reçu - FEVES",
-          getNewReportEmailHtml(admin.firstName, reporterName, reason, message || null, adminUrl)
-        ).catch((err) => console.error("[REPORT_EMAIL] Error sending to admin:", err));
+        // sendEmail attend un objet { to, subject, htmlContent }. Auparavant
+        // appelé en positionnel → to/subject/htmlContent devenaient undefined →
+        // les admins ne recevaient jamais les signalements.
+        sendEmail({
+          to: admin.email,
+          subject: "Nouveau signalement reçu - FEVES",
+          htmlContent: getNewReportEmailHtml(admin.firstName, reporterName, reason, message || null, adminUrl),
+        }).catch((err) => console.error("[REPORT_EMAIL] Error sending to admin:", err));
       }
     } catch (err) {
       console.error("[REPORT_CREATE] Error:", err);
