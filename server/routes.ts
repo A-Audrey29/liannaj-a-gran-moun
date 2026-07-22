@@ -1614,7 +1614,8 @@ export async function registerRoutes(
         role: "REFERENT_SENIOR",
         status: "ACTIVE",
         phone: phone || null,
-        linkedSeniorId,
+        // UserCreateInput (checked) attend la relation, pas le scalar FK.
+        linkedSenior: { connect: { id: linkedSeniorId } },
         profilePhoto: `https://ui-avatars.com/api/?name=${encodeURIComponent(firstName + "+" + lastName)}&background=8b5cf6&color=fff&size=200`,
       });
 
