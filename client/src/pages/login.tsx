@@ -160,6 +160,7 @@ export default function LoginPage() {
             { label: "Senior", email: "senior@test.fr" },
             { label: "Jeune", email: "junior@test.fr" },
             { label: "Référent", email: "referent@test.fr" },
+            { label: "Professeur", email: "professeur@test.fr" },
           ].map((account) => (
             <button
               key={account.email}
