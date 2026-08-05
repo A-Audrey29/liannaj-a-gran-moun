@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import StarRating from "@/components/star-rating";
 import { Command, CommandInput, CommandList, CommandEmpty, CommandGroup, CommandItem } from "@/components/ui/command";
@@ -66,6 +67,9 @@ import {
   RefreshCw,
   AlertTriangle,
   CheckCheck,
+  GraduationCap,
+  Briefcase,
+  Building2,
 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import type { User, Relation, Intervention, PaymentRecord, Notification } from "@shared/schema";
@@ -86,9 +90,13 @@ const ADMIN_TABS = [
   { id: "paiements", label: "Paiements", icon: CreditCard },
   { id: "signalements", label: "Signalements", icon: Flag },
   { id: "notifications", label: "Notifications", icon: Bell },
+  { id: "professeurs", label: "Professeurs", icon: GraduationCap },
+  { id: "notes-profs", label: "Notes profs", icon: MessageSquare },
+  { id: "stages", label: "Stages", icon: Briefcase },
   { id: "mon-compte", label: "Mon compte", icon: UserCog },
   { id: "creer-admin", label: "Créer un admin", icon: UserPlus },
   { id: "creer-referent", label: "Créer un référent", icon: Users },
+  { id: "creer-professeur", label: "Créer un prof", icon: UserPlus },
 ] as const;
 
 const STATUS_COLORS: Record<string, string> = {
@@ -130,6 +138,7 @@ const ROLE_COLORS: Record<string, string> = {
   SENIOR: "bg-blue-100 text-blue-800",
   JUNIOR: "bg-teal-100 text-teal-800",
   REFERENT_SENIOR: "bg-violet-100 text-violet-800",
+  TEACHER: "bg-green-100 text-green-800",
 };
 
 function formatDate(d: string | Date) {
@@ -1985,6 +1994,410 @@ function SignalementsTab() {
   );
 }
 
+// ==================== PROFESSEURS TAB ====================
+
+type TeacherWithStudents = SafeUser & { students?: SafeUser[] };
+type InternshipWithStudent = { id: string; companyName: string; companyAddress: string | null; supervisorName: string | null; supervisorEmail: string | null; startDate: string; endDate: string | null; description: string | null; status: string; teacherNotes: string | null; createdAt: string; student: SafeUser };
+type CommentWithUsers = { id: string; content: string; createdAt: string; updatedAt: string; teacher: SafeUser; student: SafeUser };
+
+const INTERNSHIP_STATUS_LABELS: Record<string, string> = {
+  UPCOMING: "À venir",
+  ONGOING: "En cours",
+  COMPLETED: "Terminé",
+  CANCELLED: "Annulé",
+};
+
+const INTERNSHIP_STATUS_COLORS: Record<string, string> = {
+  UPCOMING: "bg-blue-100 text-blue-800",
+  ONGOING: "bg-green-100 text-green-800",
+  COMPLETED: "bg-gray-100 text-gray-600",
+  CANCELLED: "bg-red-100 text-red-700",
+};
+
+function ProfesseursTab() {
+  const { toast } = useToast();
+  const [selectedTeacher, setSelectedTeacher] = useState<SafeUser | null>(null);
+  const [assignStudentId, setAssignStudentId] = useState("");
+
+  const { data: teachers = [], refetch: refetchTeachers } = useQuery<SafeUser[]>({
+    queryKey: ["/api/admin/teachers"],
+  });
+  const { data: allUsers = [] } = useQuery<SafeUser[]>({ queryKey: ["/api/admin/users"] });
+  const juniors = allUsers.filter((u) => u.role === "JUNIOR" && u.status === "ACTIVE");
+
+  const { data: teacherStudents = [], refetch: refetchStudents } = useQuery<SafeUser[]>({
+    queryKey: [`/api/admin/teachers/${selectedTeacher?.id}/students`],
+    enabled: !!selectedTeacher,
+  });
+
+  const assignMut = useMutation({
+    mutationFn: () =>
+      apiRequest("POST", `/api/admin/teachers/${selectedTeacher!.id}/students`, { studentId: assignStudentId }),
+    onSuccess: () => {
+      refetchStudents();
+      setAssignStudentId("");
+      toast({ title: "Élève affilié" });
+    },
+    onError: async (err: any) => {
+      let msg = "Erreur";
+      try { const j = await err.response?.json?.(); msg = j?.message || msg; } catch {}
+      toast({ title: "Erreur", description: msg, variant: "destructive" });
+    },
+  });
+
+  const unassignMut = useMutation({
+    mutationFn: (studentId: string) =>
+      apiRequest("DELETE", `/api/admin/teachers/${selectedTeacher!.id}/students/${studentId}`),
+    onSuccess: () => {
+      refetchStudents();
+      toast({ title: "Liaison supprimée" });
+    },
+  });
+
+  if (teachers.length === 0) {
+    return (
+      <div className="text-center py-16 text-muted-foreground">
+        <GraduationCap className="w-10 h-10 mx-auto mb-3 opacity-30" />
+        <p>Aucun professeur créé.</p>
+        <p className="text-sm mt-1">Utilisez l'onglet "Créer un prof" pour en ajouter.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+        {teachers.map((t) => (
+          <Card
+            key={t.id}
+            className={`cursor-pointer transition-colors ${selectedTeacher?.id === t.id ? "border-green-500 bg-green-50" : "hover:border-green-300"}`}
+            onClick={() => setSelectedTeacher(t)}
+          >
+            <CardContent className="pt-4 pb-4">
+              <div className="flex items-center gap-3">
+                <img
+                  src={getPhotoUrl(t.profilePhoto)}
+                  alt={`${t.firstName} ${t.lastName}`}
+                  className="w-10 h-10 rounded-full object-cover"
+                />
+                <div>
+                  <p className="font-medium text-sm">{t.firstName} {t.lastName}</p>
+                  <p className="text-xs text-muted-foreground">{t.email}</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
+      {selectedTeacher && (
+        <Card>
+          <CardContent className="pt-5 space-y-4">
+            <h3 className="font-semibold">Élèves de {selectedTeacher.firstName} {selectedTeacher.lastName}</h3>
+
+            <div className="flex gap-2">
+              <Select value={assignStudentId} onValueChange={setAssignStudentId}>
+                <SelectTrigger className="flex-1">
+                  <SelectValue placeholder="Choisir un élève..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {juniors
+                    .filter((j) => !teacherStudents.some((s) => s.id === j.id))
+                    .map((j) => (
+                      <SelectItem key={j.id} value={j.id}>
+                        {j.firstName} {j.lastName}
+                      </SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
+              <Button
+                size="sm"
+                className="bg-green-600 hover:bg-green-700 shrink-0"
+                disabled={!assignStudentId || assignMut.isPending}
+                onClick={() => assignMut.mutate()}
+              >
+                {assignMut.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : "Affilier"}
+              </Button>
+            </div>
+
+            {teacherStudents.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-4">Aucun élève affilié.</p>
+            ) : (
+              <div className="space-y-2">
+                {teacherStudents.map((s: SafeUser) => (
+                  <div key={s.id} className="flex items-center justify-between p-2 rounded bg-muted/40">
+                    <div className="flex items-center gap-2">
+                      <img src={getPhotoUrl(s.profilePhoto)} alt="" className="w-8 h-8 rounded-full object-cover" />
+                      <div>
+                        <p className="text-sm font-medium">{s.firstName} {s.lastName}</p>
+                        {s.schoolName && <p className="text-xs text-muted-foreground">{s.schoolName}</p>}
+                      </div>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-destructive hover:text-destructive"
+                      onClick={() => unassignMut.mutate(s.id)}
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+    </div>
+  );
+}
+
+// ==================== NOTES PROFS TAB ====================
+
+function NotesProfTab() {
+  const { data: comments = [], isLoading } = useQuery<CommentWithUsers[]>({
+    queryKey: ["/api/admin/teacher-comments"],
+  });
+
+  const [filterTeacherId, setFilterTeacherId] = useState<string | null>(null);
+  const [filterStudentId, setFilterStudentId] = useState<string | null>(null);
+
+  const teachers = Array.from(new Map(comments.map((c) => [c.teacher.id, c.teacher])).values());
+  const students = Array.from(new Map(comments.map((c) => [c.student.id, c.student])).values());
+
+  const filtered = comments.filter(
+    (c) =>
+      (!filterTeacherId || c.teacher.id === filterTeacherId) &&
+      (!filterStudentId || c.student.id === filterStudentId)
+  );
+
+  if (isLoading) return <Skeleton className="h-40 w-full" />;
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap gap-3">
+        <Select value={filterTeacherId ?? "__all"} onValueChange={(v) => setFilterTeacherId(v === "__all" ? null : v)}>
+          <SelectTrigger className="w-48">
+            <SelectValue placeholder="Tous les professeurs" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="__all">Tous les professeurs</SelectItem>
+            {teachers.map((t) => (
+              <SelectItem key={t.id} value={t.id}>{t.firstName} {t.lastName}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select value={filterStudentId ?? "__all"} onValueChange={(v) => setFilterStudentId(v === "__all" ? null : v)}>
+          <SelectTrigger className="w-48">
+            <SelectValue placeholder="Tous les élèves" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="__all">Tous les élèves</SelectItem>
+            {students.map((s) => (
+              <SelectItem key={s.id} value={s.id}>{s.firstName} {s.lastName}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      {filtered.length === 0 ? (
+        <div className="text-center py-12 text-muted-foreground">
+          <MessageSquare className="w-10 h-10 mx-auto mb-3 opacity-30" />
+          <p>Aucune note.</p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {filtered.map((c) => (
+            <Card key={c.id} className="border-l-4 border-l-green-400">
+              <CardContent className="pt-4">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex-1 space-y-1">
+                    <p className="text-sm leading-relaxed">{c.content}</p>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <Badge className="bg-green-100 text-green-800 text-xs">
+                        Prof : {c.teacher.firstName} {c.teacher.lastName}
+                      </Badge>
+                      <Badge className="bg-teal-100 text-teal-800 text-xs">
+                        Élève : {c.student.firstName} {c.student.lastName}
+                      </Badge>
+                      <span className="text-xs text-muted-foreground">
+                        {new Date(c.createdAt).toLocaleDateString("fr-FR")}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ==================== STAGES TAB ====================
+
+function StagesTab() {
+  const { data: internships = [], isLoading } = useQuery<InternshipWithStudent[]>({
+    queryKey: ["/api/admin/internships"],
+  });
+
+  const [filterStatus, setFilterStatus] = useState<string>("__all");
+  const [filterStudentId, setFilterStudentId] = useState<string | null>(null);
+
+  const students = Array.from(new Map(internships.map((i) => [i.student.id, i.student])).values());
+
+  const filtered = internships.filter(
+    (i) =>
+      (filterStatus === "__all" || i.status === filterStatus) &&
+      (!filterStudentId || i.student.id === filterStudentId)
+  );
+
+  if (isLoading) return <Skeleton className="h-40 w-full" />;
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap gap-3">
+        <Select value={filterStatus} onValueChange={setFilterStatus}>
+          <SelectTrigger className="w-40">
+            <SelectValue placeholder="Tous les statuts" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="__all">Tous les statuts</SelectItem>
+            <SelectItem value="UPCOMING">À venir</SelectItem>
+            <SelectItem value="ONGOING">En cours</SelectItem>
+            <SelectItem value="COMPLETED">Terminé</SelectItem>
+            <SelectItem value="CANCELLED">Annulé</SelectItem>
+          </SelectContent>
+        </Select>
+        <Select value={filterStudentId ?? "__all"} onValueChange={(v) => setFilterStudentId(v === "__all" ? null : v)}>
+          <SelectTrigger className="w-48">
+            <SelectValue placeholder="Tous les élèves" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="__all">Tous les élèves</SelectItem>
+            {students.map((s) => (
+              <SelectItem key={s.id} value={s.id}>{s.firstName} {s.lastName}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      {filtered.length === 0 ? (
+        <div className="text-center py-12 text-muted-foreground">
+          <Building2 className="w-10 h-10 mx-auto mb-3 opacity-30" />
+          <p>Aucun stage trouvé.</p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {filtered.map((i) => (
+            <Card key={i.id}>
+              <CardContent className="pt-4">
+                <div className="flex items-start justify-between gap-2 flex-wrap">
+                  <div className="flex-1 space-y-1">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <p className="font-semibold">{i.companyName}</p>
+                      <Badge className={`text-xs ${INTERNSHIP_STATUS_COLORS[i.status] || ""}`}>
+                        {INTERNSHIP_STATUS_LABELS[i.status] || i.status}
+                      </Badge>
+                    </div>
+                    {i.companyAddress && (
+                      <p className="text-xs text-muted-foreground">{i.companyAddress}</p>
+                    )}
+                    <p className="text-xs text-muted-foreground">
+                      {new Date(i.startDate).toLocaleDateString("fr-FR")}
+                      {i.endDate ? ` → ${new Date(i.endDate).toLocaleDateString("fr-FR")}` : " → en cours"}
+                    </p>
+                    {i.supervisorName && (
+                      <p className="text-xs text-muted-foreground">
+                        Tuteur : {i.supervisorName}{i.supervisorEmail ? ` (${i.supervisorEmail})` : ""}
+                      </p>
+                    )}
+                    {i.description && <p className="text-sm mt-1">{i.description}</p>}
+                    {i.teacherNotes && (
+                      <div className="mt-1 p-2 bg-amber-50 border border-amber-200 rounded text-xs">
+                        <span className="font-medium text-amber-800">Notes prof : </span>
+                        <span className="text-amber-900">{i.teacherNotes}</span>
+                      </div>
+                    )}
+                  </div>
+                  <Badge className="bg-teal-100 text-teal-800 text-xs shrink-0">
+                    {i.student.firstName} {i.student.lastName}
+                  </Badge>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ==================== CRÉER PROFESSEUR TAB ====================
+
+function CreerProfesseurTab() {
+  const { toast } = useToast();
+  const [form, setForm] = useState({ email: "", password: "", firstName: "", lastName: "", phone: "" });
+
+  const createMut = useMutation({
+    mutationFn: () => apiRequest("POST", "/api/admin/teachers", form),
+    onSuccess: () => {
+      setForm({ email: "", password: "", firstName: "", lastName: "", phone: "" });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/teachers"] });
+      toast({ title: "Professeur créé", description: "Le compte professeur a été créé avec succès." });
+    },
+    onError: async (err: any) => {
+      let msg = "Erreur lors de la création";
+      try { const j = await err.response?.json?.(); msg = j?.message || msg; } catch {}
+      toast({ title: "Erreur", description: msg, variant: "destructive" });
+    },
+  });
+
+  return (
+    <div className="max-w-md space-y-4">
+      <h3 className="font-semibold text-base">Créer un compte professeur</h3>
+      <p className="text-sm text-muted-foreground">
+        Le compte sera actif immédiatement. Le professeur peut se connecter sur <code>/espace-professeur</code>.
+      </p>
+
+      <div className="space-y-3">
+        <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-1.5">
+            <Label>Prénom <span className="text-destructive">*</span></Label>
+            <Input value={form.firstName} onChange={(e) => setForm((f) => ({ ...f, firstName: e.target.value }))} />
+          </div>
+          <div className="space-y-1.5">
+            <Label>Nom <span className="text-destructive">*</span></Label>
+            <Input value={form.lastName} onChange={(e) => setForm((f) => ({ ...f, lastName: e.target.value }))} />
+          </div>
+        </div>
+        <div className="space-y-1.5">
+          <Label>Email <span className="text-destructive">*</span></Label>
+          <Input type="email" value={form.email} onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} />
+        </div>
+        <div className="space-y-1.5">
+          <Label>Mot de passe <span className="text-destructive">*</span></Label>
+          <Input type="password" value={form.password} onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))} />
+        </div>
+        <div className="space-y-1.5">
+          <Label>Téléphone</Label>
+          <Input value={form.phone} onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))} placeholder="06 00 00 00 00" />
+        </div>
+
+        <Button
+          className="bg-green-600 hover:bg-green-700 w-full"
+          disabled={!form.email || !form.password || !form.firstName || !form.lastName || createMut.isPending}
+          onClick={() => createMut.mutate()}
+        >
+          {createMut.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <UserPlus className="w-4 h-4 mr-1" />}
+          Créer le compte professeur
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 // ==================== MAIN ADMIN PAGE ====================
 
 export default function Admin() {
@@ -2061,9 +2474,13 @@ export default function Admin() {
       {activeTab === "paiements" && <PaiementsTab />}
       {activeTab === "signalements" && <SignalementsTab />}
       {activeTab === "notifications" && <NotificationsAdminTab />}
+      {activeTab === "professeurs" && <ProfesseursTab />}
+      {activeTab === "notes-profs" && <NotesProfTab />}
+      {activeTab === "stages" && <StagesTab />}
       {activeTab === "mon-compte" && <MonCompteTab />}
       {activeTab === "creer-admin" && <CreerAdminTab />}
       {activeTab === "creer-referent" && <CreerReferentTab />}
+      {activeTab === "creer-professeur" && <CreerProfesseurTab />}
     </div>
   );
 }

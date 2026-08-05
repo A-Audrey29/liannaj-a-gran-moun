@@ -1,6 +1,7 @@
 import { z } from "zod";
 
-export type Role = "ADMIN" | "SENIOR" | "JUNIOR" | "REFERENT_SENIOR";
+export type Role = "ADMIN" | "SENIOR" | "JUNIOR" | "REFERENT_SENIOR" | "TEACHER";
+export type InternshipStatus = "UPCOMING" | "ONGOING" | "COMPLETED" | "CANCELLED";
 export type UserStatus = "PENDING_VALIDATION" | "ACTIVE" | "SUSPENDED" | "BANNED";
 export type RelationStatus = "PENDING" | "PENDING_FIRST_MEETING" | "ACTIVE" | "PAUSED" | "CLOSED";
 export type InterventionStatus = "PROPOSED" | "CONFIRMED" | "CANCELLED" | "DONE" | "COMPLETED_PENDING_FEEDBACK" | "COMPLETED";
@@ -91,6 +92,79 @@ export interface Favorite {
   juniorId: string;
   createdAt: Date;
 }
+
+export interface TeacherStudent {
+  id: string;
+  teacherId: string;
+  studentId: string;
+  createdAt: Date;
+}
+
+export interface TeacherComment {
+  id: string;
+  teacherId: string;
+  studentId: string;
+  content: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface Internship {
+  id: string;
+  studentId: string;
+  companyName: string;
+  companyAddress: string | null;
+  supervisorName: string | null;
+  supervisorEmail: string | null;
+  startDate: Date;
+  endDate: Date | null;
+  description: string | null;
+  status: InternshipStatus;
+  teacherNotes: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export const createTeacherCommentSchema = z.object({
+  content: z.string().min(1, "Contenu requis").max(2000, "Commentaire trop long"),
+});
+
+export const updateTeacherCommentSchema = z.object({
+  content: z.string().min(1, "Contenu requis").max(2000, "Commentaire trop long"),
+});
+
+export const createInternshipSchema = z.object({
+  companyName: z.string().min(1, "Nom de l'entreprise requis"),
+  companyAddress: z.preprocess((v) => (v === "" ? undefined : v), z.string().optional()),
+  supervisorName: z.preprocess((v) => (v === "" ? undefined : v), z.string().optional()),
+  supervisorEmail: z.preprocess((v) => (v === "" ? undefined : v), z.string().email("Email invalide").optional()),
+  startDate: z.string().min(1, "Date de début requise"),
+  endDate: z.preprocess((v) => (v === "" ? undefined : v), z.string().optional()),
+  description: z.preprocess((v) => (v === "" ? undefined : v), z.string().max(1000).optional()),
+  status: z.enum(["UPCOMING", "ONGOING", "COMPLETED", "CANCELLED"]).default("UPCOMING"),
+  teacherNotes: z.preprocess((v) => (v === "" ? undefined : v), z.string().max(2000).optional()),
+});
+
+export const updateInternshipSchema = createInternshipSchema.partial();
+
+export const updateStudentBioSchema = z.object({
+  bio: z.preprocess((v) => (v === "" ? undefined : v), z.string().max(500).optional()),
+  desiredActivity: z.preprocess((v) => (v === "" ? undefined : v), z.string().optional()),
+});
+
+export const createTeacherSchema = z.object({
+  email: z.string().email("Email invalide"),
+  password: z.string().min(6, "Le mot de passe doit faire au moins 6 caractères"),
+  firstName: z.string().min(1, "Prénom requis"),
+  lastName: z.string().min(1, "Nom requis"),
+  phone: z.preprocess((v) => (v === "" ? undefined : v), z.string().optional()),
+});
+
+export type CreateTeacherCommentInput = z.infer<typeof createTeacherCommentSchema>;
+export type CreateInternshipInput = z.infer<typeof createInternshipSchema>;
+export type UpdateInternshipInput = z.infer<typeof updateInternshipSchema>;
+export type UpdateStudentBioInput = z.infer<typeof updateStudentBioSchema>;
+export type CreateTeacherInput = z.infer<typeof createTeacherSchema>;
 
 export const loginSchema = z.object({
   email: z.string().email("Email invalide"),

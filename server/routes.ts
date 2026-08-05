@@ -1656,6 +1656,314 @@ export async function registerRoutes(
     }
   });
 
+  // ==================== TEACHER ====================
+
+  function requireTeacher(req: any, res: any, next: any) {
+    if (!req.isAuthenticated()) return res.status(401).json({ message: "Non authentifié" });
+    if (req.user?.role !== "TEACHER") return res.status(403).json({ message: "Accès réservé aux professeurs" });
+    next();
+  }
+
+  // GET /api/teacher/students — liste des élèves du prof
+  app.get("/api/teacher/students", requireTeacher, async (req, res) => {
+    try {
+      const teacherId = (req.user as any).id;
+      const links = await storage.getTeacherStudents(teacherId);
+      const students = links.map((l) => ({
+        ...sanitizeUserPublic(l.student),
+        linkedAt: l.createdAt,
+      }));
+      res.json(students);
+    } catch (err) {
+      console.error("[TEACHER_STUDENTS] Error:", err);
+      res.status(500).json({ message: "Erreur" });
+    }
+  });
+
+  // GET /api/teacher/students/:id — fiche élève complète
+  app.get("/api/teacher/students/:id", requireTeacher, async (req, res) => {
+    try {
+      const teacherId = (req.user as any).id;
+      const isLinked = await storage.isTeacherOfStudent(teacherId, req.params.id);
+      if (!isLinked) return res.status(403).json({ message: "Cet élève ne vous est pas affilié" });
+
+      const student = await storage.getUser(req.params.id);
+      if (!student || student.role !== "JUNIOR") return res.status(404).json({ message: "Élève introuvable" });
+
+      // Senior affilié si relation active
+      const relations = await storage.getRelationsByUser(student.id);
+      const activeRelation = relations.find((r) => r.status === "ACTIVE" || r.status === "PENDING_FIRST_MEETING");
+      const senior = activeRelation ? sanitizeUserPublic(activeRelation.senior) : null;
+
+      const internships = await storage.getStudentInternships(student.id);
+      const comments = await storage.getTeacherComments(student.id);
+
+      res.json({
+        student: sanitizeUserPublic(student),
+        senior,
+        internships,
+        comments: comments.map((c) => ({
+          id: c.id,
+          content: c.content,
+          createdAt: c.createdAt,
+          updatedAt: c.updatedAt,
+          teacherName: `${c.teacher.firstName} ${c.teacher.lastName}`,
+          isOwn: c.teacherId === teacherId,
+        })),
+      });
+    } catch (err) {
+      console.error("[TEACHER_STUDENT_DETAIL] Error:", err);
+      res.status(500).json({ message: "Erreur" });
+    }
+  });
+
+  // PATCH /api/teacher/students/:id/bio — édition bio par le prof
+  app.patch("/api/teacher/students/:id/bio", requireTeacher, async (req, res) => {
+    try {
+      const teacherId = (req.user as any).id;
+      const isLinked = await storage.isTeacherOfStudent(teacherId, req.params.id);
+      if (!isLinked) return res.status(403).json({ message: "Cet élève ne vous est pas affilié" });
+
+      const { updateStudentBioSchema } = await import("../shared/schema");
+      const parsed = updateStudentBioSchema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ message: "Données invalides", errors: parsed.error.flatten().fieldErrors });
+
+      const student = await storage.updateUser(req.params.id, parsed.data);
+      res.json(sanitizeUserPublic(student));
+    } catch (err) {
+      console.error("[TEACHER_UPDATE_BIO] Error:", err);
+      res.status(500).json({ message: "Erreur" });
+    }
+  });
+
+  // POST /api/teacher/students/:id/comments
+  app.post("/api/teacher/students/:id/comments", requireTeacher, async (req, res) => {
+    try {
+      const teacherId = (req.user as any).id;
+      const isLinked = await storage.isTeacherOfStudent(teacherId, req.params.id);
+      if (!isLinked) return res.status(403).json({ message: "Cet élève ne vous est pas affilié" });
+
+      const { createTeacherCommentSchema } = await import("../shared/schema");
+      const parsed = createTeacherCommentSchema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ message: "Données invalides", errors: parsed.error.flatten().fieldErrors });
+
+      const comment = await storage.createTeacherComment(teacherId, req.params.id, parsed.data.content);
+      res.status(201).json(comment);
+    } catch (err) {
+      console.error("[TEACHER_CREATE_COMMENT] Error:", err);
+      res.status(500).json({ message: "Erreur" });
+    }
+  });
+
+  // PATCH /api/teacher/students/:studentId/comments/:commentId
+  app.patch("/api/teacher/students/:studentId/comments/:commentId", requireTeacher, async (req, res) => {
+    try {
+      const teacherId = (req.user as any).id;
+      const { updateTeacherCommentSchema } = await import("../shared/schema");
+      const parsed = updateTeacherCommentSchema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ message: "Données invalides", errors: parsed.error.flatten().fieldErrors });
+
+      const comment = await storage.updateTeacherComment(req.params.commentId, teacherId, parsed.data.content);
+      res.json(comment);
+    } catch (err) {
+      console.error("[TEACHER_UPDATE_COMMENT] Error:", err);
+      res.status(500).json({ message: "Erreur" });
+    }
+  });
+
+  // DELETE /api/teacher/students/:studentId/comments/:commentId
+  app.delete("/api/teacher/students/:studentId/comments/:commentId", requireTeacher, async (req, res) => {
+    try {
+      const teacherId = (req.user as any).id;
+      await storage.deleteTeacherComment(req.params.commentId, teacherId);
+      res.json({ message: "Commentaire supprimé" });
+    } catch (err) {
+      console.error("[TEACHER_DELETE_COMMENT] Error:", err);
+      res.status(500).json({ message: "Erreur" });
+    }
+  });
+
+  // GET /api/teacher/students/:id/internships
+  app.get("/api/teacher/students/:id/internships", requireTeacher, async (req, res) => {
+    try {
+      const teacherId = (req.user as any).id;
+      const isLinked = await storage.isTeacherOfStudent(teacherId, req.params.id);
+      if (!isLinked) return res.status(403).json({ message: "Cet élève ne vous est pas affilié" });
+
+      const internships = await storage.getStudentInternships(req.params.id);
+      res.json(internships);
+    } catch (err) {
+      res.status(500).json({ message: "Erreur" });
+    }
+  });
+
+  // POST /api/teacher/students/:id/internships
+  app.post("/api/teacher/students/:id/internships", requireTeacher, async (req, res) => {
+    try {
+      const teacherId = (req.user as any).id;
+      const isLinked = await storage.isTeacherOfStudent(teacherId, req.params.id);
+      if (!isLinked) return res.status(403).json({ message: "Cet élève ne vous est pas affilié" });
+
+      const { createInternshipSchema } = await import("../shared/schema");
+      const parsed = createInternshipSchema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ message: "Données invalides", errors: parsed.error.flatten().fieldErrors });
+
+      const internship = await storage.createInternship({
+        studentId: req.params.id,
+        companyName: parsed.data.companyName,
+        companyAddress: parsed.data.companyAddress,
+        supervisorName: parsed.data.supervisorName,
+        supervisorEmail: parsed.data.supervisorEmail,
+        startDate: new Date(parsed.data.startDate),
+        endDate: parsed.data.endDate ? new Date(parsed.data.endDate) : undefined,
+        description: parsed.data.description,
+        status: parsed.data.status,
+        teacherNotes: parsed.data.teacherNotes,
+      });
+      res.status(201).json(internship);
+    } catch (err) {
+      console.error("[TEACHER_CREATE_INTERNSHIP] Error:", err);
+      res.status(500).json({ message: "Erreur" });
+    }
+  });
+
+  // PATCH /api/teacher/students/:studentId/internships/:internshipId
+  app.patch("/api/teacher/students/:studentId/internships/:internshipId", requireTeacher, async (req, res) => {
+    try {
+      const teacherId = (req.user as any).id;
+      const isLinked = await storage.isTeacherOfStudent(teacherId, req.params.studentId);
+      if (!isLinked) return res.status(403).json({ message: "Cet élève ne vous est pas affilié" });
+
+      const { updateInternshipSchema } = await import("../shared/schema");
+      const parsed = updateInternshipSchema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ message: "Données invalides", errors: parsed.error.flatten().fieldErrors });
+
+      const data: any = { ...parsed.data };
+      if (data.startDate) data.startDate = new Date(data.startDate);
+      if (data.endDate) data.endDate = new Date(data.endDate);
+
+      const internship = await storage.updateInternship(req.params.internshipId, data);
+      res.json(internship);
+    } catch (err) {
+      console.error("[TEACHER_UPDATE_INTERNSHIP] Error:", err);
+      res.status(500).json({ message: "Erreur" });
+    }
+  });
+
+  // DELETE /api/teacher/students/:studentId/internships/:internshipId
+  app.delete("/api/teacher/students/:studentId/internships/:internshipId", requireTeacher, async (req, res) => {
+    try {
+      const teacherId = (req.user as any).id;
+      const isLinked = await storage.isTeacherOfStudent(teacherId, req.params.studentId);
+      if (!isLinked) return res.status(403).json({ message: "Cet élève ne vous est pas affilié" });
+
+      await storage.deleteInternship(req.params.internshipId);
+      res.json({ message: "Stage supprimé" });
+    } catch (err) {
+      res.status(500).json({ message: "Erreur" });
+    }
+  });
+
+  // ==================== ADMIN — TEACHERS ====================
+
+  app.get("/api/admin/teachers", requireAdmin, async (_req, res) => {
+    try {
+      const teachers = await storage.getAllTeachers();
+      res.json(teachers.map(sanitizeUser));
+    } catch (err) {
+      res.status(500).json({ message: "Erreur" });
+    }
+  });
+
+  app.post("/api/admin/teachers", requireAdmin, async (req, res) => {
+    try {
+      const { createTeacherSchema } = await import("../shared/schema");
+      const parsed = createTeacherSchema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ message: "Données invalides", errors: parsed.error.flatten().fieldErrors });
+
+      const { email, password, firstName, lastName, phone } = parsed.data;
+      const existing = await storage.getUserByEmail(email.toLowerCase().trim());
+      if (existing) return res.status(409).json({ message: "Cet email est déjà utilisé" });
+
+      const hashedPassword = await bcrypt.hash(password, 10);
+      const teacher = await storage.createUser({
+        email: email.toLowerCase().trim(),
+        password: hashedPassword,
+        firstName,
+        lastName,
+        role: "TEACHER",
+        status: "ACTIVE",
+        phone: phone || null,
+        profilePhoto: `https://ui-avatars.com/api/?name=${encodeURIComponent(firstName + "+" + lastName)}&background=16a34a&color=fff&size=200`,
+      });
+
+      res.status(201).json(sanitizeUser(teacher));
+    } catch (err) {
+      console.error("[ADMIN_CREATE_TEACHER] Error:", err);
+      res.status(500).json({ message: "Erreur lors de la création du professeur" });
+    }
+  });
+
+  app.get("/api/admin/teachers/:teacherId/students", requireAdmin, async (req, res) => {
+    try {
+      const links = await storage.getTeacherStudents(req.params.teacherId);
+      res.json(links.map((l) => ({ ...sanitizeUser(l.student), linkedAt: l.createdAt })));
+    } catch (err) {
+      res.status(500).json({ message: "Erreur" });
+    }
+  });
+
+  app.post("/api/admin/teachers/:teacherId/students", requireAdmin, async (req, res) => {
+    try {
+      const { studentId } = req.body;
+      if (!studentId) return res.status(400).json({ message: "studentId requis" });
+      const student = await storage.getUser(studentId);
+      if (!student || student.role !== "JUNIOR") return res.status(400).json({ message: "Élève invalide" });
+      const link = await storage.addTeacherStudent(req.params.teacherId, studentId);
+      res.status(201).json(link);
+    } catch (err: any) {
+      if (err.code === "P2002") return res.status(409).json({ message: "Liaison déjà existante" });
+      res.status(500).json({ message: "Erreur" });
+    }
+  });
+
+  app.delete("/api/admin/teachers/:teacherId/students/:studentId", requireAdmin, async (req, res) => {
+    try {
+      await storage.removeTeacherStudent(req.params.teacherId, req.params.studentId);
+      res.json({ message: "Liaison supprimée" });
+    } catch (err) {
+      res.status(500).json({ message: "Erreur" });
+    }
+  });
+
+  app.get("/api/admin/teacher-comments", requireAdmin, async (_req, res) => {
+    try {
+      const comments = await storage.getAllTeacherComments();
+      res.json(comments.map((c) => ({
+        id: c.id,
+        content: c.content,
+        createdAt: c.createdAt,
+        updatedAt: c.updatedAt,
+        teacher: sanitizeUserPublic(c.teacher),
+        student: sanitizeUserPublic(c.student),
+      })));
+    } catch (err) {
+      res.status(500).json({ message: "Erreur" });
+    }
+  });
+
+  app.get("/api/admin/internships", requireAdmin, async (_req, res) => {
+    try {
+      const internships = await storage.getAllInternships();
+      res.json(internships.map((i) => ({
+        ...i,
+        student: sanitizeUserPublic(i.student),
+      })));
+    } catch (err) {
+      res.status(500).json({ message: "Erreur" });
+    }
+  });
+
   // ==================== RÉFÉRENT SÉNIOR ====================
 
   function requireReferent(req: any, res: any, next: any) {

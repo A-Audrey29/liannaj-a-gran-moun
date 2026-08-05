@@ -1,5 +1,5 @@
 import { prisma } from "./prisma";
-import type { User, Category, UserCategory, Relation, Intervention, AdminRecommendation, Notification, PaymentRecord, Favorite, Conversation, Message, PushSubscription, Report, Prisma } from "../generated/prisma/client.ts";
+import type { User, Category, UserCategory, Relation, Intervention, AdminRecommendation, Notification, PaymentRecord, Favorite, Conversation, Message, PushSubscription, Report, TeacherStudent, TeacherComment, Internship, Prisma } from "../generated/prisma/client.ts";
 
 export interface IStorage {
   getUser(id: string): Promise<User | null>;
@@ -76,6 +76,26 @@ export interface IStorage {
   getAdmins(): Promise<User[]>;
   getRelationsBySeniorId(seniorId: string): Promise<(Relation & { senior: User; junior: User; interventions: Intervention[] })[]>;
   getSeniorsByStatus(status: string): Promise<User[]>;
+
+  // Teacher
+  getTeacherStudents(teacherId: string): Promise<(TeacherStudent & { student: User })[]>;
+  addTeacherStudent(teacherId: string, studentId: string): Promise<TeacherStudent>;
+  removeTeacherStudent(teacherId: string, studentId: string): Promise<void>;
+  isTeacherOfStudent(teacherId: string, studentId: string): Promise<boolean>;
+
+  getTeacherComments(studentId: string): Promise<(TeacherComment & { teacher: User })[]>;
+  createTeacherComment(teacherId: string, studentId: string, content: string): Promise<TeacherComment>;
+  updateTeacherComment(id: string, teacherId: string, content: string): Promise<TeacherComment>;
+  deleteTeacherComment(id: string, teacherId: string): Promise<void>;
+  getAllTeacherComments(): Promise<(TeacherComment & { teacher: User; student: User })[]>;
+
+  getStudentInternships(studentId: string): Promise<Internship[]>;
+  createInternship(data: { studentId: string; companyName: string; companyAddress?: string; supervisorName?: string; supervisorEmail?: string; startDate: Date; endDate?: Date; description?: string; status?: string; teacherNotes?: string }): Promise<Internship>;
+  updateInternship(id: string, data: Prisma.InternshipUpdateInput): Promise<Internship>;
+  deleteInternship(id: string): Promise<void>;
+  getAllInternships(): Promise<(Internship & { student: User })[]>;
+
+  getAllTeachers(): Promise<User[]>;
 }
 
 class DatabaseStorage implements IStorage {
@@ -658,6 +678,104 @@ class DatabaseStorage implements IStorage {
   async getSeniorsByStatus(status: string): Promise<User[]> {
     return prisma.user.findMany({
       where: { role: "SENIOR", status: status as any },
+      orderBy: [{ lastName: "asc" }, { firstName: "asc" }],
+    });
+  }
+
+  // ==================== TEACHER ====================
+
+  async getTeacherStudents(teacherId: string): Promise<(TeacherStudent & { student: User })[]> {
+    return prisma.teacherStudent.findMany({
+      where: { teacherId },
+      include: { student: true },
+      orderBy: { createdAt: "asc" },
+    });
+  }
+
+  async addTeacherStudent(teacherId: string, studentId: string): Promise<TeacherStudent> {
+    return prisma.teacherStudent.create({ data: { teacherId, studentId } });
+  }
+
+  async removeTeacherStudent(teacherId: string, studentId: string): Promise<void> {
+    await prisma.teacherStudent.deleteMany({ where: { teacherId, studentId } });
+  }
+
+  async isTeacherOfStudent(teacherId: string, studentId: string): Promise<boolean> {
+    const link = await prisma.teacherStudent.findUnique({
+      where: { teacherId_studentId: { teacherId, studentId } },
+    });
+    return link !== null;
+  }
+
+  async getTeacherComments(studentId: string): Promise<(TeacherComment & { teacher: User })[]> {
+    return prisma.teacherComment.findMany({
+      where: { studentId },
+      include: { teacher: true },
+      orderBy: { createdAt: "desc" },
+    });
+  }
+
+  async createTeacherComment(teacherId: string, studentId: string, content: string): Promise<TeacherComment> {
+    return prisma.teacherComment.create({ data: { teacherId, studentId, content } });
+  }
+
+  async updateTeacherComment(id: string, teacherId: string, content: string): Promise<TeacherComment> {
+    return prisma.teacherComment.update({ where: { id, teacherId }, data: { content } });
+  }
+
+  async deleteTeacherComment(id: string, teacherId: string): Promise<void> {
+    await prisma.teacherComment.delete({ where: { id, teacherId } });
+  }
+
+  async getAllTeacherComments(): Promise<(TeacherComment & { teacher: User; student: User })[]> {
+    return prisma.teacherComment.findMany({
+      include: { teacher: true, student: true },
+      orderBy: { createdAt: "desc" },
+    });
+  }
+
+  async getStudentInternships(studentId: string): Promise<Internship[]> {
+    return prisma.internship.findMany({
+      where: { studentId },
+      orderBy: { startDate: "desc" },
+    });
+  }
+
+  async createInternship(data: { studentId: string; companyName: string; companyAddress?: string; supervisorName?: string; supervisorEmail?: string; startDate: Date; endDate?: Date; description?: string; status?: string; teacherNotes?: string }): Promise<Internship> {
+    return prisma.internship.create({
+      data: {
+        studentId: data.studentId,
+        companyName: data.companyName,
+        companyAddress: data.companyAddress || null,
+        supervisorName: data.supervisorName || null,
+        supervisorEmail: data.supervisorEmail || null,
+        startDate: data.startDate,
+        endDate: data.endDate || null,
+        description: data.description || null,
+        status: (data.status as any) || "UPCOMING",
+        teacherNotes: data.teacherNotes || null,
+      },
+    });
+  }
+
+  async updateInternship(id: string, data: Prisma.InternshipUpdateInput): Promise<Internship> {
+    return prisma.internship.update({ where: { id }, data });
+  }
+
+  async deleteInternship(id: string): Promise<void> {
+    await prisma.internship.delete({ where: { id } });
+  }
+
+  async getAllInternships(): Promise<(Internship & { student: User })[]> {
+    return prisma.internship.findMany({
+      include: { student: true },
+      orderBy: { startDate: "desc" },
+    });
+  }
+
+  async getAllTeachers(): Promise<User[]> {
+    return prisma.user.findMany({
+      where: { role: "TEACHER" },
       orderBy: [{ lastName: "asc" }, { firstName: "asc" }],
     });
   }
