@@ -390,10 +390,11 @@ function RelationsSection({ data }: { data: StudentDetail }) {
   return (
     <div className="space-y-3">
       {relations.map((rel) => {
-        const meetingsDone = rel.interventions.filter(
+        const relInterventions = rel.interventions ?? [];
+        const meetingsDone = relInterventions.filter(
           (i) => i.status === "COMPLETED" || i.status === "DONE"
         ).length;
-        const nextMeeting = rel.interventions
+        const nextMeeting = relInterventions
           .filter((i) => i.status === "CONFIRMED" || i.status === "PROPOSED")
           .sort(
             (a, b) =>
@@ -442,7 +443,7 @@ function RelationsSection({ data }: { data: StudentDetail }) {
                   </p>
                 </div>
                 <div className="text-center">
-                  <p className="text-xl font-bold text-blue-600">{rel.interventions.length}</p>
+                  <p className="text-xl font-bold text-blue-600">{relInterventions.length}</p>
                   <p className="text-xs text-muted-foreground">Total planifié</p>
                 </div>
                 <div className="text-center">
@@ -479,9 +480,9 @@ function RencontresSection({ data }: { data: StudentDetail }) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
   // Flatten toutes les interventions de toutes les relations, triées par date desc
-  const allInterventions = data.relations
+  const allInterventions = (data.relations ?? [])
     .flatMap((rel) =>
-      rel.interventions.map((i) => ({
+      (rel.interventions ?? []).map((i) => ({
         ...i,
         seniorName: `${rel.senior.firstName} ${rel.senior.lastName}`,
         seniorPhoto: rel.senior.profilePhoto,
@@ -852,10 +853,10 @@ function StudentDetailView({
     );
   }
 
-  const { student, relations, comments } = data;
+  const { student, relations = [], comments = [] } = data;
 
   // Toutes interventions réalisées
-  const allInterventions = relations.flatMap((r) => r.interventions);
+  const allInterventions = relations.flatMap((r) => r.interventions ?? []);
   const doneCount = allInterventions.filter(
     (i) => i.status === "COMPLETED" || i.status === "DONE"
   ).length;
