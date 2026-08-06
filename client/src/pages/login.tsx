@@ -38,7 +38,12 @@ export default function LoginPage() {
     onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
       const role = data?.user?.role;
-      setLocation(role === "ADMIN" ? "/admin" : role === "REFERENT_SENIOR" ? "/espace-referent" : "/mon-espace");
+      setLocation(
+        role === "ADMIN" ? "/admin" :
+        role === "REFERENT_SENIOR" ? "/espace-referent" :
+        role === "TEACHER" ? "/espace-professeur" :
+        "/mon-espace"
+      );
     },
     onError: (error: Error) => {
       const message = error.message || "";
