@@ -1680,7 +1680,7 @@ export async function registerRoutes(
     }
   });
 
-  // GET /api/teacher/students/:id — fiche élève complète
+  // GET /api/teacher/students/:id — fiche élève complète (relations + interventions + feedback)
   app.get("/api/teacher/students/:id", requireTeacher, async (req, res) => {
     try {
       const teacherId = (req.user as any).id;
@@ -1690,18 +1690,32 @@ export async function registerRoutes(
       const student = await storage.getUser(req.params.id);
       if (!student || student.role !== "JUNIOR") return res.status(404).json({ message: "Élève introuvable" });
 
-      // Senior affilié si relation active
+      // Toutes les relations avec leur sénior et interventions complètes (feedback inclus)
       const relations = await storage.getRelationsByUser(student.id);
-      const activeRelation = relations.find((r) => r.status === "ACTIVE" || r.status === "PENDING_FIRST_MEETING");
-      const senior = activeRelation ? sanitizeUserPublic(activeRelation.senior) : null;
+      const relationsFormatted = relations.map((r) => ({
+        id: r.id,
+        status: r.status,
+        createdAt: r.createdAt,
+        senior: sanitizeUserPublic(r.senior),
+        interventions: (r.interventions || []).map((i) => ({
+          id: i.id,
+          scheduledDate: i.scheduledDate,
+          durationMinutes: i.durationMinutes,
+          location: i.location,
+          tasks: i.tasks,
+          status: i.status,
+          seniorRating: i.seniorRating,
+          seniorComment: i.seniorComment,
+          juniorRating: i.juniorRating,
+          juniorComment: i.juniorComment,
+        })),
+      }));
 
-      const internships = await storage.getStudentInternships(student.id);
       const comments = await storage.getTeacherComments(student.id);
 
       res.json({
         student: sanitizeUserPublic(student),
-        senior,
-        internships,
+        relations: relationsFormatted,
         comments: comments.map((c) => ({
           id: c.id,
           content: c.content,
@@ -1736,7 +1750,7 @@ export async function registerRoutes(
     }
   });
 
-  // POST /api/teacher/students/:id/comments
+  // POST /api/teacher/students/:id/comments — notifie les admins par email
   app.post("/api/teacher/students/:id/comments", requireTeacher, async (req, res) => {
     try {
       const teacherId = (req.user as any).id;
@@ -1748,6 +1762,22 @@ export async function registerRoutes(
       if (!parsed.success) return res.status(400).json({ message: "Données invalides", errors: parsed.error.flatten().fieldErrors });
 
       const comment = await storage.createTeacherComment(teacherId, req.params.id, parsed.data.content);
+
+      // Notification email aux admins
+      const teacher = req.user as any;
+      const student = await storage.getUser(req.params.id);
+      const admins = await storage.getAdmins();
+      const teacherName = `${teacher.firstName} ${teacher.lastName}`;
+      const studentName = student ? `${student.firstName} ${student.lastName}` : "un élève";
+      const baseUrl = process.env.BASE_URL || getBaseUrl(req);
+      for (const admin of admins) {
+        sendEmail({
+          to: admin.email,
+          subject: `FEVES — Note professeur de ${teacherName} sur ${studentName}`,
+          htmlContent: `<h2 style="color:#16a34a">Nouvelle note professeur</h2><p><strong>Professeur :</strong> ${teacherName} (${teacher.email})</p><p><strong>Élève :</strong> ${studentName}</p><hr><p>${parsed.data.content.replace(/\n/g, "<br>")}</p><hr><p><a href="${baseUrl}/admin">Voir dans l'espace admin → onglet "Notes profs"</a></p>`,
+        }).catch(console.error);
+      }
+
       res.status(201).json(comment);
     } catch (err) {
       console.error("[TEACHER_CREATE_COMMENT] Error:", err);
