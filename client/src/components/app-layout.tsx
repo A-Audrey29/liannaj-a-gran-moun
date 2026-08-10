@@ -24,14 +24,20 @@ function NavLinks({ authenticated, role, onClick }: { authenticated: boolean; ro
     );
   }
 
+  const navLink = () => {
+    if (role === "ADMIN") return { href: "/admin", label: "ADMIN", testId: "link-admin" };
+    if (role === "REFERENT_SENIOR") return { href: "/espace-referent", label: "MON ESPACE", testId: "link-espace-referent" };
+    if (role === "TEACHER") return { href: "/espace-professeur", label: "ESPACE PROFESSEUR", testId: "link-espace-professeur" };
+    return { href: "/mon-espace", label: "MON ESPACE", testId: "link-mon-espace" };
+  };
+
+  const { href, label, testId } = navLink();
+
   return (
     <>
-      {role !== "ADMIN" && (
-        <Link href="/mon-espace" onClick={onClick} className={`text-sm font-medium hover:text-[#dc4256] transition-colors ${location === "/mon-espace" ? "text-[#dc4256]" : ""}`} data-testid="link-mon-espace">MON ESPACE</Link>
-      )}
-      {role === "ADMIN" && (
-        <Link href="/admin" onClick={onClick} className={`text-sm font-medium hover:text-[#dc4256] transition-colors ${location === "/admin" ? "text-[#dc4256]" : ""}`} data-testid="link-admin">ADMIN</Link>
-      )}
+      <Link href={href} onClick={onClick} className={`text-sm font-medium hover:text-[#dc4256] transition-colors ${location === href ? "text-[#dc4256]" : ""}`} data-testid={testId}>
+        {label}
+      </Link>
     </>
   );
 }

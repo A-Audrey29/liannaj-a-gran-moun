@@ -573,7 +573,7 @@ async function main() {
     ],
   });
 
-  await prisma.user.create({
+  const referent = await prisma.user.create({
     data: {
       email: "referent@test.fr",
       password: hashedPassword,
@@ -587,9 +587,55 @@ async function main() {
     },
   });
 
+  const teacher = await prisma.user.create({
+    data: {
+      email: "professeur@test.fr",
+      password: hashedPassword,
+      role: "TEACHER",
+      status: "ACTIVE",
+      firstName: "Sophie",
+      lastName: "Martin",
+      phone: "0690030303",
+      profilePhoto: "https://ui-avatars.com/api/?name=Sophie+Martin&background=16a34a&color=fff&size=200",
+    },
+  });
+
+  // Affilier les 2 premiers juniors au professeur test
+  await prisma.teacherStudent.createMany({
+    data: [
+      { teacherId: teacher.id, studentId: junior1.id },
+      { teacherId: teacher.id, studentId: junior2.id },
+    ],
+  });
+
+  // Ajouter un commentaire et un stage de démo
+  await prisma.teacherComment.create({
+    data: {
+      teacherId: teacher.id,
+      studentId: junior1.id,
+      content: "Élève très motivé, à accompagner dans sa mise en relation. Famille engagée dans le suivi.",
+    },
+  });
+
+  await prisma.internship.create({
+    data: {
+      studentId: junior1.id,
+      companyName: "Mairie de Les Abymes",
+      companyAddress: "Les Abymes, Guadeloupe",
+      supervisorName: "Franck Céleste",
+      supervisorEmail: "f.celeste@mairie-lesabymes.fr",
+      startDate: new Date("2026-06-02"),
+      endDate: new Date("2026-06-27"),
+      description: "Stage d'observation service administratif",
+      status: "COMPLETED",
+      teacherNotes: "Stage bien déroulé. Bilan positif du tuteur.",
+    },
+  });
+
   console.log("✅ Seed complet (Guadeloupe) :");
   console.log("   - 1 Admin (Pointe-à-Pitre)");
   console.log("   - 1 Référent sénior : referent@test.fr (lié à Jean Dupont)");
+  console.log("   - 1 Professeur : professeur@test.fr (affilié à 2 juniors)");
   console.log("   - 6 Seniors : 5 actifs (Les Abymes) + 1 pending (Pointe-à-Pitre)");
   console.log("   - 6 Juniors actifs (Les Abymes)");
   console.log("   - 6 Catégories : Bricolage, Jardinage, Informatique, Cuisine, Lecture, Promenade");

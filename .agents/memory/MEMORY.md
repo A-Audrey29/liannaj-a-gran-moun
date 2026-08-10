@@ -1,0 +1,1 @@
+- [Teacher feature](teacher-feature.md) — rôle TEACHER + TeacherStudent + TeacherComment + Internship ajoutés; db push utilisé (pas migrate) car pas de migration history.

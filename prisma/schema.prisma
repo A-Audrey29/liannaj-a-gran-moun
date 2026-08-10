@@ -12,6 +12,14 @@ enum Role {
   SENIOR
   JUNIOR
   REFERENT_SENIOR
+  TEACHER
+}
+
+enum InternshipStatus {
+  UPCOMING
+  ONGOING
+  COMPLETED
+  CANCELLED
 }
 
 enum UserStatus {
@@ -104,6 +112,12 @@ model User {
 
   favoriteSeniors     Favorite[] @relation("SeniorFavorites")
   favoriteJuniors     Favorite[] @relation("JuniorFavorites")
+
+  teacherStudents     TeacherStudent[] @relation("TeacherStudents")
+  studentTeachers     TeacherStudent[] @relation("StudentTeachers")
+  teacherComments     TeacherComment[] @relation("TeacherComments")
+  studentComments     TeacherComment[] @relation("StudentComments")
+  internships         Internship[]
 
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
@@ -285,4 +299,51 @@ model PushSubscription {
   createdAt DateTime @default(now())
 
   @@index([userId])
+}
+
+model TeacherStudent {
+  id        String   @id @default(cuid())
+  teacherId String
+  studentId String
+  teacher   User     @relation("TeacherStudents", fields: [teacherId], references: [id], onDelete: Cascade)
+  student   User     @relation("StudentTeachers", fields: [studentId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([teacherId, studentId])
+  @@index([teacherId])
+  @@index([studentId])
+}
+
+model TeacherComment {
+  id        String   @id @default(cuid())
+  teacherId String
+  studentId String
+  content   String
+  teacher   User     @relation("TeacherComments", fields: [teacherId], references: [id], onDelete: Cascade)
+  student   User     @relation("StudentComments", fields: [studentId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([teacherId])
+  @@index([studentId])
+}
+
+model Internship {
+  id              String           @id @default(cuid())
+  studentId       String
+  student         User             @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  companyName     String
+  companyAddress  String?
+  supervisorName  String?
+  supervisorEmail String?
+  startDate       DateTime
+  endDate         DateTime?
+  description     String?
+  status          InternshipStatus @default(UPCOMING)
+  teacherNotes    String?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  @@index([studentId])
+  @@index([status])
 }
