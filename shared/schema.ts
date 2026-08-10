@@ -266,6 +266,7 @@ export const updateProfileSchema = z.object({
   referentTitle: optionalString,
   referentFirstName: optionalString,
   referentLastName: optionalString,
+  referentEmail: optionalEmail,
 });
 
 export interface PaymentRecord {

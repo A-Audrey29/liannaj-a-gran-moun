@@ -866,6 +866,31 @@ function CadrageTab() {
 // ==================== FICHE PROFIL DIALOG ====================
 
 function ProfileDialog({ user, open, onOpenChange }: { user: SafeUser | null; open: boolean; onOpenChange: (v: boolean) => void }) {
+  const { toast } = useToast();
+  const isJunior = user?.role === "JUNIOR";
+
+  const { data: allUsers = [] } = useQuery<SafeUser[]>({
+    queryKey: ["/api/admin/users"],
+    enabled: isJunior && open,
+  });
+  const teachers = allUsers.filter((u) => u.role === "TEACHER" && u.status === "ACTIVE");
+
+  const { data: currentTeacher, isLoading: teacherLoading } = useQuery<SafeUser | null>({
+    queryKey: ["/api/admin/users", user?.id, "teacher"],
+    queryFn: () => apiRequest("GET", `/api/admin/users/${user!.id}/teacher`).then((r) => r.json()),
+    enabled: isJunior && open && !!user,
+  });
+
+  const setTeacherMut = useMutation({
+    mutationFn: (teacherId: string | null) =>
+      apiRequest("PATCH", `/api/admin/users/${user!.id}/teacher`, { teacherId }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/users", user?.id, "teacher"] });
+      toast({ title: "Professeur référent mis à jour" });
+    },
+    onError: () => toast({ title: "Erreur", description: "Impossible de mettre à jour le professeur référent", variant: "destructive" }),
+  });
+
   if (!user) return null;
 
   const fields: { label: string; value: string | null | undefined; show?: boolean }[] = [
@@ -880,8 +905,8 @@ function ProfileDialog({ user, open, onOpenChange }: { user: SafeUser | null; op
     { label: "Bio", value: user.bio },
     { label: "Activité souhaitée", value: user.desiredActivity },
     { label: "École", value: user.schoolName, show: user.role === "JUNIOR" },
-    { label: "Référent", value: user.referentTitle && user.referentFirstName && user.referentLastName ? `${user.referentTitle} ${user.referentFirstName} ${user.referentLastName}` : null, show: user.role === "JUNIOR" },
-    { label: "Email référent", value: user.referentEmail, show: user.role === "JUNIOR" },
+    { label: "Référent", value: user.referentTitle && user.referentFirstName && user.referentLastName ? `${user.referentTitle} ${user.referentFirstName} ${user.referentLastName}` : null, show: user.role === "JUNIOR" && !currentTeacher },
+    { label: "Email référent", value: user.referentEmail, show: user.role === "JUNIOR" && !currentTeacher },
     { label: "Personne de confiance", value: user.trustedPersonName },
     { label: "Email personne de confiance", value: user.trustedPersonEmail },
     { label: "Abonnement", value: user.subscriptionActive ? "Actif" : "Inactif" },
@@ -914,6 +939,31 @@ function ProfileDialog({ user, open, onOpenChange }: { user: SafeUser | null; op
               <span className="text-sm font-medium">{f.value}</span>
             </div>
           ))}
+
+          {isJunior && (
+            <div className="flex flex-col pt-2 border-t">
+              <Label htmlFor="select-student-teacher" className="text-xs text-muted-foreground mb-1">
+                Professeur référent
+              </Label>
+              <Select
+                value={currentTeacher?.id ?? "none"}
+                disabled={teacherLoading || setTeacherMut.isPending}
+                onValueChange={(v) => setTeacherMut.mutate(v === "none" ? null : v)}
+              >
+                <SelectTrigger id="select-student-teacher" data-testid="select-student-teacher">
+                  <SelectValue placeholder="Aucun professeur référent" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none" data-testid="option-teacher-none">Aucun professeur référent</SelectItem>
+                  {teachers.map((t) => (
+                    <SelectItem key={t.id} value={t.id} data-testid={`option-teacher-${t.id}`}>
+                      {t.firstName} {t.lastName}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
         </div>
       </DialogContent>
     </Dialog>

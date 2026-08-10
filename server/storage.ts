@@ -82,6 +82,9 @@ export interface IStorage {
   addTeacherStudent(teacherId: string, studentId: string): Promise<TeacherStudent>;
   removeTeacherStudent(teacherId: string, studentId: string): Promise<void>;
   isTeacherOfStudent(teacherId: string, studentId: string): Promise<boolean>;
+  getStudentTeacher(studentId: string): Promise<(TeacherStudent & { teacher: User }) | null>;
+  setStudentTeacher(studentId: string, teacherId: string | null): Promise<void>;
+  getJuniorsByReferentEmail(email: string): Promise<User[]>;
 
   getTeacherComments(studentId: string): Promise<(TeacherComment & { teacher: User })[]>;
   createTeacherComment(teacherId: string, studentId: string, content: string): Promise<TeacherComment>;
@@ -705,6 +708,26 @@ class DatabaseStorage implements IStorage {
       where: { teacherId_studentId: { teacherId, studentId } },
     });
     return link !== null;
+  }
+
+  async getStudentTeacher(studentId: string): Promise<(TeacherStudent & { teacher: User }) | null> {
+    return prisma.teacherStudent.findFirst({
+      where: { studentId },
+      include: { teacher: true },
+    });
+  }
+
+  async setStudentTeacher(studentId: string, teacherId: string | null): Promise<void> {
+    await prisma.teacherStudent.deleteMany({ where: { studentId } });
+    if (teacherId) {
+      await prisma.teacherStudent.create({ data: { teacherId, studentId } });
+    }
+  }
+
+  async getJuniorsByReferentEmail(email: string): Promise<User[]> {
+    return prisma.user.findMany({
+      where: { role: "JUNIOR", referentEmail: { equals: email, mode: "insensitive" } },
+    });
   }
 
   async getTeacherComments(studentId: string): Promise<(TeacherComment & { teacher: User })[]> {

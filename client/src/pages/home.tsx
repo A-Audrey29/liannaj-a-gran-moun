@@ -1026,6 +1026,7 @@ function ProfilTab({ user }: { user: AuthUser | null }) {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const [editOpen, setEditOpen] = useState(false);
+  const { linkedTeacher } = useAuth();
 
   const handleLogout = async () => {
     try {
@@ -1095,9 +1096,18 @@ function ProfilTab({ user }: { user: AuthUser | null }) {
               <>
                 <SectionTitle>Referent & Ecole</SectionTitle>
                 <div className="space-y-1 text-sm">
-                  <ProfileField label="Titre" value={user.referentTitle} />
-                  <ProfileField label="Nom" value={user.referentLastName} />
-                  <ProfileField label="Email" value={user.referentEmail} />
+                  {linkedTeacher ? (
+                    <>
+                      <ProfileField label="Professeur référent" value={`${linkedTeacher.firstName} ${linkedTeacher.lastName}`} />
+                      <ProfileField label="Email" value={linkedTeacher.email} />
+                    </>
+                  ) : (
+                    <>
+                      <ProfileField label="Titre" value={user.referentTitle} />
+                      <ProfileField label="Nom" value={user.referentLastName} />
+                      <ProfileField label="Email" value={user.referentEmail} />
+                    </>
+                  )}
                   <Separator className="my-3" />
                   <ProfileField label="Ecole" value={user.schoolName} />
                 </div>
@@ -1217,6 +1227,7 @@ function ChangePasswordSection() {
 
 function EditProfileDialog({ user, open, onOpenChange }: { user: AuthUser; open: boolean; onOpenChange: (v: boolean) => void }) {
   const { toast } = useToast();
+  const { linkedTeacher } = useAuth();
 
   const form = useForm<UpdateProfileInput>({
     resolver: zodResolver(updateProfileSchema),
@@ -1235,6 +1246,7 @@ function EditProfileDialog({ user, open, onOpenChange }: { user: AuthUser; open:
       referentTitle: user.referentTitle || "",
       referentFirstName: user.referentFirstName || "",
       referentLastName: user.referentLastName || "",
+      referentEmail: user.referentEmail || "",
     },
   });
 
@@ -1376,29 +1388,45 @@ function EditProfileDialog({ user, open, onOpenChange }: { user: AuthUser; open:
                 <div className="bg-[#f3eaff] rounded-xl p-4 -mx-2">
                   <SectionTitle>Referent & Ecole</SectionTitle>
                   <div className="space-y-3">
-                    <FormField control={form.control} name="referentTitle" render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Titre</FormLabel>
-                        <FormControl><Input {...field} placeholder="Ex: Professeur, Directeur..." data-testid="input-edit-referentTitle" /></FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )} />
-                    <div className="grid grid-cols-2 gap-3">
-                      <FormField control={form.control} name="referentFirstName" render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Prenom</FormLabel>
-                          <FormControl><Input {...field} data-testid="input-edit-referentFirstName" /></FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )} />
-                      <FormField control={form.control} name="referentLastName" render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Nom</FormLabel>
-                          <FormControl><Input {...field} data-testid="input-edit-referentLastName" /></FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )} />
-                    </div>
+                    {linkedTeacher ? (
+                      <div className="text-sm bg-white rounded-lg p-3" data-testid="text-linked-teacher-readonly">
+                        <p className="font-medium">Professeur référent : {linkedTeacher.firstName} {linkedTeacher.lastName}</p>
+                        <p className="text-muted-foreground mt-1">Géré par l'établissement — contactez l'administration pour le changer.</p>
+                      </div>
+                    ) : (
+                      <>
+                        <FormField control={form.control} name="referentTitle" render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Titre</FormLabel>
+                            <FormControl><Input {...field} placeholder="Ex: Professeur, Directeur..." data-testid="input-edit-referentTitle" /></FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )} />
+                        <div className="grid grid-cols-2 gap-3">
+                          <FormField control={form.control} name="referentFirstName" render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Prenom</FormLabel>
+                              <FormControl><Input {...field} data-testid="input-edit-referentFirstName" /></FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )} />
+                          <FormField control={form.control} name="referentLastName" render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Nom</FormLabel>
+                              <FormControl><Input {...field} data-testid="input-edit-referentLastName" /></FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )} />
+                        </div>
+                        <FormField control={form.control} name="referentEmail" render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Email du référent</FormLabel>
+                            <FormControl><Input type="email" {...field} data-testid="input-edit-referentEmail" /></FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )} />
+                      </>
+                    )}
                     <Separator className="my-2" />
                     <FormField control={form.control} name="schoolName" render={({ field }) => (
                       <FormItem>

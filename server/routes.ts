@@ -167,6 +167,13 @@ export async function registerRoutes(
         }
       }
 
+      if (user.role === "JUNIOR" && data.referentEmail) {
+        const teacher = await storage.getUserByEmail(data.referentEmail.toLowerCase().trim());
+        if (teacher && teacher.role === "TEACHER" && teacher.status === "ACTIVE") {
+          await storage.setStudentTeacher(user.id, teacher.id);
+        }
+      }
+
       const baseUrl = process.env.BASE_URL || `${req.protocol}://${req.get("host")}`;
       const validationUrl = `${baseUrl}/api/validate?token=${validationToken}`;
       const userName = `${user.firstName} ${user.lastName}`;
@@ -233,11 +240,16 @@ export async function registerRoutes(
     });
   });
 
-  app.get("/api/auth/me", (req, res) => {
+  app.get("/api/auth/me", async (req, res) => {
     if (!req.isAuthenticated()) {
       return res.status(401).json({ message: "Non authentifié" });
     }
-    res.json({ user: req.user });
+    let linkedTeacher = null;
+    if (req.user!.role === "JUNIOR") {
+      const link = await storage.getStudentTeacher(req.user!.id);
+      linkedTeacher = link ? sanitizeUserPublic(link.teacher) : null;
+    }
+    res.json({ user: req.user, linkedTeacher });
   });
 
   app.patch("/api/auth/me", requireAuth, async (req, res) => {
@@ -1106,6 +1118,38 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/admin/users/:id/teacher", requireAdmin, async (req, res) => {
+    try {
+      const link = await storage.getStudentTeacher(req.params.id);
+      res.json(link ? sanitizeUserPublic(link.teacher) : null);
+    } catch (err) {
+      console.error("[ADMIN_GET_STUDENT_TEACHER] Error:", err);
+      res.status(500).json({ message: "Erreur" });
+    }
+  });
+
+  app.patch("/api/admin/users/:id/teacher", requireAdmin, async (req, res) => {
+    try {
+      const student = await storage.getUser(req.params.id);
+      if (!student) return res.status(404).json({ message: "Élève non trouvé" });
+      if (student.role !== "JUNIOR") return res.status(400).json({ message: "Cet utilisateur n'est pas un jeune" });
+
+      const { teacherId } = req.body as { teacherId: string | null };
+      if (teacherId) {
+        const teacher = await storage.getUser(teacherId);
+        if (!teacher || teacher.role !== "TEACHER") {
+          return res.status(400).json({ message: "Professeur invalide" });
+        }
+      }
+
+      await storage.setStudentTeacher(student.id, teacherId ?? null);
+      res.json({ message: "Professeur référent mis à jour" });
+    } catch (err) {
+      console.error("[ADMIN_SET_STUDENT_TEACHER] Error:", err);
+      res.status(500).json({ message: "Erreur" });
+    }
+  });
+
   app.delete("/api/admin/users/:id", requireAdmin, async (req, res) => {
     try {
       const user = await storage.getUser(req.params.id);
@@ -1926,6 +1970,14 @@ export async function registerRoutes(
         phone: phone || null,
         profilePhoto: `https://ui-avatars.com/api/?name=${encodeURIComponent(firstName + "+" + lastName)}&background=16a34a&color=fff&size=200`,
       });
+
+      const waitingJuniors = await storage.getJuniorsByReferentEmail(teacher.email);
+      for (const junior of waitingJuniors) {
+        const existingLink = await storage.getStudentTeacher(junior.id);
+        if (!existingLink) {
+          await storage.setStudentTeacher(junior.id, teacher.id);
+        }
+      }
 
       res.status(201).json(sanitizeUser(teacher));
     } catch (err) {

@@ -26,14 +26,22 @@ export interface AuthUser {
   profilePhoto: string | null;
 }
 
+export interface LinkedTeacher {
+  id: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+}
+
 export function useAuth() {
-  const { data, isLoading } = useQuery<{ user: AuthUser } | null>({
+  const { data, isLoading } = useQuery<{ user: AuthUser; linkedTeacher: LinkedTeacher | null } | null>({
     queryKey: ["/api/auth/me"],
-    queryFn: getQueryFn<{ user: AuthUser } | null>({ on401: "returnNull" }),
+    queryFn: getQueryFn<{ user: AuthUser; linkedTeacher: LinkedTeacher | null } | null>({ on401: "returnNull" }),
   });
 
   return {
     user: data?.user ?? null,
+    linkedTeacher: data?.linkedTeacher ?? null,
     isLoading,
     isAuthenticated: !!data?.user,
   };
