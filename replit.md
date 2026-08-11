@@ -186,7 +186,7 @@ client/
 7. **Login feedback check** : hasPendingFeedback retourné au login
 
 ## Design System
-- **Nom plateforme** : "liannaj a gran moun" (font Architects Daughter, couleur #dc4256)
+- **Nom plateforme** : "lyannaj a gran moun" (font Architects Daughter, couleur #dc4256)
 - **Fond** : #fbfbfb (zones contenu), #f3eaff / #e8d7fe (zones lavande)
 - **Titres** : #dc4256 (rouge)
 - **Cartes** : fond blanc, rounded-2xl, ombres douces

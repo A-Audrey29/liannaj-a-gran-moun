@@ -1,8 +1,8 @@
-# FEVES — liannaj a gran moun
+# FEVES — lyannaj a gran moun
 
 Application web de mise en relation entre **seniors** et **jeunes** pour des activités sociales en Guadeloupe.
 
-> "liannaj a gran moun" signifie "lien avec les personnes âgées" en créole guadeloupéen.
+> "lyannaj a gran moun" signifie "lien avec les personnes âgées" en créole guadeloupéen.
 
 ---
 

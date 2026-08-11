@@ -1,4 +1,4 @@
-# Liannaj — Ajouter les disponibilités (récurrentes + ponctuelles)
+# Lyannaj — Ajouter les disponibilités (récurrentes + ponctuelles)
 
 > **État au 2026-08-11 — plan entièrement livré, et dépassé sur un point.**
 >
@@ -25,12 +25,12 @@
 
 ## Context
 
-Objectif initial : « récupérer la fonctionnalité de réservation d'Asanblé pour Liannaj ».
+Objectif initial : « récupérer la fonctionnalité de réservation d'Asanblé pour Lyannaj ».
 La lecture du code a invalidé deux prémisses du plan précédent — d'où ce plan réécrit.
 
 **Découverte 1 — la stack n'est pas celle d'Asanblé.**
 
-| | Asanblé | Liannaj |
+| | Asanblé | Lyannaj |
 |---|---|---|
 | Framework | Next.js 15 App Router | Express 5 + Vite + React 18 |
 | ORM | Drizzle | **Prisma 7** |
@@ -42,7 +42,7 @@ La lecture du code a invalidé deux prémisses du plan précédent — d'où ce 
 Conséquence : le code Drizzle d'Asanblé n'est **pas** copiable. Les 240 lignes de
 mutations, le schéma et l'UI sont à réécrire pour Prisma/Express/wouter.
 
-**Découverte 2 — Liannaj a DÉJÀ la réservation.**
+**Découverte 2 — Lyannaj a DÉJÀ la réservation.**
 
 Le modèle `Intervention` ([prisma/schema.prisma:168-189](prisma/schema.prisma)) porte
 `scheduledDate`, `durationMinutes`, `location`, `status`
@@ -137,11 +137,11 @@ modifiée, donc aucun risque sur les données en prod.
 
 ### Étape 2 — Helpers dates
 
-Copier `server/lib/dates.ts` d'Asanblé → `server/lib/dates.ts` dans Liannaj.
+Copier `server/lib/dates.ts` d'Asanblé → `server/lib/dates.ts` dans Lyannaj.
 Copie littérale, y compris l'en-tête documentant le périmètre Guadeloupe.
 Aucun import à adapter (module autonome).
 
-*Note* : Liannaj utilise `toLocaleDateString("fr-FR")` sans `timeZone` explicite
+*Note* : Lyannaj utilise `toLocaleDateString("fr-FR")` sans `timeZone` explicite
 ([routes.ts:805](server/routes.ts) et 6 autres). Même dette latente qu'Asanblé, sans
 impact tant que les utilisateurs sont en Guadeloupe. **Hors périmètre** — ne pas corriger ici.
 
@@ -262,7 +262,7 @@ découvrira pas en prod.
 - **Ne jamais modifier** `Intervention`, ses routes, ses notifications, ses emails.
   Ajout strictement additif.
 - `prisma db push` **uniquement** après build vert et GO explicite d'Audrey.
-- Commit local `9d4174e` non poussé sur Liannaj → à pousser quand tu veux, sans rapport.
+- Commit local `9d4174e` non poussé sur Lyannaj → à pousser quand tu veux, sans rapport.
 
 ## Décisions prises sans demander
 

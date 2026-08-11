@@ -1,9 +1,10 @@
+import { PLATFORM_TAGLINE } from "@shared/branding";
 import { useAuth } from "@/hooks/use-auth";
 import { Link, useLocation } from "wouter";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
-import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
+import { Sheet, SheetContent, SheetTrigger, SheetTitle } from "@/components/ui/sheet";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { Menu } from "lucide-react";
 import { useState } from "react";
@@ -63,7 +64,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       <header className="sticky top-0 z-50 bg-white border-b border-border/50">
         <div className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
           <Link href="/" data-testid="link-home-logo">
-            <span className="font-serif font-bold tracking-tight text-[#dc4256] text-xl md:text-2xl">liannaj a gran moun</span>
+            <span className="font-serif font-bold tracking-tight text-[#dc4256] text-xl md:text-2xl">{PLATFORM_TAGLINE}</span>
           </Link>
 
           <nav className="hidden md:flex items-center gap-4">
@@ -88,6 +89,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 <TooltipContent>Menu</TooltipContent>
               </Tooltip>
               <SheetContent side="right" className="w-72 bg-white">
+                <SheetTitle className="sr-only">Menu</SheetTitle>
                 <div className="flex flex-col gap-4 pt-8">
                   <NavLinks authenticated={isAuthenticated} role={user?.role} onClick={() => setMobileOpen(false)} />
                   {isAuthenticated && (
