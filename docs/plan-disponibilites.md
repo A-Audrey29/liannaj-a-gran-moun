@@ -1,5 +1,28 @@
 # Liannaj — Ajouter les disponibilités (récurrentes + ponctuelles)
 
+> **État au 2026-08-11 — plan entièrement livré, et dépassé sur un point.**
+>
+> Commits `efcd96f` (socle dispos) et `fedaaec` (blocage dur + grille) sur
+> `feature/disponibilites-junior`.
+>
+> **La question ouverte en bas de ce document est tranchée** : le Senior ne peut
+> plus proposer hors des créneaux déclarés. Le blocage est dur, côté serveur
+> (400) *et* côté UI (plus de saisie libre de date). L'étape 7 disait l'inverse
+> (« ne pas modifier le formulaire de proposition en V1 ») — cette consigne est
+> caduque.
+>
+> Écarts avec le plan, décidés en cours de route :
+> - **Trois** chemins de création à protéger, pas deux : `POST /api/referent/interventions`
+>   ([server/routes.ts](../server/routes.ts)) permet au Référent de proposer au nom
+>   du Senior. Non repéré au moment du plan.
+> - `dates.ts` et la fusion de créneaux vivent dans `shared/` (et non `server/lib/`),
+>   pour que client et serveur partagent une seule implémentation.
+> - Deux impasses corrigées : 403 du Senior pendant `PENDING_FIRST_MEETING`,
+>   et Référent sans accès aux dispos qu'il doit respecter.
+>
+> **`prisma db push` reste à faire** : la table `Availability` n'existe pas encore
+> en base.
+
 ## Context
 
 Objectif initial : « récupérer la fonctionnalité de réservation d'Asanblé pour Liannaj ».
@@ -245,13 +268,21 @@ découvrira pas en prod.
 
 Aucune.
 
-## Question ouverte (non bloquante, étape 7)
+## Question ouverte (non bloquante, étape 7) — TRANCHÉE le 2026-08-11
 
-Le Senior doit-il pouvoir proposer une intervention **hors** des créneaux déclarés par
-le Junior ? V1 : oui (affichage informatif seulement, flux inchangé). Contraindre est
-une décision produit, à trancher après usage réel.
+~~Le Senior doit-il pouvoir proposer une intervention **hors** des créneaux déclarés par
+le Junior ? V1 : oui (affichage informatif seulement, flux inchangé).~~
+
+**Non — blocage dur.** Décision d'Audrey. Une proposition hors créneaux est refusée en
+400, et l'UI ne permet plus de saisir une date libre : le Senior clique un créneau vert
+dans la grille semaine. La contrainte est donc garantie par construction côté UI, et
+vérifiée côté serveur pour les trois chemins de création.
+
+Le jeune **confirme toujours** (`PROPOSED → CONFIRMED`) : une disponibilité déclarée
+n'est pas un engagement.
 
 ## Prochaine action
 
-Étape 1 : créer la branche `feature/disponibilites-junior` et ajouter le modèle
-`Availability` au schéma Prisma (sans `db push`).
+`npx prisma db push` pour créer la table `Availability` en base — c'est le seul
+reste. Additif pur (nouvelle table + nouvel enum, aucune table existante modifiée).
+Tant que ce n'est pas fait, la feature échoue au runtime.
