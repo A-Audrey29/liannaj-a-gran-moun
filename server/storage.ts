@@ -1,5 +1,5 @@
 import { prisma } from "./prisma";
-import type { User, Category, UserCategory, Relation, Intervention, AdminRecommendation, Notification, PaymentRecord, Favorite, Conversation, Message, PushSubscription, Report, TeacherStudent, TeacherComment, Internship, Prisma } from "../generated/prisma/client.ts";
+import type { User, Category, UserCategory, Relation, Intervention, AdminRecommendation, Notification, PaymentRecord, Favorite, Conversation, Message, PushSubscription, Report, TeacherStudent, TeacherComment, Internship, Availability, Prisma } from "../generated/prisma/client.ts";
 
 export interface IStorage {
   getUser(id: string): Promise<User | null>;
@@ -30,6 +30,18 @@ export interface IStorage {
   getPendingFeedbackInterventions(userId: string): Promise<(Intervention & { relation: Relation })[]>;
   getPendingFeedbackForReminder(): Promise<(Intervention & { relation: Relation & { senior: User; junior: User } })[]>;
   updateInterventionFeedbackReminderSent(id: string): Promise<Intervention>;
+
+  getAvailabilitiesByUser(userId: string): Promise<Availability[]>;
+  getAvailabilitiesInRange(userId: string, from: Date, to: Date): Promise<Availability[]>;
+  createAvailability(data: { userId: string; startAt: Date; endAt: Date; kind: "AVAILABLE" | "UNAVAILABLE" }): Promise<Availability>;
+  createManyAvailabilities(data: { userId: string; startAt: Date; endAt: Date; kind: "AVAILABLE" | "UNAVAILABLE" }[]): Promise<number>;
+  softDeleteAvailabilities(ids: string[]): Promise<number>;
+  getAvailability(id: string): Promise<Availability | null>;
+  getConfirmedInterventionsForUser(userId: string, from?: Date, to?: Date): Promise<Intervention[]>;
+  deleteAndCreateAvailabilities(
+    deleteIds: string[],
+    createData: { userId: string; startAt: Date; endAt: Date; kind: "AVAILABLE" | "UNAVAILABLE" }[]
+  ): Promise<{ deleted: number; created: number }>;
 
   createAdminRecommendation(seniorId: string, juniorId: string, note?: string): Promise<AdminRecommendation>;
   getAdminRecommendations(seniorId: string): Promise<(AdminRecommendation & { junior: User })[]>;
@@ -253,6 +265,73 @@ class DatabaseStorage implements IStorage {
     return prisma.intervention.update({
       where: { id },
       data: { feedbackReminderSentAt: new Date() },
+    });
+  }
+
+  async getAvailabilitiesByUser(userId: string): Promise<Availability[]> {
+    return prisma.availability.findMany({
+      where: { userId, deletedAt: null },
+      orderBy: { startAt: "asc" },
+    });
+  }
+
+  async getAvailabilitiesInRange(userId: string, from: Date, to: Date): Promise<Availability[]> {
+    return prisma.availability.findMany({
+      where: {
+        userId,
+        deletedAt: null,
+        startAt: { lt: to },
+        endAt: { gt: from },
+      },
+      orderBy: { startAt: "asc" },
+    });
+  }
+
+  async createAvailability(data: { userId: string; startAt: Date; endAt: Date; kind: "AVAILABLE" | "UNAVAILABLE" }): Promise<Availability> {
+    return prisma.availability.create({ data });
+  }
+
+  async createManyAvailabilities(data: { userId: string; startAt: Date; endAt: Date; kind: "AVAILABLE" | "UNAVAILABLE" }[]): Promise<number> {
+    const result = await prisma.availability.createMany({ data });
+    return result.count;
+  }
+
+  async softDeleteAvailabilities(ids: string[]): Promise<number> {
+    const result = await prisma.availability.updateMany({
+      where: { id: { in: ids } },
+      data: { deletedAt: new Date() },
+    });
+    return result.count;
+  }
+
+  async getAvailability(id: string): Promise<Availability | null> {
+    return prisma.availability.findUnique({ where: { id } });
+  }
+
+  async getConfirmedInterventionsForUser(userId: string, from?: Date, to?: Date): Promise<Intervention[]> {
+    return prisma.intervention.findMany({
+      where: {
+        status: "CONFIRMED",
+        relation: { juniorId: userId },
+        ...(from || to
+          ? { scheduledDate: { ...(from ? { gte: from } : {}), ...(to ? { lte: to } : {}) } }
+          : {}),
+      },
+    });
+  }
+
+  async deleteAndCreateAvailabilities(
+    deleteIds: string[],
+    createData: { userId: string; startAt: Date; endAt: Date; kind: "AVAILABLE" | "UNAVAILABLE" }[]
+  ): Promise<{ deleted: number; created: number }> {
+    return prisma.$transaction(async (tx) => {
+      const deleted = deleteIds.length > 0
+        ? (await tx.availability.updateMany({ where: { id: { in: deleteIds } }, data: { deletedAt: new Date() } })).count
+        : 0;
+      const created = createData.length > 0
+        ? (await tx.availability.createMany({ data: createData })).count
+        : 0;
+      return { deleted, created };
     });
   }
 

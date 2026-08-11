@@ -119,6 +119,8 @@ model User {
   studentComments     TeacherComment[] @relation("StudentComments")
   internships         Internship[]
 
+  availabilities      Availability[] @relation("UserAvailabilities")
+
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
 
@@ -186,6 +188,28 @@ model Intervention {
 
   @@index([relationId, status])
   @@index([status, scheduledDate])
+}
+
+enum AvailabilityKind {
+  AVAILABLE
+  UNAVAILABLE
+}
+
+model Availability {
+  id        String           @id @default(cuid())
+  userId    String
+  user      User             @relation("UserAvailabilities", fields: [userId], references: [id], onDelete: Cascade)
+
+  startAt   DateTime
+  endAt     DateTime
+  kind      AvailabilityKind @default(AVAILABLE)
+  deletedAt DateTime?
+
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+
+  @@index([userId, startAt])
+  @@index([startAt])
 }
 
 model AdminRecommendation {

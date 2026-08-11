@@ -19,7 +19,8 @@ import {
   getFeedbackReminderEmailHtml,
   getNewReportEmailHtml,
 } from "./lib/email-templates";
-import { insertUserSchema, createRelationSchema, insertInterventionSchema, feedbackSchema, createPaymentSchema, changePasswordSchema, createAdminSchema, insertReportSchema } from "../shared/schema";
+import { insertUserSchema, createRelationSchema, insertInterventionSchema, feedbackSchema, createPaymentSchema, changePasswordSchema, createAdminSchema, insertReportSchema, createAvailabilitySchema, createRecurringAvailabilitiesSchema, createDateExceptionSchema } from "../shared/schema";
+import { createRecurringAvailabilities, createDateException, deleteAvailability } from "./lib/availability";
 import { addSSEClient, sendSSEEvent, isUserConnected } from "./lib/sse";
 import { sendPushNotification, getVapidPublicKey } from "./lib/push";
 
@@ -947,6 +948,111 @@ export async function registerRoutes(
       res.json(updated);
     } catch (err) {
       console.error("[CANCEL_INTERVENTION] Error:", err);
+      res.status(500).json({ message: "Erreur" });
+    }
+  });
+
+  // ==================== AVAILABILITIES ====================
+
+  app.get("/api/availabilities/me", requireAuth, async (req, res) => {
+    try {
+      const availabilities = await storage.getAvailabilitiesByUser(req.user!.id);
+      res.json(availabilities);
+    } catch (err) {
+      console.error("[GET_MY_AVAILABILITIES] Error:", err);
+      res.status(500).json({ message: "Erreur" });
+    }
+  });
+
+  app.post("/api/availabilities", requireAuth, async (req, res) => {
+    try {
+      if (req.user!.role !== "JUNIOR") {
+        return res.status(403).json({ message: "Seul un Junior peut déclarer une disponibilité" });
+      }
+      const parsed = createAvailabilitySchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: "Données invalides", errors: parsed.error.flatten().fieldErrors });
+      }
+      const availability = await storage.createAvailability({
+        userId: req.user!.id,
+        startAt: new Date(parsed.data.startAt),
+        endAt: new Date(parsed.data.endAt),
+        kind: parsed.data.kind,
+      });
+      res.status(201).json(availability);
+    } catch (err) {
+      console.error("[CREATE_AVAILABILITY] Error:", err);
+      res.status(500).json({ message: "Erreur" });
+    }
+  });
+
+  app.post("/api/availabilities/recurring", requireAuth, async (req, res) => {
+    try {
+      if (req.user!.role !== "JUNIOR") {
+        return res.status(403).json({ message: "Seul un Junior peut déclarer un planning récurrent" });
+      }
+      const parsed = createRecurringAvailabilitiesSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: "Données invalides", errors: parsed.error.flatten().fieldErrors });
+      }
+      const result = await createRecurringAvailabilities(req.user!.id, parsed.data);
+      res.status(201).json(result);
+    } catch (err) {
+      console.error("[CREATE_RECURRING_AVAILABILITIES] Error:", err);
+      res.status(500).json({ message: "Erreur" });
+    }
+  });
+
+  app.post("/api/availabilities/exception", requireAuth, async (req, res) => {
+    try {
+      if (req.user!.role !== "JUNIOR") {
+        return res.status(403).json({ message: "Seul un Junior peut déclarer une exception" });
+      }
+      const parsed = createDateExceptionSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: "Données invalides", errors: parsed.error.flatten().fieldErrors });
+      }
+      const result = await createDateException(req.user!.id, parsed.data);
+      res.status(201).json(result);
+    } catch (err) {
+      console.error("[CREATE_DATE_EXCEPTION] Error:", err);
+      res.status(500).json({ message: "Erreur" });
+    }
+  });
+
+  app.delete("/api/availabilities/:id", requireAuth, async (req, res) => {
+    try {
+      if (req.user!.role !== "JUNIOR") {
+        return res.status(403).json({ message: "Seul un Junior peut supprimer une disponibilité" });
+      }
+      const ok = await deleteAvailability(req.user!.id, req.params.id);
+      if (!ok) {
+        return res.status(404).json({ message: "Disponibilité introuvable" });
+      }
+      res.status(204).end();
+    } catch (err) {
+      console.error("[DELETE_AVAILABILITY] Error:", err);
+      res.status(500).json({ message: "Erreur" });
+    }
+  });
+
+  app.get("/api/users/:juniorId/availabilities", requireAuth, async (req, res) => {
+    try {
+      const user = req.user!;
+      const juniorId = req.params.juniorId;
+      if (user.role !== "ADMIN") {
+        if (user.role !== "SENIOR") {
+          return res.status(403).json({ message: "Accès refusé" });
+        }
+        const relation = await storage.getRelationBySeniorAndJunior(user.id, juniorId);
+        if (!relation || relation.status !== "ACTIVE") {
+          return res.status(403).json({ message: "Aucune relation active avec ce Junior" });
+        }
+      }
+      const availabilities = await storage.getAvailabilitiesByUser(juniorId);
+      res.json(availabilities);
+    } catch (err) {
+      console.error("[GET_JUNIOR_AVAILABILITIES] Error:", err);
       res.status(500).json({ message: "Erreur" });
     }
   });

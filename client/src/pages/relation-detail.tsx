@@ -14,10 +14,12 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import StatusBadge from "@/components/status-badge";
 import StarRating from "@/components/star-rating";
-import { ArrowLeft, Calendar, Clock, MapPin, Plus, Check, X, Mail, CheckCheck } from "lucide-react";
+import { ArrowLeft, Calendar, Clock, MapPin, Plus, Check, X, Mail, CheckCheck, CalendarClock } from "lucide-react";
 import { useState } from "react";
 import { getPhotoUrl } from "@/lib/photo-url";
-import type { Relation, User as UserType, Intervention } from "@shared/schema";
+import type { Relation, User as UserType, Intervention, Availability } from "@shared/schema";
+import { mergeAvailabilities } from "@/lib/merge-availabilities";
+import { fmtDayLong, fmtTimeRange } from "@/lib/availability-format";
 
 type RelationDetail = Relation & { senior: UserType; junior: UserType; interventions: Intervention[] };
 
@@ -194,6 +196,8 @@ export default function RelationDetail() {
         </Card>
       )}
 
+      {(isSenior || isAdmin) && <JuniorAvailabilities juniorId={relation.juniorId} juniorName={relation.junior.firstName} />}
+
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Interventions</h3>
         {canPropose && <NewInterventionDialog relationId={relation.id} isFirst={false} />}
@@ -238,6 +242,44 @@ export default function RelationDetail() {
         </div>
       )}
     </div>
+  );
+}
+
+function JuniorAvailabilities({ juniorId, juniorName }: { juniorId: string; juniorName: string }) {
+  const { data: availabilities, isLoading } = useQuery<Availability[]>({
+    queryKey: [`/api/users/${juniorId}/availabilities`],
+  });
+
+  if (isLoading) {
+    return <Skeleton className="h-24 rounded-2xl mb-6" />;
+  }
+
+  const slots = mergeAvailabilities(availabilities || []).filter((s) => s.endAt.getTime() > Date.now());
+
+  return (
+    <Card className="rounded-2xl border-0 shadow-sm mb-6">
+      <CardContent className="py-6">
+        <h3 className="text-base font-bold mb-4 flex items-center gap-2">
+          <CalendarClock className="w-5 h-5 text-[#8b5cf6]" />
+          Disponibilités de {juniorName}
+        </h3>
+
+        {slots.length === 0 ? (
+          <p className="text-base text-muted-foreground">
+            {juniorName} n'a pas encore indiqué ses disponibilités.
+          </p>
+        ) : (
+          <div className="space-y-3">
+            {slots.map((s, i) => (
+              <div key={i} className="flex items-center gap-3 bg-emerald-50 rounded-xl px-4 py-3" data-testid={`row-junior-availability-${i}`}>
+                <span className="text-base font-semibold">{fmtDayLong(s.startAt)}</span>
+                <span className="text-base text-muted-foreground">{fmtTimeRange(s.startAt, s.endAt)}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 

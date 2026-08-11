@@ -6,6 +6,7 @@ export type UserStatus = "PENDING_VALIDATION" | "ACTIVE" | "SUSPENDED" | "BANNED
 export type RelationStatus = "PENDING" | "PENDING_FIRST_MEETING" | "ACTIVE" | "PAUSED" | "CLOSED";
 export type InterventionStatus = "PROPOSED" | "CONFIRMED" | "CANCELLED" | "DONE" | "COMPLETED_PENDING_FEEDBACK" | "COMPLETED";
 export type NotificationType = "RELATION_REQUEST" | "INTERVENTION_PROPOSED" | "INTERVENTION_CONFIRMED" | "FEEDBACK_REMINDER" | "NEW_MESSAGE" | "SYSTEM";
+export type AvailabilityKind = "AVAILABLE" | "UNAVAILABLE";
 
 export interface User {
   id: string;
@@ -72,6 +73,15 @@ export interface Intervention {
   juniorRating: number | null;
   juniorComment: string | null;
   feedbackReminderSentAt: Date | null;
+  createdAt: Date;
+}
+
+export interface Availability {
+  id: string;
+  userId: string;
+  startAt: Date;
+  endAt: Date;
+  kind: AvailabilityKind;
   createdAt: Date;
 }
 
@@ -244,6 +254,58 @@ export const feedbackSchema = z.object({
   comment: z.string().max(1000).optional(),
 });
 
+export const createAvailabilitySchema = z
+  .object({
+    startAt: z.string().min(1),
+    endAt: z.string().min(1),
+    kind: z.enum(["AVAILABLE", "UNAVAILABLE"]).default("AVAILABLE"),
+  })
+  .refine((data) => new Date(data.endAt) > new Date(data.startAt), {
+    message: "endAt doit être après startAt",
+    path: ["endAt"],
+  });
+
+const timeHHMM = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Format attendu HH:MM");
+const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Format attendu YYYY-MM-DD");
+
+export const createDateExceptionSchema = z
+  .object({
+    date: isoDate,
+    kind: z.enum(["AVAILABLE", "UNAVAILABLE"]),
+    startTime: timeHHMM.optional(),
+    endTime: timeHHMM.optional(),
+  })
+  .refine(
+    (data) => (data.startTime === undefined) === (data.endTime === undefined),
+    { message: "startTime et endTime doivent être fournis ensemble ou omis tous les deux", path: ["endTime"] }
+  );
+
+export const recurringSlotSchema = z.object({
+  dayOfWeek: z.number().min(0).max(6),
+  startTime: timeHHMM,
+  endTime: timeHHMM,
+});
+
+const MAX_RECURRING_RANGE_DAYS = 90;
+
+export const createRecurringAvailabilitiesSchema = z
+  .object({
+    from: isoDate,
+    to: isoDate,
+    slots: z.array(recurringSlotSchema).min(1),
+  })
+  .refine((data) => data.to >= data.from, {
+    message: "to doit être après from",
+    path: ["to"],
+  })
+  .refine(
+    (data) => {
+      const days = (new Date(data.to).getTime() - new Date(data.from).getTime()) / 86_400_000;
+      return days <= MAX_RECURRING_RANGE_DAYS;
+    },
+    { message: `Plage limitée à ${MAX_RECURRING_RANGE_DAYS} jours`, path: ["to"] }
+  );
+
 export const createRelationSchema = z.object({
   juniorId: z.string().min(1, "ID du Junior requis"),
 });
@@ -348,6 +410,9 @@ export type LoginInput = z.infer<typeof loginSchema>;
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type InsertIntervention = z.infer<typeof insertInterventionSchema>;
 export type FeedbackInput = z.infer<typeof feedbackSchema>;
+export type CreateAvailabilityInput = z.infer<typeof createAvailabilitySchema>;
+export type CreateDateExceptionInput = z.infer<typeof createDateExceptionSchema>;
+export type CreateRecurringAvailabilitiesInput = z.infer<typeof createRecurringAvailabilitiesSchema>;
 export type CreateRelationInput = z.infer<typeof createRelationSchema>;
 export type UpdateProfileInput = z.infer<typeof updateProfileSchema>;
 export type CreatePaymentInput = z.infer<typeof createPaymentSchema>;

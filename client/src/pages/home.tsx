@@ -17,11 +17,12 @@ import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import StatusBadge from "@/components/status-badge";
-import { Calendar, MessageCircle, Mail, User, LayoutGrid, ChevronRight, ChevronLeft, Plus, Check, X, Pencil, Heart, Camera, Trash2, AlertTriangle, Star, Users, ClipboardCheck, Eye, EyeOff, List, GalleryHorizontalEnd, MapPin, Lock, HelpCircle, Loader2 } from "lucide-react";
+import { Calendar, MessageCircle, Mail, User, LayoutGrid, ChevronRight, ChevronLeft, Plus, Check, X, Pencil, Heart, Camera, Trash2, AlertTriangle, Star, Users, ClipboardCheck, Eye, EyeOff, List, GalleryHorizontalEnd, MapPin, Lock, HelpCircle, Loader2, CalendarClock } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 import { updateProfileSchema, type UpdateProfileInput, changePasswordSchema, type ChangePasswordInput } from "@shared/schema";
 import type { Relation, User as UserType, Intervention } from "@shared/schema";
 import MessagesTab from "@/components/messages-tab";
+import DisponibilitesTab from "@/components/disponibilites-tab";
 import { useSSE } from "@/hooks/use-sse";
 import { useUnreadMessageCount } from "@/hooks/use-unread-count";
 import { usePushNotifications } from "@/hooks/use-push";
@@ -32,6 +33,7 @@ type MatchSuggestion = { user: UserType; commonCategories: string[]; isRecommend
 const ALL_TABS = [
   { id: "dashboard", label: "Tableau de bord", icon: LayoutGrid },
   { id: "rencontres", label: "Mes rencontres", icon: Calendar },
+  { id: "disponibilites", label: "Mes disponibilités", icon: CalendarClock },
   { id: "messages", label: "Messagerie", icon: Mail },
   { id: "demandes", label: "Trouver un profil", icon: MessageCircle },
   { id: "profil", label: "Mon informations", icon: User },
@@ -78,12 +80,12 @@ export default function Home() {
   const [openRelationId, setOpenRelationId] = useState<string | null>(null);
   const isNotAdmin = user?.role !== "ADMIN";
   const tabs = user?.role === "ADMIN"
-    ? ALL_TABS.filter((t) => t.id !== "profil" && t.id !== "messages" && t.id !== "aide")
+    ? ALL_TABS.filter((t) => t.id !== "profil" && t.id !== "messages" && t.id !== "aide" && t.id !== "disponibilites")
     : user?.role === "JUNIOR"
     ? ALL_TABS.filter((t) => t.id !== "aide").map((t) =>
         t.id === "demandes" ? { ...t, label: "Demandes reçues" } : t
       )
-    : ALL_TABS.filter((t) => t.id !== "aide");
+    : ALL_TABS.filter((t) => t.id !== "aide" && t.id !== "disponibilites");
   const { toast } = useToast();
 
   function setActiveTab(tab: string) {
@@ -195,6 +197,7 @@ export default function Home() {
 
       {activeTab === "dashboard" && <DashboardTab counts={counts} isLoading={relLoading} user={user} onSwitchTab={setActiveTab} />}
       {activeTab === "rencontres" && <RencontresTab relations={relations} isLoading={relLoading} user={user} onOpenMessage={(relationId) => { setOpenRelationId(relationId); setActiveTab("messages"); }} />}
+      {activeTab === "disponibilites" && user?.role === "JUNIOR" && <DisponibilitesTab />}
       {activeTab === "messages" && <MessagesTab user={user} openRelationId={openRelationId} />}
       {activeTab === "demandes" && <DemandesTab relations={relations} isLoading={relLoading} user={user} />}
       {activeTab === "profil" && <ProfilTab user={user} />}
