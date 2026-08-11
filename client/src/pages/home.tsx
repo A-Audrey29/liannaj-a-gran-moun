@@ -76,6 +76,7 @@ function useDashboardCounts(relations?: RelationWithUsers[], pendingFB?: Interve
 
 export default function Home() {
   const { user } = useAuth();
+  const [, setLocation] = useLocation();
   const [activeTab, setActiveTabState] = useState<string>("dashboard");
   const [openRelationId, setOpenRelationId] = useState<string | null>(null);
   const isNotAdmin = user?.role !== "ADMIN";
@@ -168,6 +169,22 @@ export default function Home() {
           </button>
         )}
       </div>
+
+      {user?.role === "SENIOR" && counts.activeRelations.length > 0 && (
+        <Button
+          className="w-full mb-6 rounded-2xl h-14 text-base font-semibold bg-[#dc4256] hover:bg-[#c73848] text-white shadow-sm"
+          onClick={() => {
+            if (counts.activeRelations.length === 1) {
+              setLocation(`/relations/${counts.activeRelations[0].id}`);
+            } else {
+              setActiveTab("rencontres");
+            }
+          }}
+          data-testid="button-proposer-rencontre-permanent"
+        >
+          <Calendar className="w-5 h-5 mr-2" /> Proposer une rencontre
+        </Button>
+      )}
 
       <div className="flex flex-wrap gap-2 mb-8">
         {tabs.map((tab) => {

@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogClose } from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
@@ -19,7 +20,7 @@ import { useState, useEffect } from "react";
 import { getPhotoUrl } from "@/lib/photo-url";
 import type { Relation, User as UserType, Intervention } from "@shared/schema";
 import AvailabilityWeekPicker, { type FreeSlot } from "@/components/availability-week-picker";
-import { fmtTimeRange, fmtDayLong } from "@/lib/availability-format";
+import { fmtTime, fmtTimeRange, fmtDayLong } from "@/lib/availability-format";
 
 type RelationDetail = Relation & { senior: UserType; junior: UserType; interventions: Intervention[] };
 
@@ -361,11 +362,27 @@ function InterventionCard({ intervention, relation, user }: { intervention: Inte
 
 
 /**
+ * Génère les heures de départ possibles dans un créneau, pas de 15 min,
+ * en laissant au moins 30 min (durée mini serveur) avant la fin.
+ */
+function startTimeOptions(slot: FreeSlot): { value: string; label: string }[] {
+  const options: { value: string; label: string }[] = [];
+  let cursor = new Date(slot.startAt);
+  const latest = new Date(slot.endAt.getTime() - 30 * 60_000);
+  while (cursor <= latest) {
+    options.push({ value: cursor.toISOString(), label: fmtTime(cursor) });
+    cursor = new Date(cursor.getTime() + 15 * 60_000);
+  }
+  return options;
+}
+
+/**
  * Proposition de rencontre, pilotée par le créneau cliqué dans la grille.
  *
  * Il n'y a volontairement pas de saisie libre de date : le serveur refuse tout
  * créneau hors disponibilités, donc laisser saisir n'importe quoi ne produirait
- * que des 400. La durée reste ajustable mais bornée à la fin du créneau.
+ * que des 400. L'heure de départ et la durée restent ajustables dans les
+ * bornes du créneau.
  */
 function NewInterventionDialog({
   relationId,
@@ -379,24 +396,41 @@ function NewInterventionDialog({
   onClose: () => void;
 }) {
   const { toast } = useToast();
+  const [startTime, setStartTime] = useState("");
   const [duration, setDuration] = useState("120");
   const [location, setLocation] = useState("");
   const [tasks, setTasks] = useState("");
 
-  const slotMinutes = slot ? Math.floor((slot.endAt.getTime() - slot.startAt.getTime()) / 60_000) : 0;
-  // Bornes serveur : min 30, max 480 (insertInterventionSchema).
-  const maxDuration = Math.min(slotMinutes, 480);
+  const startOptions = slot ? startTimeOptions(slot) : [];
+  const chosenStart = startTime ? new Date(startTime) : slot?.startAt || null;
 
-  // À chaque nouveau créneau, repartir d'une durée qui tient dedans.
+  const remainingMinutes = chosenStart && slot
+    ? Math.floor((slot.endAt.getTime() - chosenStart.getTime()) / 60_000)
+    : 0;
+  // Bornes serveur : min 30, max 480 (insertInterventionSchema).
+  const maxDuration = Math.min(remainingMinutes, 480);
+
+  // À chaque nouveau créneau, repartir du début du créneau et d'une durée qui tient dedans.
   useEffect(() => {
-    if (slot) setDuration(String(Math.min(120, maxDuration)));
-  }, [slot, maxDuration]);
+    if (slot) {
+      const slotMinutes = Math.floor((slot.endAt.getTime() - slot.startAt.getTime()) / 60_000);
+      setStartTime(slot.startAt.toISOString());
+      setDuration(String(Math.min(120, Math.min(slotMinutes, 480))));
+    }
+  }, [slot]);
+
+  // Si l'heure choisie réduit la durée max en dessous de la durée saisie, la recadrer.
+  useEffect(() => {
+    if (duration && parseInt(duration) > maxDuration && maxDuration >= 30) {
+      setDuration(String(maxDuration));
+    }
+  }, [maxDuration]);
 
   const createMutation = useMutation({
     mutationFn: async () => {
       await apiRequest("POST", `/api/relations/${relationId}/interventions`, {
         // Instant UTC : sans ambiguïté quel que soit le fuseau du serveur.
-        scheduledDate: slot!.startAt.toISOString(),
+        scheduledDate: chosenStart!.toISOString(),
         durationMinutes: parseInt(duration),
         location: location || undefined,
         tasks: tasks ? tasks.split(",").map((t) => t.trim()).filter(Boolean) : [],
@@ -438,6 +472,21 @@ function NewInterventionDialog({
               <div className="text-sm font-semibold text-emerald-900" data-testid="text-picked-slot">
                 {fmtDayLong(slot.startAt)} · {fmtTimeRange(slot.startAt, slot.endAt)}
               </div>
+            </div>
+            <div>
+              <Label>Heure de début</Label>
+              <Select value={startTime} onValueChange={setStartTime}>
+                <SelectTrigger data-testid="select-intervention-start-time">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {startOptions.map((opt) => (
+                    <SelectItem key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div>
               <Label>Durée (minutes)</Label>
