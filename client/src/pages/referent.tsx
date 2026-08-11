@@ -2,6 +2,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { useLocation } from "wouter";
 import { getPhotoUrl } from "@/lib/photo-url";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -160,6 +161,7 @@ function DashboardTab({ senior, relations }: { senior: UserType | null; relation
 // ==================== SUIVI TAB ====================
 
 function SuiviTab({ relations }: { relations: RelationWithUsers[] }) {
+  const [, setLocation] = useLocation();
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
   if (relations.length === 0) {
@@ -207,6 +209,16 @@ function SuiviTab({ relations }: { relations: RelationWithUsers[] }) {
 
               {isExpanded && (
                 <div className="mt-4 pt-4 border-t space-y-2">
+                  {r.status === "ACTIVE" && (
+                    <Button
+                      size="sm"
+                      className="w-full rounded-full text-xs bg-[#8b5cf6] hover:bg-[#7c3aed] text-white mb-2"
+                      onClick={() => setLocation(`/relations/${r.id}`)}
+                      data-testid={`button-proposer-rencontre-${r.id}`}
+                    >
+                      Proposer une rencontre à {r.junior.firstName}
+                    </Button>
+                  )}
                   {interventions.length === 0 ? (
                     <p className="text-sm text-muted-foreground text-center py-2">Aucune intervention planifiée</p>
                   ) : (
@@ -543,6 +555,7 @@ function ProfilTab() {
 
 export default function ReferentHome() {
   const { user } = useAuth();
+  const [, setLocation] = useLocation();
   const [activeTab, setActiveTab] = useState<TabId>("dashboard");
   const { toast } = useToast();
 
@@ -562,6 +575,7 @@ export default function ReferentHome() {
   if (!user) return null;
 
   const isLoading = seniorLoading || relLoading;
+  const activeRelations = relations.filter((r) => r.status === "ACTIVE");
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-8">
@@ -574,6 +588,22 @@ export default function ReferentHome() {
         </div>
         <Badge className="bg-violet-100 text-violet-800">Référent</Badge>
       </div>
+
+      {!isLoading && activeRelations.length > 0 && (
+        <Button
+          className="w-full mb-6 rounded-2xl h-14 text-base font-semibold bg-[#8b5cf6] hover:bg-[#7c3aed] text-white shadow-sm"
+          onClick={() => {
+            if (activeRelations.length === 1) {
+              setLocation(`/relations/${activeRelations[0].id}`);
+            } else {
+              setActiveTab("suivi");
+            }
+          }}
+          data-testid="button-proposer-rencontre-permanent"
+        >
+          <Calendar className="w-5 h-5 mr-2" /> Proposer une rencontre
+        </Button>
+      )}
 
       <div className="flex flex-wrap gap-2 mb-8">
         {TABS.map((tab) => {

@@ -131,10 +131,13 @@ export default function RelationDetail() {
   }
 
   const isAdmin = user?.role === "ADMIN";
-  const partner = relation.seniorId === user?.id ? relation.junior : relation.senior;
   const isSenior = relation.seniorId === user?.id;
   const isJunior = relation.juniorId === user?.id;
-  const canPropose = isSenior && relation.status === "ACTIVE";
+  // Le référent n'est ni le sénior ni le jeune de la relation : il agit au nom
+  // du sénior auquel il est rattaché (linkedSeniorId), vérifié côté serveur.
+  const isReferent = user?.role === "REFERENT_SENIOR" && (user as any).linkedSeniorId === relation.seniorId;
+  const partner = isSenior ? relation.junior : relation.senior;
+  const canPropose = (isSenior || isReferent) && relation.status === "ACTIVE";
   const canProposeFirst = isAdmin && relation.status === "PENDING_FIRST_MEETING";
   const canAdvance = isAdmin && relation.status === "PENDING";
   const sortedInterventions = [...relation.interventions].sort((a, b) => new Date(b.scheduledDate).getTime() - new Date(a.scheduledDate).getTime());
@@ -145,7 +148,7 @@ export default function RelationDetail() {
         <ArrowLeft className="w-4 h-4" /> Retour
       </button>
 
-      {isAdmin ? (
+      {isAdmin || isReferent ? (
         <Card className="rounded-2xl border-0 shadow-sm mb-6">
           <CardContent className="py-6">
             <div className="flex items-center justify-between gap-2 mb-4 flex-wrap">
@@ -199,7 +202,7 @@ export default function RelationDetail() {
         </Card>
       )}
 
-      {(isSenior || isAdmin) && (
+      {(isSenior || isAdmin || isReferent) && (
         <AvailabilityWeekPicker
           juniorId={relation.juniorId}
           juniorName={relation.junior.firstName}
@@ -212,6 +215,7 @@ export default function RelationDetail() {
         <NewInterventionDialog
           relationId={relation.id}
           isFirst={canProposeFirst}
+          asReferent={isReferent}
           slot={pickedSlot}
           onClose={() => setPickedSlot(null)}
         />
@@ -237,7 +241,7 @@ export default function RelationDetail() {
         </div>
       )}
 
-      {relation.status !== "CLOSED" && (
+      {relation.status !== "CLOSED" && (isSenior || isJunior || isAdmin) && (
         <div className="mt-8 text-center">
           <AlertDialog>
             <AlertDialogTrigger asChild>
@@ -387,11 +391,13 @@ function startTimeOptions(slot: FreeSlot): { value: string; label: string }[] {
 function NewInterventionDialog({
   relationId,
   isFirst,
+  asReferent,
   slot,
   onClose,
 }: {
   relationId: string;
   isFirst: boolean;
+  asReferent: boolean;
   slot: FreeSlot | null;
   onClose: () => void;
 }) {
@@ -428,16 +434,21 @@ function NewInterventionDialog({
 
   const createMutation = useMutation({
     mutationFn: async () => {
-      await apiRequest("POST", `/api/relations/${relationId}/interventions`, {
-        // Instant UTC : sans ambiguïté quel que soit le fuseau du serveur.
+      const payload = {
         scheduledDate: chosenStart!.toISOString(),
         durationMinutes: parseInt(duration),
         location: location || undefined,
         tasks: tasks ? tasks.split(",").map((t) => t.trim()).filter(Boolean) : [],
-      });
+      };
+      if (asReferent) {
+        await apiRequest("POST", "/api/referent/interventions", { ...payload, relationId });
+      } else {
+        await apiRequest("POST", `/api/relations/${relationId}/interventions`, payload);
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/relations", relationId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/referent/relations"] });
       queryClient.invalidateQueries({ queryKey: [`/api/users`] });
       toast({ title: isFirst ? "1ère rencontre proposée !" : "Rencontre proposée !" });
       setDuration("120");
