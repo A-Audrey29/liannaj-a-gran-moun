@@ -20,7 +20,7 @@ import {
   getNewReportEmailHtml,
 } from "./lib/email-templates";
 import { insertUserSchema, createRelationSchema, insertInterventionSchema, feedbackSchema, createPaymentSchema, changePasswordSchema, createAdminSchema, insertReportSchema, createAvailabilitySchema, createRecurringAvailabilitiesSchema, createDateExceptionSchema } from "../shared/schema";
-import { createRecurringAvailabilities, createDateException, deleteAvailability } from "./lib/availability";
+import { createRecurringAvailabilities, createDateException, deleteAvailability, isWithinAvailability, hasInterventionConflict } from "./lib/availability";
 import { addSSEClient, sendSSEEvent, isUserConnected } from "./lib/sse";
 import { sendPushNotification, getVapidPublicKey } from "./lib/push";
 
@@ -109,6 +109,28 @@ function getBaseUrl(req: any): string {
   const proto = req.headers["x-forwarded-proto"] || req.protocol || "https";
   const host = req.headers["x-forwarded-host"] || req.headers.host || "localhost:5000";
   return `${proto}://${host}`;
+}
+
+/**
+ * Blocage dur d'un créneau de rencontre. Retourne un message d'erreur FR, ou
+ * null si le créneau est valide.
+ *
+ * Partagé par les trois chemins de création (Senior, Admin pour la 1ère
+ * rencontre, Référent au nom du Senior) : un seul d'entre eux non contrôlé
+ * suffirait à contourner la contrainte.
+ */
+async function validateSlot(
+  juniorId: string,
+  scheduledDate: Date,
+  durationMinutes: number,
+): Promise<string | null> {
+  if (!(await isWithinAvailability(juniorId, scheduledDate, durationMinutes))) {
+    return "Ce créneau ne fait pas partie des disponibilités déclarées par le jeune.";
+  }
+  if (await hasInterventionConflict(juniorId, scheduledDate, durationMinutes)) {
+    return "Une autre rencontre est déjà prévue sur ce créneau.";
+  }
+  return null;
 }
 
 export async function registerRoutes(
@@ -779,9 +801,19 @@ export async function registerRoutes(
         });
       }
 
+      const scheduledDate = new Date(parsed.data.scheduledDate);
+      if (Number.isNaN(scheduledDate.getTime())) {
+        return res.status(400).json({ message: "Date invalide" });
+      }
+
+      const slotError = await validateSlot(relation.juniorId, scheduledDate, parsed.data.durationMinutes);
+      if (slotError) {
+        return res.status(400).json({ message: slotError });
+      }
+
       const intervention = await storage.createIntervention({
         relationId: parsed.data.relationId,
-        scheduledDate: new Date(parsed.data.scheduledDate),
+        scheduledDate,
         durationMinutes: parsed.data.durationMinutes,
         location: parsed.data.location,
         tasks: parsed.data.tasks,
@@ -1041,11 +1073,17 @@ export async function registerRoutes(
       const user = req.user!;
       const juniorId = req.params.juniorId;
       if (user.role !== "ADMIN") {
-        if (user.role !== "SENIOR") {
+        // Le référent consulte au nom du sénior auquel il est rattaché : il
+        // propose des rencontres, il lui faut donc les mêmes créneaux.
+        const seniorId =
+          user.role === "REFERENT_SENIOR" ? (user as any).linkedSeniorId : user.id;
+        if ((user.role !== "SENIOR" && user.role !== "REFERENT_SENIOR") || !seniorId) {
           return res.status(403).json({ message: "Accès refusé" });
         }
-        const relation = await storage.getRelationBySeniorAndJunior(user.id, juniorId);
-        if (!relation || relation.status !== "ACTIVE") {
+        const relation = await storage.getRelationBySeniorAndJunior(seniorId, juniorId);
+        // PENDING_FIRST_MEETING compte : c'est justement la phase où la 1ère
+        // rencontre se cale, donc celle où les dispos servent le plus.
+        if (!relation || (relation.status !== "ACTIVE" && relation.status !== "PENDING_FIRST_MEETING")) {
           return res.status(403).json({ message: "Aucune relation active avec ce Junior" });
         }
       }
@@ -2152,9 +2190,19 @@ export async function registerRoutes(
       if (relation.seniorId !== linkedSeniorId) return res.status(403).json({ message: "Cette relation n'appartient pas à votre sénior" });
       if (relation.status !== "ACTIVE") return res.status(400).json({ message: "La relation doit être active pour planifier une intervention" });
 
+      const scheduledDate = new Date(parsed.data.scheduledDate);
+      if (Number.isNaN(scheduledDate.getTime())) {
+        return res.status(400).json({ message: "Date invalide" });
+      }
+
+      const slotError = await validateSlot(relation.juniorId, scheduledDate, parsed.data.durationMinutes);
+      if (slotError) {
+        return res.status(400).json({ message: slotError });
+      }
+
       const intervention = await storage.createIntervention({
         relationId: parsed.data.relationId,
-        scheduledDate: new Date(parsed.data.scheduledDate),
+        scheduledDate,
         durationMinutes: parsed.data.durationMinutes,
         location: parsed.data.location,
         tasks: parsed.data.tasks,

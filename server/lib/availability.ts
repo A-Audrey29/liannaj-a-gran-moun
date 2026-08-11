@@ -1,11 +1,9 @@
 import { storage } from "../storage";
-import { addDaysISO, partsFromISO, gpDateTimeToUtc } from "./dates";
+import { addDaysISO, partsFromISO, gpDateTimeToUtc } from "../../shared/dates";
 import type { CreateRecurringAvailabilitiesInput, CreateDateExceptionInput } from "../../shared/schema";
+import { overlaps, isSlotCovered } from "../../shared/availability";
 
-/** Deux intervalles [aStart,aEnd) et [bStart,bEnd) se chevauchent-ils ? */
-export function overlaps(aStart: Date, aEnd: Date, bStart: Date, bEnd: Date): boolean {
-  return aStart < bEnd && aEnd > bStart;
-}
+export { overlaps };
 
 function confirmedIntervals(interventions: { scheduledDate: Date; durationMinutes: number }[]) {
   return interventions.map((i) => ({
@@ -105,6 +103,50 @@ export async function createDateException(
   const { deleted } = await storage.deleteAndCreateAvailabilities(toDeleteIds, toCreate);
 
   return { created: toCreate.length, deleted };
+}
+
+/**
+ * Le créneau proposé tombe-t-il dans les disponibilités déclarées par le jeune ?
+ *
+ * `juniorId` est TOUJOURS le junior de la relation, jamais l'appelant : pour la
+ * 1ère rencontre c'est l'Admin qui propose, et ce sont bien les dispos du jeune
+ * qui font foi.
+ */
+export async function isWithinAvailability(
+  juniorId: string,
+  startAt: Date,
+  durationMinutes: number
+): Promise<boolean> {
+  const endAt = new Date(startAt.getTime() + durationMinutes * 60_000);
+  const availabilities = await storage.getAvailabilitiesInRange(juniorId, startAt, endAt);
+  return isSlotCovered(availabilities, startAt, endAt);
+}
+
+/**
+ * Le créneau entre-t-il en conflit avec une rencontre déjà posée ?
+ *
+ * PROPOSED compte autant que CONFIRMED : sans ça, deux propositions peuvent
+ * viser le même créneau et le jeune se retrouve à devoir arbitrer un doublon.
+ */
+export async function hasInterventionConflict(
+  juniorId: string,
+  startAt: Date,
+  durationMinutes: number
+): Promise<boolean> {
+  const endAt = new Date(startAt.getTime() + durationMinutes * 60_000);
+  // Fenêtre élargie en amont : une rencontre commencée avant `startAt` peut
+  // déborder dessus. 24h couvre largement la durée max (480 min).
+  const windowStart = new Date(startAt.getTime() - 24 * 60 * 60_000);
+  const existing = await storage.getActiveInterventionsForUser(juniorId, windowStart, endAt);
+
+  return existing.some((i) =>
+    overlaps(
+      i.scheduledDate,
+      new Date(i.scheduledDate.getTime() + i.durationMinutes * 60_000),
+      startAt,
+      endAt
+    )
+  );
 }
 
 /** Soft delete avec vérification d'appartenance. */

@@ -14,12 +14,12 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import StatusBadge from "@/components/status-badge";
 import StarRating from "@/components/star-rating";
-import { ArrowLeft, Calendar, Clock, MapPin, Plus, Check, X, Mail, CheckCheck, CalendarClock } from "lucide-react";
-import { useState } from "react";
+import { ArrowLeft, Calendar, Clock, MapPin, Check, X, Mail, CheckCheck } from "lucide-react";
+import { useState, useEffect } from "react";
 import { getPhotoUrl } from "@/lib/photo-url";
-import type { Relation, User as UserType, Intervention, Availability } from "@shared/schema";
-import { mergeAvailabilities } from "@/lib/merge-availabilities";
-import { fmtDayLong, fmtTimeRange } from "@/lib/availability-format";
+import type { Relation, User as UserType, Intervention } from "@shared/schema";
+import AvailabilityWeekPicker, { type FreeSlot } from "@/components/availability-week-picker";
+import { fmtTimeRange, fmtDayLong } from "@/lib/availability-format";
 
 type RelationDetail = Relation & { senior: UserType; junior: UserType; interventions: Intervention[] };
 
@@ -89,6 +89,8 @@ export default function RelationDetail() {
   const { user } = useAuth();
   const { toast } = useToast();
   const [, setLocation] = useLocation();
+
+  const [pickedSlot, setPickedSlot] = useState<FreeSlot | null>(null);
 
   const { data: relation, isLoading } = useQuery<RelationDetail>({
     queryKey: ["/api/relations", params.id],
@@ -196,12 +198,26 @@ export default function RelationDetail() {
         </Card>
       )}
 
-      {(isSenior || isAdmin) && <JuniorAvailabilities juniorId={relation.juniorId} juniorName={relation.junior.firstName} />}
+      {(isSenior || isAdmin) && (
+        <AvailabilityWeekPicker
+          juniorId={relation.juniorId}
+          juniorName={relation.junior.firstName}
+          interventions={relation.interventions}
+          onPickSlot={canPropose || canProposeFirst ? setPickedSlot : null}
+        />
+      )}
+
+      {(canPropose || canProposeFirst) && (
+        <NewInterventionDialog
+          relationId={relation.id}
+          isFirst={canProposeFirst}
+          slot={pickedSlot}
+          onClose={() => setPickedSlot(null)}
+        />
+      )}
 
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Interventions</h3>
-        {canPropose && <NewInterventionDialog relationId={relation.id} isFirst={false} />}
-        {canProposeFirst && <NewInterventionDialog relationId={relation.id} isFirst={true} />}
       </div>
 
       {sortedInterventions.length === 0 ? (
@@ -242,44 +258,6 @@ export default function RelationDetail() {
         </div>
       )}
     </div>
-  );
-}
-
-function JuniorAvailabilities({ juniorId, juniorName }: { juniorId: string; juniorName: string }) {
-  const { data: availabilities, isLoading } = useQuery<Availability[]>({
-    queryKey: [`/api/users/${juniorId}/availabilities`],
-  });
-
-  if (isLoading) {
-    return <Skeleton className="h-24 rounded-2xl mb-6" />;
-  }
-
-  const slots = mergeAvailabilities(availabilities || []).filter((s) => s.endAt.getTime() > Date.now());
-
-  return (
-    <Card className="rounded-2xl border-0 shadow-sm mb-6">
-      <CardContent className="py-6">
-        <h3 className="text-base font-bold mb-4 flex items-center gap-2">
-          <CalendarClock className="w-5 h-5 text-[#8b5cf6]" />
-          Disponibilités de {juniorName}
-        </h3>
-
-        {slots.length === 0 ? (
-          <p className="text-base text-muted-foreground">
-            {juniorName} n'a pas encore indiqué ses disponibilités.
-          </p>
-        ) : (
-          <div className="space-y-3">
-            {slots.map((s, i) => (
-              <div key={i} className="flex items-center gap-3 bg-emerald-50 rounded-xl px-4 py-3" data-testid={`row-junior-availability-${i}`}>
-                <span className="text-base font-semibold">{fmtDayLong(s.startAt)}</span>
-                <span className="text-base text-muted-foreground">{fmtTimeRange(s.startAt, s.endAt)}</span>
-              </div>
-            ))}
-          </div>
-        )}
-      </CardContent>
-    </Card>
   );
 }
 
@@ -381,18 +359,44 @@ function InterventionCard({ intervention, relation, user }: { intervention: Inte
   );
 }
 
-function NewInterventionDialog({ relationId, isFirst }: { relationId: string; isFirst: boolean }) {
+
+/**
+ * Proposition de rencontre, pilotée par le créneau cliqué dans la grille.
+ *
+ * Il n'y a volontairement pas de saisie libre de date : le serveur refuse tout
+ * créneau hors disponibilités, donc laisser saisir n'importe quoi ne produirait
+ * que des 400. La durée reste ajustable mais bornée à la fin du créneau.
+ */
+function NewInterventionDialog({
+  relationId,
+  isFirst,
+  slot,
+  onClose,
+}: {
+  relationId: string;
+  isFirst: boolean;
+  slot: FreeSlot | null;
+  onClose: () => void;
+}) {
   const { toast } = useToast();
-  const [open, setOpen] = useState(false);
-  const [date, setDate] = useState("");
   const [duration, setDuration] = useState("120");
   const [location, setLocation] = useState("");
   const [tasks, setTasks] = useState("");
 
+  const slotMinutes = slot ? Math.floor((slot.endAt.getTime() - slot.startAt.getTime()) / 60_000) : 0;
+  // Bornes serveur : min 30, max 480 (insertInterventionSchema).
+  const maxDuration = Math.min(slotMinutes, 480);
+
+  // À chaque nouveau créneau, repartir d'une durée qui tient dedans.
+  useEffect(() => {
+    if (slot) setDuration(String(Math.min(120, maxDuration)));
+  }, [slot, maxDuration]);
+
   const createMutation = useMutation({
     mutationFn: async () => {
       await apiRequest("POST", `/api/relations/${relationId}/interventions`, {
-        scheduledDate: date,
+        // Instant UTC : sans ambiguïté quel que soit le fuseau du serveur.
+        scheduledDate: slot!.startAt.toISOString(),
         durationMinutes: parseInt(duration),
         location: location || undefined,
         tasks: tasks ? tasks.split(",").map((t) => t.trim()).filter(Boolean) : [],
@@ -400,47 +404,87 @@ function NewInterventionDialog({ relationId, isFirst }: { relationId: string; is
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/relations", relationId] });
-      toast({ title: isFirst ? "1ère rencontre proposée !" : "Intervention proposée !" });
-      setOpen(false);
-      setDate("");
+      queryClient.invalidateQueries({ queryKey: [`/api/users`] });
+      toast({ title: isFirst ? "1ère rencontre proposée !" : "Rencontre proposée !" });
       setDuration("120");
       setLocation("");
       setTasks("");
+      onClose();
     },
-    onError: () => toast({ title: "Erreur", variant: "destructive" }),
+    onError: (err: any) =>
+      toast({
+        title: "Proposition refusée",
+        description: err?.message || "Ce créneau n'est pas disponible.",
+        variant: "destructive",
+      }),
   });
 
+  const durationNum = parseInt(duration) || 0;
+  const tooLong = durationNum > maxDuration;
+  const tooShort = durationNum < 30;
+
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button size="sm" className="rounded-full bg-[#dc4256] hover:bg-[#c73848] text-white text-xs" data-testid="button-new-intervention">
-          <Plus className="w-3 h-3 mr-1" /> {isFirst ? "Proposer la 1ère rencontre" : "Proposer une rencontre"}
-        </Button>
-      </DialogTrigger>
+    <Dialog open={slot !== null} onOpenChange={(o) => !o && onClose()}>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>{isFirst ? "Organiser la 1ère rencontre" : "Proposer une rencontre"}</DialogTitle>
         </DialogHeader>
-        <div className="space-y-4">
-          <div>
-            <Label>Date</Label>
-            <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} data-testid="input-intervention-date" />
+        {slot && (
+          <div className="space-y-4">
+            <div className="rounded-xl bg-emerald-50 border border-emerald-200 px-4 py-3">
+              <div className="text-xs font-semibold uppercase tracking-wide text-emerald-700 mb-0.5">
+                Créneau choisi
+              </div>
+              <div className="text-sm font-semibold text-emerald-900" data-testid="text-picked-slot">
+                {fmtDayLong(slot.startAt)} · {fmtTimeRange(slot.startAt, slot.endAt)}
+              </div>
+            </div>
+            <div>
+              <Label>Durée (minutes)</Label>
+              <Input
+                type="number"
+                value={duration}
+                onChange={(e) => setDuration(e.target.value)}
+                min="30"
+                max={maxDuration}
+                step="15"
+                data-testid="input-intervention-duration"
+              />
+              <p className={`text-xs mt-1 ${tooLong || tooShort ? "text-destructive" : "text-muted-foreground"}`}>
+                {tooShort
+                  ? "Minimum 30 minutes."
+                  : tooLong
+                  ? `Ce créneau ne dure que ${maxDuration} minutes.`
+                  : `Jusqu'à ${maxDuration} minutes disponibles.`}
+              </p>
+            </div>
+            <div>
+              <Label>Lieu</Label>
+              <Input
+                value={location}
+                onChange={(e) => setLocation(e.target.value)}
+                placeholder="Ex: Centre social, domicile..."
+                data-testid="input-intervention-location"
+              />
+            </div>
+            <div>
+              <Label>Activités (séparées par des virgules)</Label>
+              <Input
+                value={tasks}
+                onChange={(e) => setTasks(e.target.value)}
+                placeholder="Ex: Cuisine, Jardinage"
+                data-testid="input-intervention-tasks"
+              />
+            </div>
           </div>
-          <div>
-            <Label>Duree (minutes)</Label>
-            <Input type="number" value={duration} onChange={(e) => setDuration(e.target.value)} min="30" max="480" data-testid="input-intervention-duration" />
-          </div>
-          <div>
-            <Label>Lieu</Label>
-            <Input value={location} onChange={(e) => setLocation(e.target.value)} placeholder="Ex: Centre social, domicile..." data-testid="input-intervention-location" />
-          </div>
-          <div>
-            <Label>Activites (separees par des virgules)</Label>
-            <Input value={tasks} onChange={(e) => setTasks(e.target.value)} placeholder="Ex: Cuisine, Jardinage" data-testid="input-intervention-tasks" />
-          </div>
-        </div>
+        )}
         <DialogFooter>
-          <Button onClick={() => createMutation.mutate()} disabled={createMutation.isPending || !date} className="bg-[#dc4256] hover:bg-[#c73848] text-white" data-testid="button-submit-intervention">
+          <Button
+            onClick={() => createMutation.mutate()}
+            disabled={createMutation.isPending || tooLong || tooShort}
+            className="bg-[#dc4256] hover:bg-[#c73848] text-white"
+            data-testid="button-submit-intervention"
+          >
             {createMutation.isPending ? "Envoi..." : "Proposer"}
           </Button>
         </DialogFooter>

@@ -38,6 +38,8 @@ export interface IStorage {
   softDeleteAvailabilities(ids: string[]): Promise<number>;
   getAvailability(id: string): Promise<Availability | null>;
   getConfirmedInterventionsForUser(userId: string, from?: Date, to?: Date): Promise<Intervention[]>;
+  /** PROPOSED + CONFIRMED — pour détecter les conflits de créneau. */
+  getActiveInterventionsForUser(userId: string, from?: Date, to?: Date): Promise<Intervention[]>;
   deleteAndCreateAvailabilities(
     deleteIds: string[],
     createData: { userId: string; startAt: Date; endAt: Date; kind: "AVAILABLE" | "UNAVAILABLE" }[]
@@ -312,6 +314,18 @@ class DatabaseStorage implements IStorage {
     return prisma.intervention.findMany({
       where: {
         status: "CONFIRMED",
+        relation: { juniorId: userId },
+        ...(from || to
+          ? { scheduledDate: { ...(from ? { gte: from } : {}), ...(to ? { lte: to } : {}) } }
+          : {}),
+      },
+    });
+  }
+
+  async getActiveInterventionsForUser(userId: string, from?: Date, to?: Date): Promise<Intervention[]> {
+    return prisma.intervention.findMany({
+      where: {
+        status: { in: ["PROPOSED", "CONFIRMED"] },
         relation: { juniorId: userId },
         ...(from || to
           ? { scheduledDate: { ...(from ? { gte: from } : {}), ...(to ? { lte: to } : {}) } }

@@ -241,9 +241,24 @@ export const insertUserSchema = insertUserBaseSchema.refine(
   { message: "Le validateur Junior doit utiliser un email professionnel ou institutionnel", path: ["validatorEmail"] }
 );
 
+/**
+ * Datetime ISO complet, heure obligatoire.
+ *
+ * Une date seule ("2026-08-17") était jusqu'ici acceptée et interprétée à
+ * minuit — inexploitable dès lors qu'on contraint la proposition aux plages
+ * horaires déclarées par le jeune.
+ */
+const isoDateTime = z
+  .string()
+  .regex(
+    /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/,
+    "Date et heure requises (format ISO, ex. 2026-08-17T14:00)",
+  )
+  .refine((v) => !Number.isNaN(new Date(v).getTime()), "Date invalide");
+
 export const insertInterventionSchema = z.object({
   relationId: z.string().min(1),
-  scheduledDate: z.string().min(1),
+  scheduledDate: isoDateTime,
   durationMinutes: z.number().min(30).max(480).default(120),
   location: z.string().optional(),
   tasks: z.array(z.string()).default([]),
@@ -369,7 +384,7 @@ export const createReferentSchema = z.object({
 
 export const referentInterventionSchema = z.object({
   relationId: z.string().min(1, "Relation requise"),
-  scheduledDate: z.string().min(1, "Date requise"),
+  scheduledDate: isoDateTime,
   durationMinutes: z.number().min(30).max(480).default(120),
   location: z.string().optional(),
   tasks: z.array(z.string()).default([]),
