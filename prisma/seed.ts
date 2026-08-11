@@ -4,6 +4,7 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import pg from "pg";
 import bcrypt from "bcryptjs";
 import { randomUUID } from "crypto";
+import { ATELIERS } from "../shared/ateliers.ts";
 
 const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
 const adapter = new PrismaPg(pool);
@@ -23,12 +24,24 @@ async function main() {
   await prisma.category.deleteMany();
   await prisma.user.deleteMany();
 
-  const bricolage = await prisma.category.create({ data: { name: "Bricolage" } });
-  const jardinage = await prisma.category.create({ data: { name: "Jardinage" } });
-  const informatique = await prisma.category.create({ data: { name: "Informatique" } });
-  const cuisine = await prisma.category.create({ data: { name: "Cuisine" } });
-  const lecture = await prisma.category.create({ data: { name: "Lecture" } });
-  const promenade = await prisma.category.create({ data: { name: "Promenade" } });
+  const [
+    bienEtre,
+    creatives,
+    physiques,
+    musiqueLecture,
+    cuisine,
+    jeux,
+    numeriques,
+  ] = await Promise.all(
+    ATELIERS.map((name) => prisma.category.create({ data: { name } }))
+  );
+
+  // Alias conservés pour ne pas réécrire tous les liens userCategory ci-dessous.
+  const bricolage = creatives;
+  const jardinage = physiques;
+  const informatique = numeriques;
+  const lecture = musiqueLecture;
+  const promenade = physiques;
 
   const admin = await prisma.user.create({
     data: {
@@ -180,6 +193,8 @@ async function main() {
       { userId: senior5.id, categoryId: cuisine.id },
       { userId: senior5.id, categoryId: promenade.id },
       { userId: senior5.id, categoryId: jardinage.id },
+      { userId: senior5.id, categoryId: bienEtre.id },
+      { userId: senior5.id, categoryId: jeux.id },
     ],
   });
 
@@ -638,7 +653,7 @@ async function main() {
   console.log("   - 1 Professeur : professeur@test.fr (affilié à 2 juniors)");
   console.log("   - 6 Seniors : 5 actifs (Les Abymes) + 1 pending (Pointe-à-Pitre)");
   console.log("   - 6 Juniors actifs (Les Abymes)");
-  console.log("   - 6 Catégories : Bricolage, Jardinage, Informatique, Cuisine, Lecture, Promenade");
+  console.log("   - 7 Catégories : " + ATELIERS.join(", "));
   console.log("   - 5 Relations : 1 PENDING, 1 PENDING_FIRST_MEETING, 3 ACTIVE");
   console.log("   - 6 Interventions : 2 CONFIRMED, 1 PROPOSED, 2 COMPLETED, 1 COMPLETED_PENDING_FEEDBACK");
   console.log("   - 2 AdminRecommendations, 1 Paiement, 4 Notifications, 2 Favoris");

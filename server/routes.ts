@@ -19,7 +19,7 @@ import {
   getFeedbackReminderEmailHtml,
   getNewReportEmailHtml,
 } from "./lib/email-templates";
-import { insertUserSchema, createRelationSchema, insertInterventionSchema, feedbackSchema, createPaymentSchema, changePasswordSchema, createAdminSchema, insertReportSchema, createAvailabilitySchema, createRecurringAvailabilitiesSchema, createDateExceptionSchema } from "../shared/schema";
+import { insertUserSchema, createRelationSchema, insertInterventionSchema, feedbackSchema, createPaymentSchema, changePasswordSchema, createAdminSchema, insertReportSchema, createAvailabilitySchema, createRecurringAvailabilitiesSchema, createDateExceptionSchema, updateUserCategoriesSchema } from "../shared/schema";
 import { createRecurringAvailabilities, createDateException, deleteAvailability, isWithinAvailability, hasInterventionConflict } from "./lib/availability";
 import { addSSEClient, sendSSEEvent, isUserConnected } from "./lib/sse";
 import { sendPushNotification, getVapidPublicKey } from "./lib/push";
@@ -301,6 +301,31 @@ export async function registerRoutes(
     } catch (err) {
       console.error("[CHANGE_PASSWORD] Error:", err);
       res.status(500).json({ message: "Erreur lors du changement de mot de passe" });
+    }
+  });
+
+  app.get("/api/auth/me/categories", requireAuth, async (req, res) => {
+    try {
+      const userCategories = await storage.getUserCategories(req.user!.id);
+      res.json({ categoryIds: userCategories.map((uc) => uc.categoryId) });
+    } catch (err) {
+      res.status(500).json({ message: "Erreur lors de la récupération des ateliers" });
+    }
+  });
+
+  app.patch("/api/auth/me/categories", requireAuth, async (req, res) => {
+    try {
+      const parsed = updateUserCategoriesSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: "Données invalides", errors: parsed.error.flatten() });
+      }
+      await storage.deleteUserCategories(req.user!.id);
+      for (const categoryId of parsed.data.categoryIds) {
+        await storage.createUserCategory(req.user!.id, categoryId);
+      }
+      res.json({ categoryIds: parsed.data.categoryIds });
+    } catch (err) {
+      res.status(500).json({ message: "Erreur lors de la mise à jour des ateliers" });
     }
   });
 

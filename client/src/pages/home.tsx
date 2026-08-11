@@ -16,13 +16,15 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Checkbox } from "@/components/ui/checkbox";
 import StatusBadge from "@/components/status-badge";
 import { Calendar, MessageCircle, Mail, User, LayoutGrid, ChevronRight, ChevronLeft, Plus, Check, X, Pencil, Heart, Camera, Trash2, AlertTriangle, Star, Users, ClipboardCheck, Eye, EyeOff, List, GalleryHorizontalEnd, MapPin, Lock, HelpCircle, Loader2, CalendarClock } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 import { updateProfileSchema, type UpdateProfileInput, changePasswordSchema, type ChangePasswordInput } from "@shared/schema";
-import type { Relation, User as UserType, Intervention } from "@shared/schema";
+import type { Relation, User as UserType, Intervention, Category } from "@shared/schema";
 import MessagesTab from "@/components/messages-tab";
 import DisponibilitesTab from "@/components/disponibilites-tab";
+import { MobileTabsMenu } from "@/components/mobile-tabs-menu";
 import { useSSE } from "@/hooks/use-sse";
 import { useUnreadMessageCount } from "@/hooks/use-unread-count";
 import { usePushNotifications } from "@/hooks/use-push";
@@ -36,7 +38,7 @@ const ALL_TABS = [
   { id: "disponibilites", label: "Mes disponibilités", icon: CalendarClock },
   { id: "messages", label: "Messagerie", icon: Mail },
   { id: "demandes", label: "Trouver un profil", icon: MessageCircle },
-  { id: "profil", label: "Mon informations", icon: User },
+  { id: "profil", label: "Mes informations", icon: User },
   { id: "aide", label: "Aide", icon: HelpCircle },
 ] as const;
 
@@ -186,7 +188,9 @@ export default function Home() {
         </Button>
       )}
 
-      <div className="flex flex-wrap gap-2 mb-8">
+      <MobileTabsMenu tabs={tabs} activeTab={activeTab} onSelect={setActiveTab} getBadgeCount={getTabBadge} />
+
+      <div className="hidden md:flex flex-wrap gap-2 mb-8">
         {tabs.map((tab) => {
           const isActive = activeTab === tab.id;
           const Icon = tab.icon;
@@ -1047,6 +1051,18 @@ function ProfilTab({ user }: { user: AuthUser | null }) {
   const { toast } = useToast();
   const [editOpen, setEditOpen] = useState(false);
 
+  const categoriesQuery = useQuery<Category[]>({
+    queryKey: ["/api/categories"],
+    enabled: !!user,
+  });
+  const myCategoriesQuery = useQuery<{ categoryIds: string[] }>({
+    queryKey: ["/api/auth/me/categories"],
+    enabled: !!user,
+  });
+  const selectedCategories = (categoriesQuery.data ?? []).filter((cat) =>
+    (myCategoriesQuery.data?.categoryIds ?? []).includes(cat.id)
+  );
+
   const handleLogout = async () => {
     try {
       await apiRequest("POST", "/api/auth/logout");
@@ -1095,7 +1111,22 @@ function ProfilTab({ user }: { user: AuthUser | null }) {
           <SectionTitle>Profil</SectionTitle>
           <div className="space-y-1 text-sm">
             <ProfileField label="Bio" value={user.bio} />
-            <ProfileField label="Activite souhaitee" value={user.desiredActivity} />
+          </div>
+          <div className="mt-4">
+            <div className="text-xs text-muted-foreground uppercase tracking-wide mb-2">
+              Ateliers que je peux animer
+            </div>
+            {selectedCategories.length > 0 ? (
+              <div className="flex flex-wrap gap-2">
+                {selectedCategories.map((cat) => (
+                  <Badge key={cat.id} variant="secondary" data-testid={`badge-category-${cat.id}`}>
+                    {cat.name}
+                  </Badge>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">Aucun atelier sélectionné.</p>
+            )}
           </div>
         </CardContent>
       </Card>
@@ -1238,6 +1269,38 @@ function ChangePasswordSection() {
 function EditProfileDialog({ user, open, onOpenChange }: { user: AuthUser; open: boolean; onOpenChange: (v: boolean) => void }) {
   const { toast } = useToast();
 
+  const categoriesQuery = useQuery<Category[]>({
+    queryKey: ["/api/categories"],
+    enabled: open,
+  });
+  const myCategoriesQuery = useQuery<{ categoryIds: string[] }>({
+    queryKey: ["/api/auth/me/categories"],
+    enabled: open,
+  });
+  const [selectedCategoryIds, setSelectedCategoryIds] = useState<string[]>([]);
+
+  useEffect(() => {
+    if (myCategoriesQuery.data) {
+      setSelectedCategoryIds(myCategoriesQuery.data.categoryIds);
+    }
+  }, [myCategoriesQuery.data]);
+
+  function toggleCategory(categoryId: string) {
+    setSelectedCategoryIds((prev) =>
+      prev.includes(categoryId) ? prev.filter((id) => id !== categoryId) : [...prev, categoryId]
+    );
+  }
+
+  const updateCategoriesMutation = useMutation({
+    mutationFn: async (categoryIds: string[]) => {
+      const res = await apiRequest("PATCH", "/api/auth/me/categories", { categoryIds });
+      return await res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/auth/me/categories"] });
+    },
+  });
+
   const form = useForm<UpdateProfileInput>({
     resolver: zodResolver(updateProfileSchema),
     defaultValues: {
@@ -1248,7 +1311,6 @@ function EditProfileDialog({ user, open, onOpenChange }: { user: AuthUser; open:
       city: user.city || "",
       postalCode: user.postalCode || "",
       bio: user.bio || "",
-      desiredActivity: user.desiredActivity || "",
       trustedPersonName: user.trustedPersonName || "",
       trustedPersonEmail: user.trustedPersonEmail || "",
       schoolName: user.schoolName || "",
@@ -1261,7 +1323,8 @@ function EditProfileDialog({ user, open, onOpenChange }: { user: AuthUser; open:
   const updateMutation = useMutation({
     mutationFn: async (data: UpdateProfileInput) => {
       const res = await apiRequest("PATCH", "/api/auth/me", data);
-      return await res.json();
+      await res.json();
+      await updateCategoriesMutation.mutateAsync(selectedCategoryIds);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
@@ -1355,13 +1418,24 @@ function EditProfileDialog({ user, open, onOpenChange }: { user: AuthUser; open:
                     <FormMessage />
                   </FormItem>
                 )} />
-                <FormField control={form.control} name="desiredActivity" render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Activite souhaitee</FormLabel>
-                    <FormControl><Input {...field} placeholder="Ex: Jardinage, Lecture..." data-testid="input-edit-desiredActivity" /></FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )} />
+                <div>
+                  <Label>Ateliers que je peux animer</Label>
+                  <div className="grid grid-cols-1 gap-3 mt-2">
+                    {(categoriesQuery.data ?? []).map((cat) => (
+                      <div key={cat.id} className="flex items-start gap-2">
+                        <Checkbox
+                          className="mt-0.5"
+                          checked={selectedCategoryIds.includes(cat.id)}
+                          onCheckedChange={() => toggleCategory(cat.id)}
+                          data-testid={`checkbox-edit-category-${cat.id}`}
+                        />
+                        <label className="text-sm" data-testid={`text-edit-category-${cat.id}`}>
+                          {cat.name}
+                        </label>
+                      </div>
+                    ))}
+                  </div>
+                </div>
               </div>
             </div>
 

@@ -8,6 +8,8 @@ import { Sheet, SheetContent, SheetTrigger, SheetTitle } from "@/components/ui/s
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { Menu } from "lucide-react";
 import { useState } from "react";
+import { usePageTabsRegistry } from "@/lib/page-tabs-context";
+import { Badge } from "@/components/ui/badge";
 
 function NavLinks({ authenticated, role, onClick }: { authenticated: boolean; role?: string; onClick?: () => void }) {
   const [location] = useLocation();
@@ -48,6 +50,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const pageTabs = usePageTabsRegistry();
 
   const handleLogout = async () => {
     try {
@@ -88,10 +91,42 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 </TooltipTrigger>
                 <TooltipContent>Menu</TooltipContent>
               </Tooltip>
-              <SheetContent side="right" className="w-72 bg-white">
+              <SheetContent side="right" className="w-72 bg-white overflow-y-auto">
                 <SheetTitle className="sr-only">Menu</SheetTitle>
                 <div className="flex flex-col gap-4 pt-8">
                   <NavLinks authenticated={isAuthenticated} role={user?.role} onClick={() => setMobileOpen(false)} />
+
+                  {pageTabs && (
+                    <div className="flex flex-col gap-2 mt-4 pt-4 border-t border-border/50">
+                      {pageTabs.tabs.map((tab) => {
+                        const isActive = tab.id === pageTabs.activeTab;
+                        const Icon = tab.icon;
+                        const count = pageTabs.getBadgeCount?.(tab.id) ?? 0;
+                        return (
+                          <button
+                            key={tab.id}
+                            onClick={() => {
+                              pageTabs.onSelect(tab.id);
+                              setMobileOpen(false);
+                            }}
+                            className={`flex items-center gap-2 px-4 py-2.5 rounded-full text-sm font-medium transition-colors ${
+                              isActive ? pageTabs.accentClassName : "bg-white text-muted-foreground hover:bg-muted"
+                            }`}
+                            data-testid={`mobile-tab-${tab.id}`}
+                          >
+                            <Icon className="w-4 h-4" />
+                            {tab.label}
+                            {count > 0 && (
+                              <Badge className={`ml-1 text-[10px] px-1.5 py-0 ${isActive ? "bg-white text-gray-900" : ""}`}>
+                                {count}
+                              </Badge>
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+
                   {isAuthenticated && (
                     <Button variant="outline" onClick={() => { handleLogout(); setMobileOpen(false); }} className="mt-4 rounded-full" data-testid="button-logout-mobile">
                       Déconnexion

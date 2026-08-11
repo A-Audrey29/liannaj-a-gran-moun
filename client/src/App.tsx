@@ -4,6 +4,7 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import AppLayout from "@/components/app-layout";
+import { PageTabsProvider } from "@/lib/page-tabs-context";
 import AuthGuard from "@/components/auth-guard";
 import Landing from "@/pages/landing";
 import Home from "@/pages/home";
@@ -29,6 +30,7 @@ function AdminGuard({ children }: { children: React.ReactNode }) {
 
 function Router() {
   return (
+    <PageTabsProvider>
     <AppLayout>
       <Switch>
         <Route path="/" component={Landing} />
@@ -59,6 +61,7 @@ function Router() {
         <Route component={NotFound} />
       </Switch>
     </AppLayout>
+    </PageTabsProvider>
   );
 }
 

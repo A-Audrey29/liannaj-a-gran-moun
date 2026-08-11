@@ -325,6 +325,12 @@ export const createRelationSchema = z.object({
   juniorId: z.string().min(1, "ID du Junior requis"),
 });
 
+export const updateUserCategoriesSchema = z.object({
+  categoryIds: z.array(z.string()),
+});
+
+export type UpdateUserCategoriesInput = z.infer<typeof updateUserCategoriesSchema>;
+
 export const updateProfileSchema = z.object({
   firstName: z.string().min(1, "Prénom requis").optional(),
   lastName: z.string().min(1, "Nom requis").optional(),

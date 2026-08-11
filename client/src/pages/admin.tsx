@@ -12,6 +12,7 @@ import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import StarRating from "@/components/star-rating";
+import { MobileTabsMenu } from "@/components/mobile-tabs-menu";
 import { Command, CommandInput, CommandList, CommandEmpty, CommandGroup, CommandItem } from "@/components/ui/command";
 import {
   Dialog,
@@ -73,6 +74,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import type { User, Relation, Intervention, PaymentRecord, Notification } from "@shared/schema";
+import { ATELIERS } from "@shared/ateliers";
 import MessagerieAdminTab from "@/components/admin-messages-tab";
 
 type SafeUser = Omit<User, "password" | "validationToken" | "validationExpiry">;
@@ -704,8 +706,15 @@ function CadrageTab() {
     scheduledDate: "",
     durationMinutes: 120,
     location: "",
-    tasks: "",
+    tasks: [] as string[],
   });
+
+  function toggleTask(task: string) {
+    setFormData((prev) => ({
+      ...prev,
+      tasks: prev.tasks.includes(task) ? prev.tasks.filter((t) => t !== task) : [...prev.tasks, task],
+    }));
+  }
 
   const { data: relations = [], isLoading } = useQuery<RelationWithUsers[]>({
     queryKey: ["/api/admin/relations/pending-meeting"],
@@ -721,7 +730,7 @@ function CadrageTab() {
       queryClient.invalidateQueries({ queryKey: ["/api/relations"] });
       setDialogOpen(false);
       setSelectedRelation(null);
-      setFormData({ scheduledDate: "", durationMinutes: 120, location: "", tasks: "" });
+      setFormData({ scheduledDate: "", durationMinutes: 120, location: "", tasks: [] });
       toast({ title: "1ère rencontre organisée" });
     },
     onError: () => {
@@ -737,7 +746,7 @@ function CadrageTab() {
       scheduledDate: formData.scheduledDate,
       durationMinutes: formData.durationMinutes,
       location: formData.location || undefined,
-      tasks: formData.tasks ? formData.tasks.split(",").map((t) => t.trim()).filter(Boolean) : [],
+      tasks: formData.tasks,
     });
   }
 
@@ -841,14 +850,27 @@ function CadrageTab() {
               />
             </div>
             <div>
-              <Label htmlFor="cadrage-tasks">Activités (séparées par des virgules)</Label>
-              <Input
-                id="cadrage-tasks"
-                value={formData.tasks}
-                onChange={(e) => setFormData({ ...formData, tasks: e.target.value })}
-                placeholder="Ex: Présentation, Tour du quartier"
-                data-testid="input-cadrage-tasks"
-              />
+              <Label>Prestation</Label>
+              <div className="flex flex-wrap gap-2 mt-2">
+                {ATELIERS.map((task) => {
+                  const selected = formData.tasks.includes(task);
+                  return (
+                    <button
+                      key={task}
+                      type="button"
+                      onClick={() => toggleTask(task)}
+                      className={`px-3 py-1.5 rounded-full text-sm border transition-colors ${
+                        selected
+                          ? "bg-primary text-primary-foreground border-primary"
+                          : "bg-white text-muted-foreground border-border hover:bg-muted"
+                      }`}
+                      data-testid={`task-${task}`}
+                    >
+                      {task}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
             <DialogFooter>
               <Button type="submit" className="bg-[#dc4256] hover:bg-[#c53a4d]" disabled={createMut.isPending} data-testid="btn-submit-cadrage">
@@ -878,7 +900,6 @@ function ProfileDialog({ user, open, onOpenChange }: { user: SafeUser | null; op
     { label: "Code postal", value: user.postalCode },
     { label: "Date de naissance", value: user.birthDate ? formatDate(user.birthDate) : null },
     { label: "Bio", value: user.bio },
-    { label: "Activité souhaitée", value: user.desiredActivity },
     { label: "École", value: user.schoolName, show: user.role === "JUNIOR" },
     { label: "Référent", value: user.referentTitle && user.referentFirstName && user.referentLastName ? `${user.referentTitle} ${user.referentFirstName} ${user.referentLastName}` : null, show: user.role === "JUNIOR" },
     { label: "Email référent", value: user.referentEmail, show: user.role === "JUNIOR" },
@@ -2440,7 +2461,9 @@ export default function Admin() {
     <div className="max-w-5xl mx-auto px-4 py-8">
       <h1 className="text-2xl md:text-3xl font-bold mb-6" data-testid="text-admin-title">Administration</h1>
 
-      <div className="flex gap-1 mb-8 overflow-x-auto pb-2">
+      <MobileTabsMenu tabs={ADMIN_TABS} activeTab={activeTab} onSelect={setActiveTab} getBadgeCount={getTabCount} />
+
+      <div className="hidden md:flex gap-1 mb-8 overflow-x-auto pb-2">
         {ADMIN_TABS.map((tab) => {
           const isActive = activeTab === tab.id;
           const Icon = tab.icon;

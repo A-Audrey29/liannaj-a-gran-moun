@@ -18,6 +18,7 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
+import { MobileTabsMenu } from "@/components/mobile-tabs-menu";
 import {
   ChevronLeft,
   ChevronRight,
@@ -213,11 +214,9 @@ function ProfilSection({
 
   const [editing, setEditing] = useState(false);
   const [bioValue, setBioValue] = useState("");
-  const [activityValue, setActivityValue] = useState("");
 
   function openEdit() {
     setBioValue(student.bio ?? "");
-    setActivityValue(student.desiredActivity ?? "");
     setEditing(true);
   }
 
@@ -225,7 +224,6 @@ function ProfilSection({
     mutationFn: () =>
       apiRequest("PATCH", `/api/teacher/students/${studentId}/bio`, {
         bio: bioValue,
-        desiredActivity: activityValue,
       }),
     onSuccess: () => {
       setEditing(false);
@@ -272,14 +270,6 @@ function ProfilSection({
             </p>
           )}
 
-          {student.desiredActivity && (
-            <div>
-              <Label className="text-xs text-muted-foreground uppercase tracking-wide">
-                Activité souhaitée avec le sénior
-              </Label>
-              <p className="text-sm mt-1">{student.desiredActivity}</p>
-            </div>
-          )}
         </CardContent>
       </Card>
 
@@ -344,14 +334,6 @@ function ProfilSection({
                 maxLength={500}
               />
               <p className="text-xs text-muted-foreground text-right">{bioValue.length}/500</p>
-            </div>
-            <div className="space-y-1.5">
-              <Label>Activité souhaitée avec le sénior</Label>
-              <Input
-                value={activityValue}
-                onChange={(e) => setActivityValue(e.target.value)}
-                placeholder="Ex : aide informatique, jardinage, lecture..."
-              />
             </div>
           </div>
           <DialogFooter>
@@ -920,7 +902,15 @@ function StudentDetailView({
       </Card>
 
       {/* Section tabs */}
-      <div className="flex gap-2 flex-wrap">
+      <MobileTabsMenu
+        tabs={SECTIONS}
+        activeTab={section}
+        onSelect={(id) => setSection(id as DetailSection)}
+        getBadgeCount={(id) => SECTIONS.find((s) => s.id === id)?.count ?? 0}
+        accentClassName="bg-green-600 text-white"
+      />
+
+      <div className="hidden md:flex gap-2 flex-wrap">
         {SECTIONS.map((s) => {
           const isActive = section === s.id;
           const Icon = s.icon;
@@ -1051,7 +1041,15 @@ export default function TeacherHome() {
       </div>
 
       {/* Tabs */}
-      <div className="flex flex-wrap gap-2 mb-8">
+      <MobileTabsMenu
+        tabs={MAIN_TABS}
+        activeTab={activeTab}
+        onSelect={(id) => setActiveTab(id as MainTabId)}
+        getBadgeCount={(id) => (id === "suivi" ? students.length : 0)}
+        accentClassName="bg-green-600 text-white"
+      />
+
+      <div className="hidden md:flex flex-wrap gap-2 mb-8">
         {MAIN_TABS.map((tab) => {
           const isActive = activeTab === tab.id;
           const Icon = tab.icon;

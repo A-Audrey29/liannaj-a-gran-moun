@@ -17,9 +17,11 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { referentInterventionSchema, referentContactSchema, type ReferentInterventionInput, type ReferentContactInput } from "@shared/schema";
 import type { User as UserType, Relation, Intervention } from "@shared/schema";
+import { ATELIERS } from "@shared/ateliers";
 import { LayoutGrid, Calendar, Plus, Mail, User, CheckCircle, Clock, Loader2, ChevronRight } from "lucide-react";
 import { useState } from "react";
 import { useSSE } from "@/hooks/use-sse";
+import { MobileTabsMenu } from "@/components/mobile-tabs-menu";
 
 type RelationWithUsers = Relation & { senior: UserType; junior: UserType; interventions?: Intervention[] };
 
@@ -249,10 +251,7 @@ function SuiviTab({ relations }: { relations: RelationWithUsers[] }) {
 
 // ==================== DEMANDER PRESTATION TAB ====================
 
-const TASK_OPTIONS = [
-  "Jardinage", "Bricolage", "Informatique", "Cuisine",
-  "Lecture", "Promenade", "Courses", "Démarches administratives",
-];
+const TASK_OPTIONS = ATELIERS;
 
 function PrestationTab({ relations }: { relations: RelationWithUsers[] }) {
   const { toast } = useToast();
@@ -605,7 +604,9 @@ export default function ReferentHome() {
         </Button>
       )}
 
-      <div className="flex flex-wrap gap-2 mb-8">
+      <MobileTabsMenu tabs={TABS} activeTab={activeTab} onSelect={(id) => setActiveTab(id as TabId)} accentClassName="bg-[#8b5cf6] text-white" />
+
+      <div className="hidden md:flex flex-wrap gap-2 mb-8">
         {TABS.map((tab) => {
           const isActive = activeTab === tab.id;
           const Icon = tab.icon;

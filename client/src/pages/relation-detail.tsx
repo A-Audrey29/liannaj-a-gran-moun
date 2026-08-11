@@ -21,6 +21,7 @@ import { getPhotoUrl } from "@/lib/photo-url";
 import type { Relation, User as UserType, Intervention } from "@shared/schema";
 import AvailabilityWeekPicker, { type FreeSlot } from "@/components/availability-week-picker";
 import { fmtTime, fmtTimeRange, fmtDayLong } from "@/lib/availability-format";
+import { ATELIERS } from "@shared/ateliers";
 
 type RelationDetail = Relation & { senior: UserType; junior: UserType; interventions: Intervention[] };
 
@@ -42,7 +43,6 @@ function ParticipantCard({ user: u, label }: { user: UserType; label: string }) 
         <div className="font-semibold text-sm">{u.firstName} {u.lastName}</div>
         {u.city && <div className="text-xs text-muted-foreground">{u.city}</div>}
         {u.bio && <p className="text-xs text-muted-foreground mt-1 line-clamp-3">{u.bio}</p>}
-        {u.desiredActivity && <p className="text-xs text-muted-foreground mt-1 italic">"{u.desiredActivity}"</p>}
       </div>
     </div>
   );
@@ -405,7 +405,11 @@ function NewInterventionDialog({
   const [startTime, setStartTime] = useState("");
   const [duration, setDuration] = useState("120");
   const [location, setLocation] = useState("");
-  const [tasks, setTasks] = useState("");
+  const [tasks, setTasks] = useState<string[]>([]);
+
+  function toggleTask(task: string) {
+    setTasks((prev) => prev.includes(task) ? prev.filter((t) => t !== task) : [...prev, task]);
+  }
 
   const startOptions = slot ? startTimeOptions(slot) : [];
   const chosenStart = startTime ? new Date(startTime) : slot?.startAt || null;
@@ -438,7 +442,7 @@ function NewInterventionDialog({
         scheduledDate: chosenStart!.toISOString(),
         durationMinutes: parseInt(duration),
         location: location || undefined,
-        tasks: tasks ? tasks.split(",").map((t) => t.trim()).filter(Boolean) : [],
+        tasks,
       };
       if (asReferent) {
         await apiRequest("POST", "/api/referent/interventions", { ...payload, relationId });
@@ -453,7 +457,7 @@ function NewInterventionDialog({
       toast({ title: isFirst ? "1ère rencontre proposée !" : "Rencontre proposée !" });
       setDuration("120");
       setLocation("");
-      setTasks("");
+      setTasks([]);
       onClose();
     },
     onError: (err: any) =>
@@ -528,13 +532,27 @@ function NewInterventionDialog({
               />
             </div>
             <div>
-              <Label>Activités (séparées par des virgules)</Label>
-              <Input
-                value={tasks}
-                onChange={(e) => setTasks(e.target.value)}
-                placeholder="Ex: Cuisine, Jardinage"
-                data-testid="input-intervention-tasks"
-              />
+              <Label>Prestation</Label>
+              <div className="flex flex-wrap gap-2 mt-2">
+                {ATELIERS.map((task) => {
+                  const selected = tasks.includes(task);
+                  return (
+                    <button
+                      key={task}
+                      type="button"
+                      onClick={() => toggleTask(task)}
+                      className={`px-3 py-1.5 rounded-full text-sm border transition-colors ${
+                        selected
+                          ? "bg-[#dc4256] text-white border-[#dc4256]"
+                          : "bg-white text-muted-foreground border-border hover:bg-muted"
+                      }`}
+                      data-testid={`task-${task}`}
+                    >
+                      {task}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           </div>
         )}
