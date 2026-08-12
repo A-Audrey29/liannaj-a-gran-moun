@@ -2,6 +2,7 @@ import { storage } from "../storage";
 import { addDaysISO, partsFromISO, gpDateTimeToUtc } from "../../shared/dates";
 import type { CreateRecurringAvailabilitiesInput, CreateDateExceptionInput } from "../../shared/schema";
 import { overlaps, isSlotCovered } from "../../shared/availability";
+import type { Prisma } from "../../generated/prisma/client.ts";
 
 export { overlaps };
 
@@ -131,13 +132,14 @@ export async function isWithinAvailability(
 export async function hasInterventionConflict(
   juniorId: string,
   startAt: Date,
-  durationMinutes: number
+  durationMinutes: number,
+  client?: Prisma.TransactionClient
 ): Promise<boolean> {
   const endAt = new Date(startAt.getTime() + durationMinutes * 60_000);
   // Fenêtre élargie en amont : une rencontre commencée avant `startAt` peut
   // déborder dessus. 24h couvre largement la durée max (480 min).
   const windowStart = new Date(startAt.getTime() - 24 * 60 * 60_000);
-  const existing = await storage.getActiveInterventionsForUser(juniorId, windowStart, endAt);
+  const existing = await storage.getActiveInterventionsForUser(juniorId, windowStart, endAt, client);
 
   return existing.some((i) =>
     overlaps(

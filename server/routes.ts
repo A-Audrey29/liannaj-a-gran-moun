@@ -133,6 +133,23 @@ async function validateSlot(
   return null;
 }
 
+const SLOT_CONFLICT_MESSAGE = "Une autre rencontre est déjà prévue sur ce créneau.";
+
+/**
+ * Crée la rencontre via createInterventionSafe (verrou + re-check du conflit
+ * dans la transaction), pour fermer la fenêtre de course entre validateSlot()
+ * et l'insertion : deux requêtes concurrentes sur le même jeune ne peuvent
+ * plus toutes les deux passer la vérification.
+ */
+async function createInterventionOrConflict(
+  juniorId: string,
+  data: { relationId: string; scheduledDate: Date; durationMinutes: number; location?: string; tasks?: string[] }
+) {
+  return storage.createInterventionSafe(juniorId, data, (tx) =>
+    hasInterventionConflict(juniorId, data.scheduledDate, data.durationMinutes, tx)
+  );
+}
+
 export async function registerRoutes(
   httpServer: Server,
   app: Express
@@ -836,13 +853,17 @@ export async function registerRoutes(
         return res.status(400).json({ message: slotError });
       }
 
-      const intervention = await storage.createIntervention({
+      const result = await createInterventionOrConflict(relation.juniorId, {
         relationId: parsed.data.relationId,
         scheduledDate,
         durationMinutes: parsed.data.durationMinutes,
         location: parsed.data.location,
         tasks: parsed.data.tasks,
       });
+      if ("conflict" in result) {
+        return res.status(400).json({ message: SLOT_CONFLICT_MESSAGE });
+      }
+      const intervention = result.intervention;
 
       await storage.createNotification({
         user: { connect: { id: relation.juniorId } },
@@ -2225,13 +2246,17 @@ export async function registerRoutes(
         return res.status(400).json({ message: slotError });
       }
 
-      const intervention = await storage.createIntervention({
+      const result = await createInterventionOrConflict(relation.juniorId, {
         relationId: parsed.data.relationId,
         scheduledDate,
         durationMinutes: parsed.data.durationMinutes,
         location: parsed.data.location,
         tasks: parsed.data.tasks,
       });
+      if ("conflict" in result) {
+        return res.status(400).json({ message: SLOT_CONFLICT_MESSAGE });
+      }
+      const intervention = result.intervention;
 
       const referentUser = req.user as any;
       const senderName = `${referentUser.firstName} ${referentUser.lastName} (référent de ${relation.senior.firstName} ${relation.senior.lastName})`;

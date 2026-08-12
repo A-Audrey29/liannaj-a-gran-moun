@@ -25,7 +25,17 @@ export interface IStorage {
   getIntervention(id: string): Promise<Intervention | null>;
   getInterventionsByRelation(relationId: string): Promise<Intervention[]>;
   getInterventionWithRelation(id: string): Promise<(Intervention & { relation: Relation }) | null>;
-  createIntervention(data: { relationId: string; scheduledDate: Date; durationMinutes: number; location?: string; tasks?: string[] }): Promise<Intervention>;
+  /**
+   * Crée l'intervention en verrouillant le jeune (pg_advisory_xact_lock) et en
+   * refaisant vérifier le conflit dans la même transaction juste avant
+   * l'insert, pour empêcher deux requêtes concurrentes de réserver le même
+   * créneau.
+   */
+  createInterventionSafe(
+    juniorId: string,
+    data: { relationId: string; scheduledDate: Date; durationMinutes: number; location?: string; tasks?: string[] },
+    checkConflict: (tx: Prisma.TransactionClient) => Promise<boolean>
+  ): Promise<{ intervention: Intervention } | { conflict: true }>;
   updateIntervention(id: string, data: Prisma.InterventionUpdateInput): Promise<Intervention>;
   getPendingFeedbackInterventions(userId: string): Promise<(Intervention & { relation: Relation })[]>;
   getPendingFeedbackForReminder(): Promise<(Intervention & { relation: Relation & { senior: User; junior: User } })[]>;
@@ -39,7 +49,12 @@ export interface IStorage {
   getAvailability(id: string): Promise<Availability | null>;
   getConfirmedInterventionsForUser(userId: string, from?: Date, to?: Date): Promise<Intervention[]>;
   /** PROPOSED + CONFIRMED — pour détecter les conflits de créneau. */
-  getActiveInterventionsForUser(userId: string, from?: Date, to?: Date): Promise<Intervention[]>;
+  getActiveInterventionsForUser(
+    userId: string,
+    from?: Date,
+    to?: Date,
+    client?: Prisma.TransactionClient
+  ): Promise<Intervention[]>;
   deleteAndCreateAvailabilities(
     deleteIds: string[],
     createData: { userId: string; startAt: Date; endAt: Date; kind: "AVAILABLE" | "UNAVAILABLE" }[]
@@ -220,16 +235,32 @@ class DatabaseStorage implements IStorage {
     });
   }
 
-  async createIntervention(data: { relationId: string; scheduledDate: Date; durationMinutes: number; location?: string; tasks?: string[] }): Promise<Intervention> {
-    return prisma.intervention.create({
-      data: {
-        relationId: data.relationId,
-        scheduledDate: data.scheduledDate,
-        durationMinutes: data.durationMinutes,
-        location: data.location || null,
-        tasks: data.tasks || [],
-        status: "PROPOSED",
-      },
+  async createInterventionSafe(
+    juniorId: string,
+    data: { relationId: string; scheduledDate: Date; durationMinutes: number; location?: string; tasks?: string[] },
+    checkConflict: (tx: Prisma.TransactionClient) => Promise<boolean>
+  ): Promise<{ intervention: Intervention } | { conflict: true }> {
+    return prisma.$transaction(async (tx) => {
+      // Verrou par jeune : bloque toute autre transaction concurrente qui
+      // tenterait de réserver un créneau pour le même jeune, le temps de
+      // relire + écrire. Libéré automatiquement à la fin de la transaction.
+      await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${juniorId}))`;
+
+      if (await checkConflict(tx)) {
+        return { conflict: true };
+      }
+
+      const intervention = await tx.intervention.create({
+        data: {
+          relationId: data.relationId,
+          scheduledDate: data.scheduledDate,
+          durationMinutes: data.durationMinutes,
+          location: data.location || null,
+          tasks: data.tasks || [],
+          status: "PROPOSED",
+        },
+      });
+      return { intervention };
     });
   }
 
@@ -322,8 +353,13 @@ class DatabaseStorage implements IStorage {
     });
   }
 
-  async getActiveInterventionsForUser(userId: string, from?: Date, to?: Date): Promise<Intervention[]> {
-    return prisma.intervention.findMany({
+  async getActiveInterventionsForUser(
+    userId: string,
+    from?: Date,
+    to?: Date,
+    client: Prisma.TransactionClient | typeof prisma = prisma
+  ): Promise<Intervention[]> {
+    return client.intervention.findMany({
       where: {
         status: { in: ["PROPOSED", "CONFIRMED"] },
         relation: { juniorId: userId },
