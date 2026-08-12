@@ -134,6 +134,7 @@ async function validateSlot(
 }
 
 const SLOT_CONFLICT_MESSAGE = "Une autre rencontre est déjà prévue sur ce créneau.";
+const LOCK_CONTENTION_MESSAGE = "Une autre action est en cours sur ce créneau, veuillez réessayer dans un instant.";
 
 /**
  * Crée la rencontre via createInterventionSafe (verrou + re-check du conflit
@@ -649,7 +650,9 @@ export async function registerRoutes(
         return res.status(404).json({ message: "Relation non trouvée" });
       }
       const userId = req.user!.id;
-      if (relation.seniorId !== userId && relation.juniorId !== userId && req.user!.role !== "ADMIN") {
+      const linkedSeniorId = req.user!.role === "REFERENT_SENIOR" ? (req.user as any).linkedSeniorId : null;
+      const isReferentOfSenior = linkedSeniorId !== null && relation.seniorId === linkedSeniorId;
+      if (relation.seniorId !== userId && relation.juniorId !== userId && !isReferentOfSenior && req.user!.role !== "ADMIN") {
         return res.status(403).json({ message: "Accès refusé" });
       }
       res.json({
@@ -862,6 +865,9 @@ export async function registerRoutes(
       });
       if ("conflict" in result) {
         return res.status(400).json({ message: SLOT_CONFLICT_MESSAGE });
+      }
+      if ("locked" in result) {
+        return res.status(409).json({ message: LOCK_CONTENTION_MESSAGE });
       }
       const intervention = result.intervention;
 
@@ -2255,6 +2261,9 @@ export async function registerRoutes(
       });
       if ("conflict" in result) {
         return res.status(400).json({ message: SLOT_CONFLICT_MESSAGE });
+      }
+      if ("locked" in result) {
+        return res.status(409).json({ message: LOCK_CONTENTION_MESSAGE });
       }
       const intervention = result.intervention;
 

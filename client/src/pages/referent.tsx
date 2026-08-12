@@ -588,6 +588,9 @@ export default function ReferentHome() {
         <Badge className="bg-violet-100 text-violet-800">Référent</Badge>
       </div>
 
+      {isLoading && (
+        <Skeleton className="w-full mb-6 rounded-2xl h-14" data-testid="skeleton-proposer-rencontre-permanent" />
+      )}
       {!isLoading && activeRelations.length > 0 && (
         <Button
           className="w-full mb-6 rounded-2xl h-14 text-base font-semibold bg-[#8b5cf6] hover:bg-[#7c3aed] text-white shadow-sm"

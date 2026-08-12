@@ -239,29 +239,45 @@ class DatabaseStorage implements IStorage {
     juniorId: string,
     data: { relationId: string; scheduledDate: Date; durationMinutes: number; location?: string; tasks?: string[] },
     checkConflict: (tx: Prisma.TransactionClient) => Promise<boolean>
-  ): Promise<{ intervention: Intervention } | { conflict: true }> {
-    return prisma.$transaction(async (tx) => {
-      // Verrou par jeune : bloque toute autre transaction concurrente qui
-      // tenterait de réserver un créneau pour le même jeune, le temps de
-      // relire + écrire. Libéré automatiquement à la fin de la transaction.
-      await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${juniorId}))`;
+  ): Promise<{ intervention: Intervention } | { conflict: true } | { locked: true }> {
+    const maxAttempts = 3;
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      const result = await prisma.$transaction(async (tx) => {
+        // Verrou par jeune : empêche toute autre transaction concurrente de
+        // réserver un créneau pour le même jeune en même temps. Non-bloquant
+        // (try) pour ne pas mettre en file d'attente les requêtes suivantes :
+        // si le verrou est déjà pris, on échoue vite et on retente.
+        const rows = await tx.$queryRaw<{ locked: boolean }[]>`
+          SELECT pg_try_advisory_xact_lock(hashtext(${juniorId})) AS locked
+        `;
+        if (!rows[0]?.locked) {
+          return { locked: true as const };
+        }
 
-      if (await checkConflict(tx)) {
-        return { conflict: true };
-      }
+        if (await checkConflict(tx)) {
+          return { conflict: true as const };
+        }
 
-      const intervention = await tx.intervention.create({
-        data: {
-          relationId: data.relationId,
-          scheduledDate: data.scheduledDate,
-          durationMinutes: data.durationMinutes,
-          location: data.location || null,
-          tasks: data.tasks || [],
-          status: "PROPOSED",
-        },
+        const intervention = await tx.intervention.create({
+          data: {
+            relationId: data.relationId,
+            scheduledDate: data.scheduledDate,
+            durationMinutes: data.durationMinutes,
+            location: data.location || null,
+            tasks: data.tasks || [],
+            status: "PROPOSED",
+          },
+        });
+        return { intervention };
       });
-      return { intervention };
-    });
+
+      if (!("locked" in result) || attempt === maxAttempts) {
+        return result;
+      }
+      // Backoff court avant nouvelle tentative si le verrou était pris.
+      await new Promise((resolve) => setTimeout(resolve, 100 * attempt));
+    }
+    return { locked: true };
   }
 
   async updateIntervention(id: string, data: Prisma.InterventionUpdateInput): Promise<Intervention> {

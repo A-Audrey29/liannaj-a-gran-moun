@@ -28,6 +28,7 @@ import { MobileTabsMenu } from "@/components/mobile-tabs-menu";
 import { useSSE } from "@/hooks/use-sse";
 import { useUnreadMessageCount } from "@/hooks/use-unread-count";
 import { usePushNotifications } from "@/hooks/use-push";
+import { fmtTime, fmtDayLongMonth, gpParts, MOIS_LONGS } from "@/lib/availability-format";
 
 type RelationWithUsers = Relation & { senior: UserType; junior: UserType; interventions?: Intervention[] };
 type MatchSuggestion = { user: UserType; commonCategories: string[]; isRecommended: boolean; isFavorite: boolean };
@@ -131,7 +132,7 @@ export default function Home() {
 
   const urgentAlerts: { message: string; tab: string }[] = [];
   if (user?.role === "JUNIOR" && counts.proposedInterventions.length > 0) {
-    urgentAlerts.push({ message: `${counts.proposedInterventions.length} intervention${counts.proposedInterventions.length > 1 ? "s" : ""} à confirmer !`, tab: "rencontres" });
+    urgentAlerts.push({ message: `${counts.proposedInterventions.length} rencontre${counts.proposedInterventions.length > 1 ? "s" : ""} à confirmer !`, tab: "rencontres" });
   }
   if (counts.feedbackCount > 0) {
     urgentAlerts.push({ message: `${counts.feedbackCount} feedback${counts.feedbackCount > 1 ? "s" : ""} à donner`, tab: "rencontres" });
@@ -172,7 +173,10 @@ export default function Home() {
         )}
       </div>
 
-      {user?.role === "SENIOR" && counts.activeRelations.length > 0 && (
+      {user?.role === "SENIOR" && relLoading && (
+        <Skeleton className="w-full mb-6 rounded-2xl h-14" data-testid="skeleton-proposer-rencontre-permanent" />
+      )}
+      {user?.role === "SENIOR" && !relLoading && counts.activeRelations.length > 0 && (
         <Button
           className="w-full mb-6 rounded-2xl h-14 text-base font-semibold bg-[#dc4256] hover:bg-[#c73848] text-white shadow-sm"
           onClick={() => {
@@ -258,7 +262,11 @@ function DashboardTab({ counts, isLoading, user, onSwitchTab }: { counts: Dashbo
   }
 
   const nextDate = counts.nextIntervention
-    ? new Date(counts.nextIntervention.scheduledDate).toLocaleDateString("fr-FR", { day: "numeric", month: "long" })
+    ? (() => {
+        const d = new Date(counts.nextIntervention.scheduledDate);
+        const p = gpParts(d);
+        return `${p.d} ${MOIS_LONGS[p.mo]} à ${fmtTime(d)}`;
+      })()
     : null;
   const nextPartner = counts.nextIntervention?.partnerName || null;
   const nextLocation = counts.nextIntervention?.location || null;
@@ -280,6 +288,16 @@ function DashboardTab({ counts, isLoading, user, onSwitchTab }: { counts: Dashbo
       : `${counts.proposedInterventions.length} propositions`
     : "Aucune";
 
+  const relationRequests = counts.pendingDemandes.length;
+  const meetingRequests = counts.proposedInterventions.length;
+  const juniorRequests = relationRequests + meetingRequests;
+  const juniorRequestsDetail = juniorRequests === 0
+    ? "Aucune"
+    : [
+        relationRequests > 0 ? `${relationRequests} relation${relationRequests > 1 ? "s" : ""}` : null,
+        meetingRequests > 0 ? `${meetingRequests} rencontre${meetingRequests > 1 ? "s" : ""}` : null,
+      ].filter(Boolean).join(" · ");
+
   const activePartners = counts.activeRelations.slice(0, 2).map((r) => {
     const partner = r.seniorId === user?.id ? r.junior : r.senior;
     return partner.firstName;
@@ -296,11 +314,11 @@ function DashboardTab({ counts, isLoading, user, onSwitchTab }: { counts: Dashbo
           <>
             <DashboardCard
               icon={MessageCircle}
-              count={counts.pendingDemandes.length}
+              count={juniorRequests}
               label="Demandes reçues"
-              detail={counts.pendingDemandes.length > 0 ? `${counts.pendingDemandes.length} en attente` : "Aucune"}
-              onClick={() => onSwitchTab("demandes")}
-              highlight={counts.pendingDemandes.length > 0 ? "orange" : undefined}
+              detail={juniorRequestsDetail}
+              onClick={() => onSwitchTab(relationRequests > 0 ? "demandes" : meetingRequests > 0 ? "rencontres" : "demandes")}
+              highlight={juniorRequests > 0 ? "orange" : undefined}
               testId="card-demandes-recues"
             />
             <DashboardCard
@@ -489,10 +507,10 @@ function RencontresTab({ relations, isLoading, user, onOpenMessage }: { relation
                                 <div className="flex items-start justify-between gap-2">
                                   <div className="flex-1 min-w-0">
                                     <p className="font-semibold text-xs">
-                                      {new Date(interv.scheduledDate).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })}
+                                      {fmtDayLongMonth(new Date(interv.scheduledDate))}
                                     </p>
                                     <p className="text-[11px] text-muted-foreground mt-0.5">
-                                      {interv.durationMinutes} min{interv.location ? ` · 📍 ${interv.location}` : ""}
+                                      {fmtTime(new Date(interv.scheduledDate))} · {interv.durationMinutes} min{interv.location ? ` · 📍 ${interv.location}` : ""}
                                     </p>
                                     {tasks.length > 0 && (
                                       <div className="mt-1.5">
@@ -1112,22 +1130,24 @@ function ProfilTab({ user }: { user: AuthUser | null }) {
           <div className="space-y-1 text-sm">
             <ProfileField label="Bio" value={user.bio} />
           </div>
-          <div className="mt-4">
-            <div className="text-xs text-muted-foreground uppercase tracking-wide mb-2">
-              Ateliers que je peux animer
-            </div>
-            {selectedCategories.length > 0 ? (
-              <div className="flex flex-wrap gap-2">
-                {selectedCategories.map((cat) => (
-                  <Badge key={cat.id} variant="secondary" data-testid={`badge-category-${cat.id}`}>
-                    {cat.name}
-                  </Badge>
-                ))}
+          {user.role === "JUNIOR" && (
+            <div className="mt-4">
+              <div className="text-xs text-muted-foreground uppercase tracking-wide mb-2">
+                Ateliers que je peux animer
               </div>
-            ) : (
-              <p className="text-sm text-muted-foreground">Aucun atelier sélectionné.</p>
-            )}
-          </div>
+              {selectedCategories.length > 0 ? (
+                <div className="flex flex-wrap gap-2">
+                  {selectedCategories.map((cat) => (
+                    <Badge key={cat.id} variant="secondary" data-testid={`badge-category-${cat.id}`}>
+                      {cat.name}
+                    </Badge>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">Aucun atelier sélectionné.</p>
+              )}
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -1418,24 +1438,26 @@ function EditProfileDialog({ user, open, onOpenChange }: { user: AuthUser; open:
                     <FormMessage />
                   </FormItem>
                 )} />
-                <div>
-                  <Label>Ateliers que je peux animer</Label>
-                  <div className="grid grid-cols-1 gap-3 mt-2">
-                    {(categoriesQuery.data ?? []).map((cat) => (
-                      <div key={cat.id} className="flex items-start gap-2">
-                        <Checkbox
-                          className="mt-0.5"
-                          checked={selectedCategoryIds.includes(cat.id)}
-                          onCheckedChange={() => toggleCategory(cat.id)}
-                          data-testid={`checkbox-edit-category-${cat.id}`}
-                        />
-                        <label className="text-sm" data-testid={`text-edit-category-${cat.id}`}>
-                          {cat.name}
-                        </label>
-                      </div>
-                    ))}
+                {user.role === "JUNIOR" && (
+                  <div>
+                    <Label>Ateliers que je peux animer</Label>
+                    <div className="grid grid-cols-1 gap-3 mt-2">
+                      {(categoriesQuery.data ?? []).map((cat) => (
+                        <div key={cat.id} className="flex items-start gap-2">
+                          <Checkbox
+                            className="mt-0.5"
+                            checked={selectedCategoryIds.includes(cat.id)}
+                            onCheckedChange={() => toggleCategory(cat.id)}
+                            data-testid={`checkbox-edit-category-${cat.id}`}
+                          />
+                          <label className="text-sm" data-testid={`text-edit-category-${cat.id}`}>
+                            {cat.name}
+                          </label>
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                </div>
+                )}
               </div>
             </div>
 
