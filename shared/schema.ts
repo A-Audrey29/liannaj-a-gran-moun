@@ -405,6 +405,77 @@ export type CreateReferentInput = z.infer<typeof createReferentSchema>;
 export type ReferentInterventionInput = z.infer<typeof referentInterventionSchema>;
 export type ReferentContactInput = z.infer<typeof referentContactSchema>;
 
+/**
+ * Historique des rencontres, partagé par toutes les interfaces.
+ *
+ * Le périmètre (quelles rencontres) ET la visibilité des feedbacks sont décidés
+ * serveur à partir du rôle de l'appelant. Un feedback à `null` peut donc
+ * signifier « non renseigné » ou « pas le droit de le lire » : le client ne fait
+ * pas la différence, et c'est voulu — la réponse JSON ne transporte jamais un
+ * commentaire que le viewer n'a pas le droit de voir.
+ */
+export interface MeetingHistoryEntry {
+  id: string;
+  relationId: string;
+  scheduledDate: string; // ISO
+  durationMinutes: number;
+  location: string | null;
+  tasks: string[]; // = services / ateliers
+  status: InterventionStatus;
+  seniorId: string;
+  juniorId: string;
+  seniorName: string;
+  juniorName: string;
+  seniorRating: number | null;
+  seniorComment: string | null;
+  juniorRating: number | null;
+  juniorComment: string | null;
+}
+
+/**
+ * Agrégats calculés sur les seules rencontres effectivement réalisées
+ * (COMPLETED et COMPLETED_PENDING_FEEDBACK) : une rencontre annulée ou encore
+ * au stade de proposition ne représente aucune heure passée.
+ *
+ * ⚠️ `byService` : une rencontre porte plusieurs ateliers, et sa durée est
+ * comptée entière pour chacun. La somme des `minutes` de byService peut donc
+ * dépasser `totalMinutes` — ce sont des heures par service, pas une partition.
+ */
+export interface MeetingHistorySummary {
+  totalMeetings: number;
+  totalMinutes: number;
+  byService: { service: string; count: number; minutes: number }[];
+}
+
+export interface MeetingHistoryResponse {
+  entries: MeetingHistoryEntry[]; // triées par scheduledDate DESC
+  summary: MeetingHistorySummary;
+}
+
+export const INTERVENTION_STATUSES = [
+  "PROPOSED",
+  "CONFIRMED",
+  "CANCELLED",
+  "DONE",
+  "COMPLETED_PENDING_FEEDBACK",
+  "COMPLETED",
+] as const;
+
+/** Statuts comptabilisés dans le récap heures/services. */
+export const COMPLETED_STATUSES: InterventionStatus[] = ["COMPLETED", "COMPLETED_PENDING_FEEDBACK"];
+
+export const meetingHistoryQuerySchema = z.object({
+  userId: z.string().min(1).optional(),
+  status: z
+    .union([z.enum(INTERVENTION_STATUSES), z.array(z.enum(INTERVENTION_STATUSES))])
+    .optional()
+    .transform((v) => (v === undefined ? undefined : Array.isArray(v) ? v : [v])),
+  from: isoDate.optional(),
+  to: isoDate.optional(),
+});
+
+export type MeetingHistoryQuery = z.infer<typeof meetingHistoryQuerySchema>;
+
 export type ReportReason = "PERSON" | "QUESTION" | "OTHER";
 export type ReportStatus = "OPEN" | "HANDLED";
 

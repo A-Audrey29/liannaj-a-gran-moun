@@ -1,6 +1,23 @@
 import { prisma } from "./prisma";
 import type { User, Category, UserCategory, Relation, Intervention, AdminRecommendation, Notification, PaymentRecord, Favorite, Conversation, Message, PushSubscription, Report, TeacherStudent, TeacherComment, Internship, Availability, Prisma } from "../generated/prisma/client.ts";
 
+/**
+ * Périmètre d'un historique de rencontres. Construit serveur à partir du rôle
+ * de l'appelant — un identifiant venu de la query ne devient un scope qu'après
+ * contrôle d'habilitation dans la route.
+ */
+export type MeetingHistoryScope =
+  | { kind: "all" }
+  | { kind: "user"; userId: string }
+  | { kind: "senior"; seniorId: string }
+  | { kind: "students"; studentIds: string[] };
+
+export interface MeetingHistoryFilters {
+  status?: Intervention["status"][];
+  from?: Date;
+  to?: Date;
+}
+
 export interface IStorage {
   getUser(id: string): Promise<User | null>;
   getUserByEmail(email: string): Promise<User | null>;
@@ -40,6 +57,14 @@ export interface IStorage {
   getPendingFeedbackInterventions(userId: string): Promise<(Intervention & { relation: Relation })[]>;
   getPendingFeedbackForReminder(): Promise<(Intervention & { relation: Relation & { senior: User; junior: User } })[]>;
   updateInterventionFeedbackReminderSent(id: string): Promise<Intervention>;
+  /**
+   * Historique des rencontres, périmètre décidé par l'appelant (jamais par un
+   * paramètre client). Alimente /api/meetings/history pour tous les rôles.
+   */
+  getMeetingHistory(
+    scope: MeetingHistoryScope,
+    filters?: MeetingHistoryFilters
+  ): Promise<(Intervention & { relation: Relation & { senior: User; junior: User } })[]>;
 
   getAvailabilitiesByUser(userId: string): Promise<Availability[]>;
   getAvailabilitiesInRange(userId: string, from: Date, to: Date): Promise<Availability[]>;
@@ -572,6 +597,36 @@ class DatabaseStorage implements IStorage {
 
   async getAllInterventions(): Promise<(Intervention & { relation: Relation & { senior: User; junior: User } })[]> {
     return prisma.intervention.findMany({
+      include: { relation: { include: { senior: true, junior: true } } },
+      orderBy: { scheduledDate: "desc" },
+    });
+  }
+
+  async getMeetingHistory(
+    scope: MeetingHistoryScope,
+    filters?: MeetingHistoryFilters
+  ): Promise<(Intervention & { relation: Relation & { senior: User; junior: User } })[]> {
+    const relationWhere: Prisma.RelationWhereInput | undefined =
+      scope.kind === "all"
+        ? undefined
+        : scope.kind === "user"
+          ? { OR: [{ seniorId: scope.userId }, { juniorId: scope.userId }] }
+          : scope.kind === "senior"
+            ? { seniorId: scope.seniorId }
+            : { juniorId: { in: scope.studentIds } };
+
+    const where: Prisma.InterventionWhereInput = {};
+    if (relationWhere) where.relation = relationWhere;
+    if (filters?.status?.length) where.status = { in: filters.status };
+    if (filters?.from || filters?.to) {
+      where.scheduledDate = {
+        ...(filters.from ? { gte: filters.from } : {}),
+        ...(filters.to ? { lte: filters.to } : {}),
+      };
+    }
+
+    return prisma.intervention.findMany({
+      where,
       include: { relation: { include: { senior: true, junior: true } } },
       orderBy: { scheduledDate: "desc" },
     });

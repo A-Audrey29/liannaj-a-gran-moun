@@ -20,7 +20,7 @@ import { useState, useEffect } from "react";
 import { getPhotoUrl } from "@/lib/photo-url";
 import type { Relation, User as UserType, Intervention } from "@shared/schema";
 import AvailabilityWeekPicker, { type FreeSlot } from "@/components/availability-week-picker";
-import { fmtTime, fmtTimeRange, fmtDayLong } from "@/lib/availability-format";
+import { fmtTime, fmtTimeRange, fmtDayLong, fmtDayShort } from "@/lib/availability-format";
 import { ATELIERS } from "@shared/ateliers";
 
 type RelationDetail = Relation & { senior: UserType; junior: UserType; interventions: Intervention[] };
@@ -304,11 +304,11 @@ function InterventionCard({ intervention, relation, user }: { intervention: Inte
           <div className="flex items-center gap-4 text-sm">
             <div className="flex items-center gap-1.5 text-muted-foreground">
               <Calendar className="w-4 h-4" />
-              {new Date(intervention.scheduledDate).toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "long" })}
+              {fmtDayShort(new Date(intervention.scheduledDate))}
             </div>
             <div className="flex items-center gap-1.5 text-muted-foreground">
               <Clock className="w-4 h-4" />
-              {intervention.durationMinutes} min
+              {fmtTime(new Date(intervention.scheduledDate))} · {intervention.durationMinutes} min
             </div>
             {intervention.location && (
               <div className="flex items-center gap-1.5 text-muted-foreground">
@@ -341,8 +341,16 @@ function InterventionCard({ intervention, relation, user }: { intervention: Inte
 
         {needsMyFeedback && <FeedbackDialog interventionId={intervention.id} relationId={relation.id} />}
 
-        {intervention.status === "COMPLETED" && (
+        {/*
+          Le serveur ne renvoie que le feedback que l'utilisateur a le droit de
+          lire : jeune et sénior ne voient que le leur. Les blocs absents ne
+          signifient donc pas « pas encore répondu ».
+        */}
+        {intervention.status === "COMPLETED" && (hasSeniorFeedback || hasJuniorFeedback) && (
           <div className="mt-3 space-y-2 pt-3 border-t border-border/50">
+            <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">
+              {isSenior || isJunior ? "Votre feedback" : "Feedbacks"}
+            </p>
             {hasSeniorFeedback && (
               <div className="flex items-center gap-3 text-sm">
                 <span className="text-muted-foreground text-xs w-12">Senior</span>

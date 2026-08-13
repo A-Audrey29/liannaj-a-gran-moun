@@ -19,9 +19,12 @@ import {
   getFeedbackReminderEmailHtml,
   getNewReportEmailHtml,
 } from "./lib/email-templates";
-import { insertUserSchema, createRelationSchema, insertInterventionSchema, feedbackSchema, createPaymentSchema, changePasswordSchema, createAdminSchema, insertReportSchema, createAvailabilitySchema, createRecurringAvailabilitiesSchema, createDateExceptionSchema, updateUserCategoriesSchema } from "../shared/schema";
+import { insertUserSchema, createRelationSchema, insertInterventionSchema, feedbackSchema, createPaymentSchema, changePasswordSchema, createAdminSchema, insertReportSchema, createAvailabilitySchema, createRecurringAvailabilitiesSchema, createDateExceptionSchema, updateUserCategoriesSchema, meetingHistoryQuerySchema, COMPLETED_STATUSES } from "../shared/schema";
+import type { MeetingHistoryEntry, MeetingHistoryResponse, MeetingHistorySummary, Role } from "../shared/schema";
+import type { MeetingHistoryScope } from "./storage";
 import { createRecurringAvailabilities, createDateException, deleteAvailability, isWithinAvailability, hasInterventionConflict } from "./lib/availability";
 import { addSSEClient, sendSSEEvent, isUserConnected } from "./lib/sse";
+import { fmtDayNumeric, fmtTime } from "../shared/dates";
 import { sendPushNotification, getVapidPublicKey } from "./lib/push";
 
 const uploadStorage = multer.diskStorage({
@@ -73,6 +76,99 @@ function sanitizeUserPublic(user: any) {
     ...safe
   } = user;
   return safe;
+}
+
+function toMeetingHistoryEntry(i: any): MeetingHistoryEntry {
+  return {
+    id: i.id,
+    relationId: i.relationId,
+    scheduledDate: i.scheduledDate.toISOString(),
+    durationMinutes: i.durationMinutes,
+    location: i.location,
+    tasks: i.tasks || [],
+    status: i.status,
+    seniorId: i.relation.seniorId,
+    juniorId: i.relation.juniorId,
+    seniorName: `${i.relation.senior.firstName} ${i.relation.senior.lastName}`,
+    juniorName: `${i.relation.junior.firstName} ${i.relation.junior.lastName}`,
+    seniorRating: i.seniorRating,
+    seniorComment: i.seniorComment,
+    juniorRating: i.juniorRating,
+    juniorComment: i.juniorComment,
+  };
+}
+
+/**
+ * Réduit les feedbacks au strict nécessaire selon le rôle du lecteur.
+ *
+ * - ADMIN / TEACHER : encadrement, les deux feedbacks.
+ * - REFERENT_SENIOR : encadre le sénior, voit son feedback, pas celui du jeune.
+ * - SENIOR / JUNIOR : uniquement le sien. Ne pas leur renvoyer l'appréciation
+ *   que l'autre a portée sur eux.
+ *
+ * Filtrage serveur et non affichage conditionnel côté client : la donnée
+ * masquée ne doit pas partir sur le réseau.
+ */
+function scopeFeedback(entry: MeetingHistoryEntry, viewerRole: Role, viewerId: string): MeetingHistoryEntry {
+  if (viewerRole === "ADMIN" || viewerRole === "TEACHER") return entry;
+  if (viewerRole === "REFERENT_SENIOR") {
+    return { ...entry, juniorRating: null, juniorComment: null };
+  }
+  return entry.seniorId === viewerId
+    ? { ...entry, juniorRating: null, juniorComment: null }
+    : { ...entry, seniorRating: null, seniorComment: null };
+}
+
+/**
+ * Même règle de visibilité que scopeFeedback, appliquée à une intervention
+ * brute (routes /api/relations et /api/relations/:id).
+ *
+ * Ces routes servent les mêmes feedbacks que l'historique : sans ce filtre, la
+ * restriction serait contournable en ouvrant la fiche relation.
+ */
+function scopeInterventionFeedback<T extends {
+  seniorRating: number | null;
+  seniorComment: string | null;
+  juniorRating: number | null;
+  juniorComment: string | null;
+}>(intervention: T, viewerRole: Role, viewerId: string, seniorId: string): T {
+  if (viewerRole === "ADMIN" || viewerRole === "TEACHER") return intervention;
+  if (viewerRole === "REFERENT_SENIOR") {
+    return { ...intervention, juniorRating: null, juniorComment: null };
+  }
+  return seniorId === viewerId
+    ? { ...intervention, juniorRating: null, juniorComment: null }
+    : { ...intervention, seniorRating: null, seniorComment: null };
+}
+
+/**
+ * Récap : uniquement les rencontres réellement tenues. Une rencontre annulée ou
+ * encore proposée ne représente aucune heure passée.
+ *
+ * Une rencontre portant plusieurs ateliers compte sa durée entière pour chacun :
+ * la somme de byService peut donc dépasser totalMinutes (heures par service, pas
+ * une partition).
+ */
+function buildMeetingSummary(entries: MeetingHistoryEntry[]): MeetingHistorySummary {
+  const done = entries.filter((e) => COMPLETED_STATUSES.includes(e.status));
+  const byService = new Map<string, { count: number; minutes: number }>();
+
+  for (const entry of done) {
+    for (const service of entry.tasks) {
+      const acc = byService.get(service) || { count: 0, minutes: 0 };
+      acc.count += 1;
+      acc.minutes += entry.durationMinutes;
+      byService.set(service, acc);
+    }
+  }
+
+  return {
+    totalMeetings: done.length,
+    totalMinutes: done.reduce((sum, e) => sum + e.durationMinutes, 0),
+    byService: [...byService.entries()]
+      .map(([service, v]) => ({ service, ...v }))
+      .sort((a, b) => b.minutes - a.minutes),
+  };
 }
 
 const isDev = process.env.NODE_ENV !== "production";
@@ -635,6 +731,9 @@ export async function registerRoutes(
         ...r,
         senior: sanitizeUserPublic(r.senior),
         junior: sanitizeUserPublic(r.junior),
+        interventions: (r.interventions || []).map((i) =>
+          scopeInterventionFeedback(i, req.user!.role as Role, req.user!.id, r.seniorId)
+        ),
       }));
       res.json(sanitized);
     } catch (err) {
@@ -659,6 +758,9 @@ export async function registerRoutes(
         ...relation,
         senior: sanitizeUserPublic(relation.senior),
         junior: sanitizeUserPublic(relation.junior),
+        interventions: (relation.interventions || []).map((i) =>
+          scopeInterventionFeedback(i, req.user!.role as Role, userId, relation.seniorId)
+        ),
       });
     } catch (err) {
       console.error("[RELATION_DETAIL] Error:", err);
@@ -875,14 +977,14 @@ export async function registerRoutes(
         user: { connect: { id: relation.juniorId } },
         type: "INTERVENTION_PROPOSED",
         title: "Nouvelle intervention proposée",
-        message: `Une intervention a été proposée pour le ${new Date(parsed.data.scheduledDate).toLocaleDateString("fr-FR")}.`,
+        message: `Une intervention a été proposée pour le ${fmtDayNumeric(new Date(parsed.data.scheduledDate))} à ${fmtTime(new Date(parsed.data.scheduledDate))}.`,
         link: `/relations/${relation.id}`,
       });
 
       const junior = await storage.getUser(relation.juniorId);
       if (junior?.email) {
         const juniorName = `${junior.firstName} ${junior.lastName}`;
-        const dateStr = new Date(parsed.data.scheduledDate).toLocaleDateString("fr-FR");
+        const dateStr = `${fmtDayNumeric(new Date(parsed.data.scheduledDate))} à ${fmtTime(new Date(parsed.data.scheduledDate))}`;
         const locationStr = parsed.data.location || "Non précisé";
         sendEmail({
           to: junior.email,
@@ -917,14 +1019,14 @@ export async function registerRoutes(
         user: { connect: { id: intervention.relation.seniorId } },
         type: "INTERVENTION_CONFIRMED",
         title: "Intervention confirmée",
-        message: `${req.user!.firstName} ${req.user!.lastName} a confirmé l'intervention du ${intervention.scheduledDate.toLocaleDateString("fr-FR")}.`,
+        message: `${req.user!.firstName} ${req.user!.lastName} a confirmé l'intervention du ${fmtDayNumeric(intervention.scheduledDate)} à ${fmtTime(intervention.scheduledDate)}.`,
         link: `/relations/${intervention.relationId}`,
       });
 
       const senior = await storage.getUser(intervention.relation.seniorId);
       if (senior?.email) {
         const seniorName = `${senior.firstName} ${senior.lastName}`;
-        const dateStr = intervention.scheduledDate.toLocaleDateString("fr-FR");
+        const dateStr = fmtDayNumeric(intervention.scheduledDate);
         sendEmail({
           to: senior.email,
           subject: `FEVES - Intervention confirmée pour le ${dateStr}`,
@@ -975,7 +1077,7 @@ export async function registerRoutes(
         link: `/relations/${intervention.relationId}`,
       });
 
-      const dateStr = intervention.scheduledDate.toLocaleDateString("fr-FR");
+      const dateStr = fmtDayNumeric(intervention.scheduledDate);
       const seniorUser = await storage.getUser(seniorId);
       if (seniorUser?.email) {
         sendEmail({
@@ -1025,7 +1127,7 @@ export async function registerRoutes(
         user: { connect: { id: otherId } },
         type: "SYSTEM",
         title: "Intervention annulée",
-        message: `L'intervention du ${intervention.scheduledDate.toLocaleDateString("fr-FR")} a été annulée.`,
+        message: `L'intervention du ${fmtDayNumeric(intervention.scheduledDate)} a été annulée.`,
         link: `/relations/${intervention.relationId}`,
       });
 
@@ -1230,6 +1332,84 @@ export async function registerRoutes(
     } catch (err) {
       console.error("[FEEDBACK] Error:", err);
       res.status(500).json({ message: "Erreur lors de l'enregistrement du feedback" });
+    }
+  });
+
+  // ==================== HISTORIQUE DES RENCONTRES ====================
+
+  /**
+   * Historique unifié, une seule route pour les cinq rôles.
+   *
+   * Deux garde-fous distincts, à ne pas confondre :
+   *  - le PÉRIMÈTRE (quelles rencontres sont retournées) dérive de req.user ;
+   *  - la VISIBILITÉ des feedbacks est ensuite réduite selon le rôle, avant
+   *    sérialisation, pour que la réponse ne transporte jamais un commentaire
+   *    que l'appelant n'a pas le droit de lire.
+   *
+   * `?userId=` n'élargit jamais le périmètre : réservé à l'admin, et au prof
+   * pour ses seuls élèves affiliés.
+   */
+  app.get("/api/meetings/history", requireAuth, async (req, res) => {
+    try {
+      const parsed = meetingHistoryQuerySchema.safeParse(req.query);
+      if (!parsed.success) {
+        return res.status(400).json({
+          message: "Paramètres invalides",
+          errors: parsed.error.flatten().fieldErrors,
+        });
+      }
+
+      const user = req.user!;
+      const role = user.role as Role;
+      const { userId, status, from, to } = parsed.data;
+
+      let scope: MeetingHistoryScope;
+
+      if (userId) {
+        if (role === "ADMIN") {
+          scope = { kind: "user", userId };
+        } else if (role === "TEACHER") {
+          const isLinked = await storage.isTeacherOfStudent(user.id, userId);
+          if (!isLinked) {
+            return res.status(403).json({ message: "Cet élève ne vous est pas affilié" });
+          }
+          scope = { kind: "user", userId };
+        } else {
+          return res.status(403).json({ message: "Accès refusé" });
+        }
+      } else if (role === "ADMIN") {
+        scope = { kind: "all" };
+      } else if (role === "TEACHER") {
+        const students = await storage.getTeacherStudents(user.id);
+        scope = { kind: "students", studentIds: students.map((s) => s.studentId) };
+      } else if (role === "REFERENT_SENIOR") {
+        const linkedSeniorId = (user as any).linkedSeniorId;
+        if (!linkedSeniorId) {
+          return res.status(404).json({ message: "Aucun sénior lié" });
+        }
+        scope = { kind: "senior", seniorId: linkedSeniorId };
+      } else {
+        scope = { kind: "user", userId: user.id };
+      }
+
+      const interventions = await storage.getMeetingHistory(scope, {
+        status,
+        from: from ? new Date(`${from}T00:00:00.000Z`) : undefined,
+        to: to ? new Date(`${to}T23:59:59.999Z`) : undefined,
+      });
+
+      const entries = interventions
+        .map((i) => toMeetingHistoryEntry(i))
+        .map((e) => scopeFeedback(e, role, user.id));
+
+      const response: MeetingHistoryResponse = {
+        entries,
+        summary: buildMeetingSummary(entries),
+      };
+      res.json(response);
+    } catch (err) {
+      console.error("[MEETING_HISTORY] Error:", err);
+      res.status(500).json({ message: "Erreur lors du chargement de l'historique" });
     }
   });
 
@@ -2273,7 +2453,7 @@ export async function registerRoutes(
         user: { connect: { id: relation.juniorId } },
         type: "INTERVENTION_PROPOSED",
         title: "Nouvelle intervention proposée",
-        message: `${senderName} propose une intervention le ${new Date(parsed.data.scheduledDate).toLocaleDateString("fr-FR")}.`,
+        message: `${senderName} propose une intervention le ${fmtDayNumeric(new Date(parsed.data.scheduledDate))} à ${fmtTime(new Date(parsed.data.scheduledDate))}.`,
         link: null,
       });
       sendSSEEvent(relation.juniorId, "invalidate", { queryKey: ["/api/relations"] });

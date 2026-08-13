@@ -18,17 +18,18 @@ import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Checkbox } from "@/components/ui/checkbox";
 import StatusBadge from "@/components/status-badge";
-import { Calendar, MessageCircle, Mail, User, LayoutGrid, ChevronRight, ChevronLeft, Plus, Check, X, Pencil, Heart, Camera, Trash2, AlertTriangle, Star, Users, ClipboardCheck, Eye, EyeOff, List, GalleryHorizontalEnd, MapPin, Lock, HelpCircle, Loader2, CalendarClock } from "lucide-react";
+import { Calendar, MessageCircle, Mail, User, LayoutGrid, ChevronRight, ChevronLeft, Plus, Check, X, Pencil, Heart, Camera, Trash2, AlertTriangle, Star, Users, ClipboardCheck, List, GalleryHorizontalEnd, MapPin, Lock, HelpCircle, Loader2, CalendarClock } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 import { updateProfileSchema, type UpdateProfileInput, changePasswordSchema, type ChangePasswordInput } from "@shared/schema";
 import type { Relation, User as UserType, Intervention, Category } from "@shared/schema";
 import MessagesTab from "@/components/messages-tab";
+import MeetingHistory from "@/components/meeting-history";
 import DisponibilitesTab from "@/components/disponibilites-tab";
 import { MobileTabsMenu } from "@/components/mobile-tabs-menu";
 import { useSSE } from "@/hooks/use-sse";
 import { useUnreadMessageCount } from "@/hooks/use-unread-count";
 import { usePushNotifications } from "@/hooks/use-push";
-import { fmtTime, fmtDayLongMonth, gpParts, MOIS_LONGS } from "@/lib/availability-format";
+import { fmtTime, gpParts, MOIS_LONGS } from "@/lib/availability-format";
 
 type RelationWithUsers = Relation & { senior: UserType; junior: UserType; interventions?: Intervention[] };
 type MatchSuggestion = { user: UserType; commonCategories: string[]; isRecommended: boolean; isFavorite: boolean };
@@ -378,7 +379,6 @@ function DashboardTab({ counts, isLoading, user, onSwitchTab }: { counts: Dashbo
 
 function RencontresTab({ relations, isLoading, user, onOpenMessage }: { relations?: RelationWithUsers[]; isLoading: boolean; user: any; onOpenMessage: (relationId: string) => void }) {
   const [, setLocation] = useLocation();
-  const [collapsedIds, setCollapsedIds] = useState<Set<string>>(new Set());
   const { toast } = useToast();
 
   const confirmMutation = useMutation({
@@ -387,6 +387,7 @@ function RencontresTab({ relations, isLoading, user, onOpenMessage }: { relation
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/relations"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/meetings/history"] });
       toast({ title: "Rencontre confirmée !", description: "Le sénior et l'équipe FEVES ont été notifiés." });
     },
     onError: () => toast({ title: "Erreur", description: "Impossible de confirmer la rencontre.", variant: "destructive" }),
@@ -409,13 +410,12 @@ function RencontresTab({ relations, isLoading, user, onOpenMessage }: { relation
   }
 
   return (
-    <div className="space-y-3">
-      {activeRelations.map((rel) => {
-        const partner = rel.seniorId === user?.id ? rel.junior : rel.senior;
-        const isExpanded = !collapsedIds.has(rel.id);
-        const interventions = (rel.interventions || []).sort((a, b) => new Date(b.scheduledDate).getTime() - new Date(a.scheduledDate).getTime());
+    <div className="space-y-6">
+      <div className="space-y-3">
+        {activeRelations.map((rel) => {
+          const partner = rel.seniorId === user?.id ? rel.junior : rel.senior;
 
-        return (
+          return (
           <Card key={rel.id} className="rounded-2xl border-0 shadow-sm overflow-hidden" data-testid={`card-relation-${rel.id}`}>
             <CardContent className="p-0">
               <div
@@ -453,108 +453,39 @@ function RencontresTab({ relations, isLoading, user, onOpenMessage }: { relation
                 </div>
               </div>
 
-              {interventions.length === 0 && (
-                <div className="border-t px-4 py-3">
-                  <p className="text-xs text-muted-foreground text-center">Aucune rencontre planifiée</p>
-                </div>
-              )}
-
-              {interventions.length > 0 && (
-                <div>
-                  <div className="border-t" />
-                  <div className="pt-3 pb-4 pr-4" style={{ marginLeft: "10%" }}>
-                    <div className="border-l-2 border-primary/20 pl-4">
-                      <div className="flex items-center justify-between mb-3">
-                        <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Historique des rencontres</h4>
-                        <Button
-                          variant={isExpanded ? "outline" : "default"}
-                          size="sm"
-                          className="rounded-full text-xs gap-1.5"
-                          aria-expanded={isExpanded}
-                          onClick={() => {
-                            setCollapsedIds((prev) => {
-                              const next = new Set(prev);
-                              if (next.has(rel.id)) {
-                                next.delete(rel.id);
-                              } else {
-                                next.add(rel.id);
-                              }
-                              return next;
-                            });
-                          }}
-                          data-testid={`toggle-history-${rel.id}`}
-                        >
-                          {isExpanded ? (
-                            <><EyeOff className="w-3.5 h-3.5" /> Masquer l'historique</>
-                          ) : (
-                            <><Eye className="w-3.5 h-3.5" /> Voir l'historique ({interventions.length})</>
-                          )}
-                        </Button>
-                      </div>
-
-                      {isExpanded && (
-                        <div className="space-y-3">
-                          {interventions.map((interv) => {
-                            const isJunior = user?.role === "JUNIOR";
-                            const isProposed = interv.status === "PROPOSED";
-                            const tasks: string[] = interv.tasks || [];
-                            return (
-                              <div
-                                key={interv.id}
-                                className={`py-3 px-3 rounded-xl text-sm ${isProposed && isJunior ? "bg-orange-50 border border-orange-200" : "bg-muted/30"}`}
-                                data-testid={`intervention-${interv.id}`}
-                              >
-                                <div className="flex items-start justify-between gap-2">
-                                  <div className="flex-1 min-w-0">
-                                    <p className="font-semibold text-xs">
-                                      {fmtDayLongMonth(new Date(interv.scheduledDate))}
-                                    </p>
-                                    <p className="text-[11px] text-muted-foreground mt-0.5">
-                                      {fmtTime(new Date(interv.scheduledDate))} · {interv.durationMinutes} min{interv.location ? ` · 📍 ${interv.location}` : ""}
-                                    </p>
-                                    {tasks.length > 0 && (
-                                      <div className="mt-1.5">
-                                        <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-1">Activités prévues</p>
-                                        <div className="flex flex-wrap gap-1">
-                                          {tasks.map((task, i) => (
-                                            <span key={i} className="inline-block bg-primary/10 text-primary text-[10px] px-2 py-0.5 rounded-full">
-                                              {task}
-                                            </span>
-                                          ))}
-                                        </div>
-                                      </div>
-                                    )}
-                                  </div>
-                                  <StatusBadge status={interv.status} />
-                                </div>
-                                {isProposed && isJunior && (
-                                  <div className="mt-3 pt-2 border-t border-orange-200">
-                                    <p className="text-[11px] text-orange-700 mb-2">Cette rencontre attend votre confirmation.</p>
-                                    <Button
-                                      size="sm"
-                                      className="w-full bg-[#dc4256] hover:bg-[#c73848] text-white text-xs"
-                                      onClick={() => confirmMutation.mutate(interv.id)}
-                                      disabled={confirmMutation.isPending}
-                                      data-testid={`button-confirm-intervention-${interv.id}`}
-                                    >
-                                      <Check className="w-3.5 h-3.5 mr-1.5" />
-                                      {confirmMutation.isPending ? "Confirmation..." : "Confirmer la rencontre"}
-                                    </Button>
-                                  </div>
-                                )}
-                              </div>
-                            );
-                          })}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              )}
             </CardContent>
           </Card>
-        );
-      })}
+          );
+        })}
+      </div>
+
+      <div>
+        <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3">
+          Historique des rencontres
+        </h3>
+        <MeetingHistory
+          scope={{ kind: "me" }}
+          viewerRole={user?.role}
+          emptyLabel="Aucune rencontre pour le moment."
+          renderActions={(entry) =>
+            entry.status === "PROPOSED" && user?.role === "JUNIOR" ? (
+              <div>
+                <p className="text-[11px] text-orange-700 mb-2">Cette rencontre attend votre confirmation.</p>
+                <Button
+                  size="sm"
+                  className="w-full bg-[#dc4256] hover:bg-[#c73848] text-white text-xs"
+                  onClick={() => confirmMutation.mutate(entry.id)}
+                  disabled={confirmMutation.isPending}
+                  data-testid={`button-confirm-intervention-${entry.id}`}
+                >
+                  <Check className="w-3.5 h-3.5 mr-1.5" />
+                  {confirmMutation.isPending ? "Confirmation..." : "Confirmer la rencontre"}
+                </Button>
+              </div>
+            ) : null
+          }
+        />
+      </div>
     </div>
   );
 }

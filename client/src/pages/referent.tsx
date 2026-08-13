@@ -22,6 +22,8 @@ import { LayoutGrid, Calendar, Plus, Mail, User, CheckCircle, Clock, Loader2, Ch
 import { useState } from "react";
 import { useSSE } from "@/hooks/use-sse";
 import { MobileTabsMenu } from "@/components/mobile-tabs-menu";
+import MeetingHistory from "@/components/meeting-history";
+import { fmtTime, fmtDayLongMonthYear } from "@/lib/availability-format";
 
 type RelationWithUsers = Relation & { senior: UserType; junior: UserType; interventions?: Intervention[] };
 
@@ -59,8 +61,10 @@ const INTERVENTION_STATUS_COLORS: Record<string, string> = {
   COMPLETED: "bg-green-100 text-green-800",
 };
 
+/** Rencontres : wall-clock Guadeloupe, jamais la timezone du navigateur. */
 function formatDate(d: string | Date) {
-  return new Date(d).toLocaleDateString("fr-FR", { day: "2-digit", month: "long", year: "numeric" });
+  const date = new Date(d);
+  return `${fmtDayLongMonthYear(date)} à ${fmtTime(date)}`;
 }
 
 const TABS = [
@@ -168,18 +172,25 @@ function SuiviTab({ relations }: { relations: RelationWithUsers[] }) {
 
   if (relations.length === 0) {
     return (
-      <div className="text-center py-12 text-muted-foreground">
-        <Calendar className="w-10 h-10 mx-auto mb-3 opacity-30" />
-        <p>Aucune relation pour ce sénior.</p>
+      <div className="space-y-6">
+        <div className="text-center py-12 text-muted-foreground">
+          <Calendar className="w-10 h-10 mx-auto mb-3 opacity-30" />
+          <p>Aucune relation pour ce sénior.</p>
+        </div>
+        <MeetingHistory
+          scope={{ kind: "me" }}
+          viewerRole="REFERENT_SENIOR"
+          emptyLabel="Aucune rencontre pour le moment."
+        />
       </div>
     );
   }
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-6">
+      <div className="space-y-3">
       {relations.map((r) => {
         const isExpanded = expandedId === r.id;
-        const interventions = r.interventions || [];
         return (
           <Card key={r.id} data-testid={`card-relation-${r.id}`}>
             <CardContent className="pt-5">
@@ -197,7 +208,7 @@ function SuiviTab({ relations }: { relations: RelationWithUsers[] }) {
                     />
                     <div>
                       <p className="font-medium">{r.junior.firstName} {r.junior.lastName}</p>
-                      <p className="text-xs text-muted-foreground">{interventions.length} intervention{interventions.length > 1 ? "s" : ""}</p>
+                      <p className="text-xs text-muted-foreground">{(r.interventions || []).length} intervention{(r.interventions || []).length > 1 ? "s" : ""}</p>
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
@@ -221,30 +232,27 @@ function SuiviTab({ relations }: { relations: RelationWithUsers[] }) {
                       Proposer une rencontre à {r.junior.firstName}
                     </Button>
                   )}
-                  {interventions.length === 0 ? (
-                    <p className="text-sm text-muted-foreground text-center py-2">Aucune intervention planifiée</p>
-                  ) : (
-                    interventions.map((i) => (
-                      <div key={i.id} className="flex items-start justify-between p-3 rounded-lg bg-muted/40" data-testid={`intervention-${i.id}`}>
-                        <div>
-                          <p className="text-sm font-medium">{formatDate(i.scheduledDate)}</p>
-                          {i.location && <p className="text-xs text-muted-foreground">{i.location}</p>}
-                          {i.tasks && i.tasks.length > 0 && (
-                            <p className="text-xs text-muted-foreground">{i.tasks.join(", ")}</p>
-                          )}
-                        </div>
-                        <Badge className={`text-xs ml-2 shrink-0 ${INTERVENTION_STATUS_COLORS[i.status] || ""}`}>
-                          {INTERVENTION_STATUS_LABELS[i.status] || i.status}
-                        </Badge>
-                      </div>
-                    ))
-                  )}
+                  <p className="text-xs text-muted-foreground text-center py-1">
+                    Le détail des rencontres est dans l'historique ci-dessous.
+                  </p>
                 </div>
               )}
             </CardContent>
           </Card>
         );
       })}
+      </div>
+
+      <div>
+        <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3">
+          Historique des rencontres
+        </h3>
+        <MeetingHistory
+          scope={{ kind: "me" }}
+          viewerRole="REFERENT_SENIOR"
+          emptyLabel="Aucune rencontre pour le moment."
+        />
+      </div>
     </div>
   );
 }

@@ -19,6 +19,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { MobileTabsMenu } from "@/components/mobile-tabs-menu";
+import MeetingHistory from "@/components/meeting-history";
 import {
   ChevronLeft,
   ChevronRight,
@@ -37,6 +38,7 @@ import {
   AlertCircle,
 } from "lucide-react";
 import type { User as UserType } from "@shared/schema";
+import { fmtTime, fmtDayLongMonthYear } from "@/lib/availability-format";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -120,6 +122,12 @@ function formatDate(d: string | Date) {
     month: "long",
     year: "numeric",
   });
+}
+
+/** Rencontres : wall-clock Guadeloupe, jamais la timezone du navigateur. */
+function formatDateTime(d: string | Date) {
+  const date = new Date(d);
+  return `${fmtDayLongMonthYear(date)} à ${fmtTime(date)}`;
 }
 
 function formatDateShort(d: string | Date) {
@@ -440,191 +448,12 @@ function RelationsSection({ data }: { data: StudentDetail }) {
                   <Clock className="w-4 h-4 text-blue-600 shrink-0" />
                   <div>
                     <p className="text-xs font-medium text-blue-900">
-                      Prochaine rencontre : {formatDate(nextMeeting.scheduledDate)}
+                      Prochaine rencontre : {formatDateTime(nextMeeting.scheduledDate)}
                     </p>
                     {nextMeeting.location && (
                       <p className="text-xs text-blue-700">{nextMeeting.location}</p>
                     )}
                   </div>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        );
-      })}
-    </div>
-  );
-}
-
-// ── Student detail — Historique des rencontres ────────────────────────────────
-
-function RencontresSection({ data }: { data: StudentDetail }) {
-  const [expandedId, setExpandedId] = useState<string | null>(null);
-
-  // Flatten toutes les interventions de toutes les relations, triées par date desc
-  const allInterventions = (data.relations ?? [])
-    .flatMap((rel) =>
-      (rel.interventions ?? []).map((i) => ({
-        ...i,
-        seniorName: `${rel.senior.firstName} ${rel.senior.lastName}`,
-        seniorPhoto: rel.senior.profilePhoto,
-        relationStatus: rel.status,
-      }))
-    )
-    .sort(
-      (a, b) =>
-        new Date(b.scheduledDate).getTime() - new Date(a.scheduledDate).getTime()
-    );
-
-  if (allInterventions.length === 0) {
-    return (
-      <div className="text-center py-12 text-muted-foreground">
-        <Calendar className="w-10 h-10 mx-auto mb-3 opacity-30" />
-        <p>Aucune rencontre planifiée.</p>
-      </div>
-    );
-  }
-
-  const hasFeedback = (i: typeof allInterventions[0]) =>
-    i.seniorRating !== null || i.juniorRating !== null;
-
-  return (
-    <div className="space-y-2">
-      {allInterventions.map((i) => {
-        const isExpanded = expandedId === i.id;
-        const isPast =
-          i.status === "COMPLETED" ||
-          i.status === "DONE" ||
-          i.status === "COMPLETED_PENDING_FEEDBACK";
-
-        return (
-          <Card key={i.id} className={isPast ? "" : "border-blue-200"}>
-            <CardContent className="pt-4 pb-4">
-              <button
-                className="w-full text-left"
-                onClick={() => setExpandedId(isExpanded ? null : i.id)}
-              >
-                <div className="flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-3 min-w-0">
-                    <img
-                      src={getPhotoUrl(i.seniorPhoto)}
-                      alt={i.seniorName}
-                      className="w-9 h-9 rounded-full object-cover shrink-0"
-                    />
-                    <div className="min-w-0">
-                      <p className="text-sm font-medium truncate">
-                        {formatDate(i.scheduledDate)}
-                      </p>
-                      <p className="text-xs text-muted-foreground truncate">
-                        Avec {i.seniorName}
-                        {i.location ? ` · ${i.location}` : ""}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    <Badge
-                      className={`text-xs ${INTERVENTION_STATUS_COLORS[i.status] || ""}`}
-                    >
-                      {INTERVENTION_STATUS_LABELS[i.status] || i.status}
-                    </Badge>
-                    {hasFeedback(i) && (
-                      <Star className="w-3.5 h-3.5 text-amber-400 fill-amber-400" />
-                    )}
-                    <ChevronRight
-                      className={`w-4 h-4 text-muted-foreground transition-transform ${
-                        isExpanded ? "rotate-90" : ""
-                      }`}
-                    />
-                  </div>
-                </div>
-              </button>
-
-              {isExpanded && (
-                <div className="mt-4 pt-4 border-t space-y-4">
-                  {/* Infos pratiques */}
-                  <div className="space-y-1.5">
-                    <p className="text-xs text-muted-foreground uppercase tracking-wide font-medium">
-                      Détails
-                    </p>
-                    <div className="grid grid-cols-2 gap-2 text-sm">
-                      <div>
-                        <span className="text-muted-foreground">Durée : </span>
-                        {i.durationMinutes >= 60
-                          ? `${Math.floor(i.durationMinutes / 60)}h${
-                              i.durationMinutes % 60 > 0 ? String(i.durationMinutes % 60).padStart(2, "0") : ""
-                            }`
-                          : `${i.durationMinutes} min`}
-                      </div>
-                      {i.location && (
-                        <div>
-                          <span className="text-muted-foreground">Lieu : </span>
-                          {i.location}
-                        </div>
-                      )}
-                    </div>
-                    {i.tasks && i.tasks.length > 0 && (
-                      <div className="flex flex-wrap gap-1 mt-1">
-                        {i.tasks.map((t) => (
-                          <span
-                            key={t}
-                            className="px-2 py-0.5 text-xs rounded-full bg-muted text-muted-foreground"
-                          >
-                            {t}
-                          </span>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Feedback */}
-                  {hasFeedback(i) && (
-                    <div className="space-y-3">
-                      <p className="text-xs text-muted-foreground uppercase tracking-wide font-medium">
-                        Feedbacks
-                      </p>
-
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        {/* Feedback sénior */}
-                        <div className="p-3 rounded-lg bg-blue-50 border border-blue-100">
-                          <p className="text-xs font-medium text-blue-800 mb-1.5">
-                            Sénior ({i.seniorName})
-                          </p>
-                          <StarDisplay rating={i.seniorRating} />
-                          {i.seniorComment && (
-                            <p className="text-xs text-blue-900 mt-1.5 italic">
-                              "{i.seniorComment}"
-                            </p>
-                          )}
-                          {!i.seniorRating && !i.seniorComment && (
-                            <p className="text-xs text-blue-700 italic">Pas encore renseigné</p>
-                          )}
-                        </div>
-
-                        {/* Feedback jeune */}
-                        <div className="p-3 rounded-lg bg-teal-50 border border-teal-100">
-                          <p className="text-xs font-medium text-teal-800 mb-1.5">
-                            Jeune ({data.student.firstName})
-                          </p>
-                          <StarDisplay rating={i.juniorRating} />
-                          {i.juniorComment && (
-                            <p className="text-xs text-teal-900 mt-1.5 italic">
-                              "{i.juniorComment}"
-                            </p>
-                          )}
-                          {!i.juniorRating && !i.juniorComment && (
-                            <p className="text-xs text-teal-700 italic">Pas encore renseigné</p>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {i.status === "COMPLETED_PENDING_FEEDBACK" && (
-                    <div className="flex items-center gap-2 p-2 bg-orange-50 border border-orange-200 rounded text-xs text-orange-800">
-                      <Clock className="w-3.5 h-3.5 shrink-0" />
-                      Feedback en attente des participants
-                    </div>
-                  )}
                 </div>
               )}
             </CardContent>
@@ -849,7 +678,7 @@ function StudentDetailView({
   const SECTIONS: { id: DetailSection; label: string; icon: any; count?: number }[] = [
     { id: "profil", label: "Profil & Bio", icon: User },
     { id: "relations", label: "Séniors", icon: Users, count: relations.length },
-    { id: "rencontres", label: "Rencontres", icon: Calendar, count: allInterventions.length },
+    { id: "rencontres", label: "Suivi des ateliers", icon: Calendar, count: allInterventions.length },
     { id: "notes", label: "Notes FEVES", icon: MessageSquare, count: comments.length },
   ];
 
@@ -945,7 +774,14 @@ function StudentDetailView({
         <ProfilSection data={data} studentId={studentId} refetch={refetch} />
       )}
       {section === "relations" && <RelationsSection data={data} />}
-      {section === "rencontres" && <RencontresSection data={data} />}
+      {section === "rencontres" && (
+        <MeetingHistory
+          scope={{ kind: "user", userId: studentId }}
+          viewerRole="TEACHER"
+          emptyLabel="Aucune rencontre planifiée."
+          exportLabel={`${data.student.firstName}-${data.student.lastName}`}
+        />
+      )}
       {section === "notes" && (
         <NotesSection data={data} studentId={studentId} refetch={refetch} />
       )}
