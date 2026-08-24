@@ -10,7 +10,50 @@ const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
 const adapter = new PrismaPg(pool);
 const prisma = new PrismaClient({ adapter });
 
+/**
+ * Ce script VIDE TOUTES LES TABLES avant de recréer des données de test.
+ * Deux gardes avant de laisser passer :
+ *
+ *   1. NODE_ENV=production → refus.
+ *   2. base distante (Neon, Render, Supabase…) → refus, même hors production.
+ *
+ * La garde n°2 est la vraie protection : en local, NODE_ENV n'est pas
+ * "production" alors que DATABASE_URL peut très bien pointer sur la base
+ * réelle. Un simple contrôle de NODE_ENV laisserait donc passer l'effacement.
+ *
+ * Contournement volontaire (à n'utiliser qu'en connaissance de cause) :
+ *   ALLOW_DESTRUCTIVE_SEED=yes npx tsx prisma/seed.ts
+ */
+function assertSafeToWipe() {
+  if (process.env.ALLOW_DESTRUCTIVE_SEED === "yes") {
+    console.warn("[SEED] ALLOW_DESTRUCTIVE_SEED=yes — gardes désactivées volontairement.");
+    return;
+  }
+
+  const url = process.env.DATABASE_URL ?? "";
+  const host = url.match(/@([^/:]+)/)?.[1] ?? "";
+  const isLocal = /^(localhost|127\.0\.0\.1|::1|host\.docker\.internal)$/.test(host);
+
+  const refuse = (raison: string) => {
+    console.error(
+      `\n[SEED] REFUS — ${raison}.\n` +
+        `Ce script supprime TOUTES les données (utilisateurs, rencontres, messages…).\n` +
+        `Base ciblée : ${host || "(inconnue)"}\n\n` +
+        `Pour créer un compte administrateur sans rien effacer :\n` +
+        `  npx tsx prisma/create-admin.ts\n\n` +
+        `Si l'effacement est réellement voulu :\n` +
+        `  ALLOW_DESTRUCTIVE_SEED=yes npx tsx prisma/seed.ts\n`
+    );
+    process.exit(1);
+  };
+
+  if (process.env.NODE_ENV === "production") refuse("NODE_ENV=production");
+  if (!isLocal) refuse(`la base n'est pas locale (${host})`);
+}
+
 async function main() {
+  assertSafeToWipe();
+
   const hashedPassword = await bcrypt.hash("password", 10);
 
   await prisma.report.deleteMany();
