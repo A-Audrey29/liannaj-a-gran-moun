@@ -16,9 +16,23 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Calendar as CalendarWidget } from "@/components/ui/calendar";
-import { Calendar, Plus, Trash2, Clock, AlertTriangle } from "lucide-react";
+import { Calendar, Plus, Trash2, AlertTriangle } from "lucide-react";
 import type { Availability } from "@shared/schema";
-import { fmtDayLong, fmtTimeRange, JOURS_LONGS } from "@/lib/availability-format";
+import { fmtDayLong, fmtTime, gpDecimalHour, JOURS_LONGS } from "@/lib/availability-format";
+
+const GRID_START_HOUR = 8;
+const GRID_END_HOUR = 20;
+const PX_PER_HOUR = 44;
+const GRID_HEIGHT = (GRID_END_HOUR - GRID_START_HOUR) * PX_PER_HOUR;
+
+/** Position/hauteur en px d'un créneau dans la grille horaire, clampé aux bornes affichées. */
+function blockStyle(start: Date, end: Date): { top: number; height: number } {
+  const startH = Math.min(Math.max(gpDecimalHour(start), GRID_START_HOUR), GRID_END_HOUR);
+  const endH = Math.min(Math.max(gpDecimalHour(end), GRID_START_HOUR), GRID_END_HOUR);
+  const top = (startH - GRID_START_HOUR) * PX_PER_HOUR;
+  const height = Math.max((endH - startH) * PX_PER_HOUR, 6);
+  return { top, height };
+}
 
 const DAY_ORDER = [1, 2, 3, 4, 5, 6, 0]; // lundi -> dimanche, dow 0=dim (convention dates.ts)
 
@@ -294,6 +308,8 @@ function dayKey(d: Date): string {
 function CalendarView({ availabilities }: { availabilities: Availability[] }) {
   const { toast } = useToast();
   const [selected, setSelected] = useState<Date | undefined>(new Date());
+  const [newStart, setNewStart] = useState("09:00");
+  const [newEnd, setNewEnd] = useState("12:00");
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
@@ -304,6 +320,25 @@ function CalendarView({ availabilities }: { availabilities: Availability[] }) {
       toast({ title: "Créneau supprimé" });
     },
     onError: () => toast({ title: "Erreur", variant: "destructive" }),
+  });
+
+  const addMutation = useMutation({
+    mutationFn: async ({ date, startTime, endTime }: { date: Date; startTime: string; endTime: string }) => {
+      const [sh, sm] = startTime.split(":").map(Number);
+      const [eh, em] = endTime.split(":").map(Number);
+      const startAt = new Date(date.getFullYear(), date.getMonth(), date.getDate(), sh, sm);
+      const endAt = new Date(date.getFullYear(), date.getMonth(), date.getDate(), eh, em);
+      await apiRequest("POST", "/api/availabilities", {
+        startAt: startAt.toISOString(),
+        endAt: endAt.toISOString(),
+        kind: "AVAILABLE",
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/availabilities/me"] });
+      toast({ title: "Créneau ajouté" });
+    },
+    onError: () => toast({ title: "Erreur", description: "Impossible d'ajouter ce créneau.", variant: "destructive" }),
   });
 
   const byDay = useMemo(() => {
@@ -360,37 +395,105 @@ function CalendarView({ availabilities }: { availabilities: Availability[] }) {
           <div className="flex-1 min-w-0">
             {!selected ? (
               <p className="text-sm text-muted-foreground py-6 text-center">Sélectionnez un jour.</p>
-            ) : selectedSlots.length === 0 ? (
-              <div className="text-center text-muted-foreground text-sm py-6">
-                <Calendar className="w-10 h-10 mx-auto mb-2 text-muted-foreground/50" />
-                Aucun créneau déclaré pour {fmtDayLong(selected).toLowerCase()}.
-              </div>
             ) : (
-              <div className="space-y-2">
+              <div>
                 <h5 className="text-sm font-medium mb-2">{fmtDayLong(selected)}</h5>
-                {selectedSlots.map((a) => (
-                  <div
-                    key={a.id}
-                    className={`flex items-center justify-between rounded-xl px-4 py-3 ${a.kind === "AVAILABLE" ? "bg-emerald-50" : "bg-muted/40"}`}
-                    data-testid={`row-availability-${a.id}`}
-                  >
-                    <div className="flex items-center gap-3 text-sm">
-                      <Clock className={`w-4 h-4 shrink-0 ${a.kind === "AVAILABLE" ? "text-emerald-600" : "text-muted-foreground"}`} />
-                      <span className="text-muted-foreground">{fmtTimeRange(new Date(a.startAt), new Date(a.endAt))}</span>
-                      {a.kind === "UNAVAILABLE" && <span className="text-xs text-muted-foreground italic">indisponible</span>}
-                    </div>
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      className="text-muted-foreground hover:text-destructive"
-                      onClick={() => deleteMutation.mutate(a.id)}
-                      disabled={deleteMutation.isPending}
-                      data-testid={`button-delete-${a.id}`}
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </Button>
+
+                <div className="flex items-end gap-2 mb-4 flex-wrap">
+                  <div>
+                    <Label className="text-xs text-muted-foreground mb-1 block">Début</Label>
+                    <Input
+                      type="time"
+                      value={newStart}
+                      onChange={(e) => setNewStart(e.target.value)}
+                      className="w-28"
+                      data-testid="input-new-slot-start"
+                    />
                   </div>
-                ))}
+                  <div>
+                    <Label className="text-xs text-muted-foreground mb-1 block">Fin</Label>
+                    <Input
+                      type="time"
+                      value={newEnd}
+                      onChange={(e) => setNewEnd(e.target.value)}
+                      className="w-28"
+                      data-testid="input-new-slot-end"
+                    />
+                  </div>
+                  <Button
+                    size="sm"
+                    className="rounded-full"
+                    onClick={() => selected && addMutation.mutate({ date: selected, startTime: newStart, endTime: newEnd })}
+                    disabled={addMutation.isPending || newEnd <= newStart}
+                    data-testid="button-add-slot"
+                  >
+                    <Plus className="w-4 h-4 mr-1" /> Ajouter
+                  </Button>
+                </div>
+
+                {selectedSlots.length === 0 ? (
+                  <div className="text-center text-muted-foreground text-sm py-6">
+                    <Calendar className="w-10 h-10 mx-auto mb-2 text-muted-foreground/50" />
+                    Aucun créneau déclaré pour {fmtDayLong(selected).toLowerCase()}.
+                  </div>
+                ) : (
+                  <div className="flex gap-2">
+                    <div className="relative shrink-0" style={{ width: 32, height: GRID_HEIGHT }}>
+                      {Array.from({ length: GRID_END_HOUR - GRID_START_HOUR }, (_, i) => GRID_START_HOUR + i).map(
+                        (h) => (
+                          <div
+                            key={h}
+                            className="absolute right-1 -translate-y-1/2 text-[10px] text-muted-foreground"
+                            style={{ top: (h - GRID_START_HOUR) * PX_PER_HOUR }}
+                          >
+                            {h}h
+                          </div>
+                        )
+                      )}
+                    </div>
+                    <div className="relative flex-1 min-w-0 rounded-lg bg-muted/20" style={{ height: GRID_HEIGHT }}>
+                      {Array.from({ length: GRID_END_HOUR - GRID_START_HOUR }, (_, i) => i).map((i) => (
+                        <div
+                          key={i}
+                          className="absolute inset-x-0 border-t border-muted/40"
+                          style={{ top: i * PX_PER_HOUR }}
+                        />
+                      ))}
+                      {selectedSlots.map((a) => {
+                        const startAt = new Date(a.startAt);
+                        const endAt = new Date(a.endAt);
+                        const { top, height } = blockStyle(startAt, endAt);
+                        return (
+                          <div
+                            key={a.id}
+                            className={`absolute inset-x-1 rounded-md px-2 py-1 text-xs flex items-center justify-between gap-1 overflow-hidden ${
+                              a.kind === "AVAILABLE"
+                                ? "bg-emerald-50 border border-emerald-200 text-emerald-900"
+                                : "bg-muted/60 border border-muted text-muted-foreground"
+                            }`}
+                            style={{ top, height }}
+                            data-testid={`row-availability-${a.id}`}
+                          >
+                            <span className="truncate">
+                              {fmtTime(startAt)} – {fmtTime(endAt)}
+                              {a.kind === "UNAVAILABLE" && <span className="italic"> · indisponible</span>}
+                            </span>
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              className="h-5 w-5 shrink-0 text-muted-foreground hover:text-destructive"
+                              onClick={() => deleteMutation.mutate(a.id)}
+                              disabled={deleteMutation.isPending}
+                              data-testid={`button-delete-${a.id}`}
+                            >
+                              <Trash2 className="w-3 h-3" />
+                            </Button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>

@@ -183,6 +183,9 @@ model Intervention {
   juniorRating    Int?               @db.SmallInt
   juniorComment   String?
   feedbackReminderSentAt DateTime?
+  // Rappel J-1 : garantit l'idempotence du cron, qui repasse toutes les 6h sur
+  // la meme fenetre de 24h. Sans cette colonne, 4 rappels par rencontre.
+  reminderSentAt  DateTime?
 
   createdAt       DateTime           @default(now())
 
@@ -268,6 +271,10 @@ model Notification {
   message   String
   link      String?
   isRead    Boolean          @default(false)
+  // Tracabilite de l'envoi e-mail. Sans ca, un echec Brevo ne laisse qu'un log
+  // serveur (rotatif sur Render) : impossible de repondre a "je n'ai rien recu".
+  emailSentAt DateTime?
+  emailError  String?
   createdAt DateTime         @default(now())
 
   @@index([userId, isRead])

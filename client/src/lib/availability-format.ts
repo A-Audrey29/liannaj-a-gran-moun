@@ -2,11 +2,20 @@
  * Formatage des créneaux — ré-export du module partagé.
  * Guadeloupe UTC-4 fixe (voir shared/dates.ts pour le détail du choix).
  */
-export { fmtTime, fmtTimeRange, fmtDayShort, fmtDayShortISO, gpParts, gpDecimalHour } from "@shared/dates";
+export {
+  fmtTime,
+  fmtTimeRange,
+  fmtDayShort,
+  fmtDayShortISO,
+  fmtDayLongMonth,
+  fmtDayLongMonthYear,
+  gpParts,
+  gpDecimalHour,
+  JOURS_LONGS,
+  MOIS_LONGS,
+} from "@shared/dates";
 
-import { gpParts } from "@shared/dates";
-
-export const JOURS_LONGS = ["Dimanche", "Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi"];
+import { gpParts, JOURS_LONGS } from "@shared/dates";
 
 /** "Mardi 17/08" — format long utilisé dans la vue relation. */
 export function fmtDayLong(date: Date): string {

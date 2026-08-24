@@ -1,6 +1,7 @@
 import { storage } from "../storage";
 import { sendEmail } from "./email";
 import { getFeedbackReminderEmailHtml } from "./email-templates";
+import { gpParts, MOIS_LONGS } from "../../shared/dates";
 
 // Ce rappel tourne dans un cron (pas de req disponible), donc on ne peut pas
 // dériver l'URL depuis la requête comme getBaseUrl(req) ailleurs. On lit BASE_URL
@@ -20,11 +21,10 @@ export async function checkAndSendFeedbackReminders() {
 
     for (const intervention of interventions) {
       const { relation } = intervention;
-      const dateStr = intervention.scheduledDate.toLocaleDateString("fr-FR", {
-        day: "numeric",
-        month: "long",
-        year: "numeric",
-      });
+      // Heure Guadeloupe : le serveur tourne en UTC, une rencontre du soir
+      // basculerait au lendemain avec toLocaleDateString.
+      const p = gpParts(intervention.scheduledDate);
+      const dateStr = `${p.d} ${MOIS_LONGS[p.mo]} ${p.y}`;
       const feedbackUrl = `${baseUrl}/relations/${intervention.relationId}`;
 
       let anySent = false;

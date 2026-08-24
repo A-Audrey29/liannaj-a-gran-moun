@@ -24,6 +24,7 @@
 const GP_OFFSET_MS = 4 * 60 * 60 * 1000; // UTC-4
 
 const JOURS_COURTS = ["Dim.", "Lun.", "Mar.", "Mer.", "Jeu.", "Ven.", "Sam."];
+export const JOURS_LONGS = ["Dimanche", "Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi"];
 const MOIS = [
   "janv.", "févr.", "mars", "avr.", "mai", "juin",
   "juil.", "août", "sept.", "oct.", "nov.", "déc.",
@@ -113,6 +114,23 @@ export function fmtDayShortISO(iso: string): string {
 export function fmtDayShort(date: Date): string {
   const p = gpParts(date);
   return `${JOURS_COURTS[p.dow]} ${p.d} ${MOIS[p.mo]}`;
+}
+
+/** "mercredi 19 août" depuis un instant UTC. */
+export function fmtDayLongMonth(date: Date): string {
+  const p = gpParts(date);
+  return `${JOURS_LONGS[p.dow].toLowerCase()} ${p.d} ${MOIS_LONGS[p.mo]}`;
+}
+
+/** "mercredi 19 août 2026" depuis un instant UTC. */
+export function fmtDayLongMonthYear(date: Date): string {
+  return `${fmtDayLongMonth(date)} ${gpParts(date).y}`;
+}
+
+/** "19/08/2026" (date GP) depuis un instant UTC. Notifications et e-mails. */
+export function fmtDayNumeric(date: Date): string {
+  const p = gpParts(date);
+  return `${String(p.d).padStart(2, "0")}/${String(p.mo + 1).padStart(2, "0")}/${p.y}`;
 }
 
 /** "14h00" depuis un instant UTC. */

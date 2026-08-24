@@ -12,6 +12,7 @@ import {
   todayISO,
   gpDayISO,
   fmtDayShortISO,
+  fmtDayLongMonth,
   fmtTime,
   fmtTimeRange,
 } from "@shared/dates";
@@ -57,6 +58,7 @@ function subtractBusy(free: Interval[], busy: Interval[]): Interval[] {
 
 export default function AvailabilityWeekPicker({ juniorId, juniorName, interventions, onPickSlot }: Props) {
   const [weekStart, setWeekStart] = useState(() => startOfWeekISO(todayISO()));
+  const [pickedSlot, setPickedSlot] = useState<FreeSlot | null>(null);
 
   const { data: availabilities, isLoading } = useQuery<Availability[]>({
     queryKey: [`/api/users/${juniorId}/availabilities`],
@@ -141,11 +143,14 @@ export default function AvailabilityWeekPicker({ juniorId, juniorName, intervent
                 const slots = slotsByDay.get(day) || [];
                 const taken = busyByDay.get(day) || [];
                 const isToday = day === todayISO();
+                const isSelectedDay = pickedSlot ? gpDayISO(pickedSlot.startAt) === day : false;
                 return (
                   <div key={day} className="min-w-0">
                     <div
-                      className={`text-[11px] font-semibold uppercase tracking-wide mb-1.5 ${
-                        isToday ? "text-[#8b5cf6]" : "text-muted-foreground"
+                      className={`font-semibold uppercase tracking-wide mb-1.5 transition-all ${
+                        isSelectedDay
+                          ? "text-sm text-[#8b5cf6]"
+                          : `text-[11px] ${isToday ? "text-[#8b5cf6]" : "text-muted-foreground"}`
                       }`}
                     >
                       {fmtDayShortISO(day)}
@@ -156,7 +161,10 @@ export default function AvailabilityWeekPicker({ juniorId, juniorName, intervent
                           key={`free-${i}`}
                           type="button"
                           disabled={!onPickSlot}
-                          onClick={() => onPickSlot?.({ startAt: s.startAt, endAt: s.endAt })}
+                          onClick={() => {
+                            setPickedSlot({ startAt: s.startAt, endAt: s.endAt });
+                            onPickSlot?.({ startAt: s.startAt, endAt: s.endAt });
+                          }}
                           className="w-full text-left rounded-lg bg-emerald-50 border border-emerald-200 px-2 py-1.5 text-xs font-medium text-emerald-900 enabled:hover:bg-emerald-100 enabled:hover:border-emerald-300 disabled:cursor-default transition-colors"
                           data-testid={`slot-free-${day}-${i}`}
                         >
@@ -186,9 +194,14 @@ export default function AvailabilityWeekPicker({ juniorId, juniorName, intervent
                 Aucun créneau libre cette semaine. Utilisez les flèches pour changer de semaine.
               </p>
             )}
-            {onPickSlot && hasAnySlotThisWeek && (
+            {onPickSlot && hasAnySlotThisWeek && !pickedSlot && (
               <p className="text-xs text-muted-foreground mt-4">
                 Cliquez un créneau vert pour proposer une rencontre.
+              </p>
+            )}
+            {pickedSlot && (
+              <p className="text-sm font-medium text-[#8b5cf6] mt-4" data-testid="text-selected-slot-summary">
+                Vous avez sélectionné le {fmtDayLongMonth(pickedSlot.startAt)} à {fmtTime(pickedSlot.startAt)}
               </p>
             )}
           </>
