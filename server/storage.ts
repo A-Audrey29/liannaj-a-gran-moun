@@ -52,7 +52,7 @@ export interface IStorage {
     juniorId: string,
     data: { relationId: string; scheduledDate: Date; durationMinutes: number; location?: string; tasks?: string[] },
     checkConflict: (tx: Prisma.TransactionClient) => Promise<boolean>
-  ): Promise<{ intervention: Intervention } | { conflict: true }>;
+  ): Promise<{ intervention: Intervention } | { conflict: true } | { locked: true }>;
   updateIntervention(id: string, data: Prisma.InterventionUpdateInput): Promise<Intervention>;
   getPendingFeedbackInterventions(userId: string): Promise<(Intervention & { relation: Relation })[]>;
   getPendingFeedbackForReminder(): Promise<(Intervention & { relation: Relation & { senior: User; junior: User } })[]>;

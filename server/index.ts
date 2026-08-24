@@ -1,4 +1,7 @@
 import "dotenv/config";
+// Doit rester le premier import applicatif : valide toute la configuration
+// avant que le moindre module ne lise process.env.
+import { env } from "./env";
 import express, { type Request, Response, NextFunction } from "express";
 import helmet from "helmet";
 import { registerRoutes } from "./routes";
@@ -131,7 +134,7 @@ app.use((req, res, next) => {
     await setupVite(httpServer, app);
   }
 
-  const port = parseInt(process.env.PORT || "5000", 10);
+  const port = env.PORT;
   httpServer.listen(
     {
       port,

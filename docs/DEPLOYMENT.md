@@ -90,9 +90,14 @@ Render vérifie que le service est démarré via une URL de santé. Configurez :
 
 | Paramètre | Valeur |
 |---|---|
-| **Health Check Path** | `/api/auth/me` |
+| **Health Check Path** | `/api/health` |
 
-Cette route retourne 401 si non connecté, mais un code HTTP 401 suffit à indiquer que le serveur fonctionne.
+Cette route est publique et vérifie aussi la connexion à la base : elle répond
+`200 {"status":"ok"}` si tout va bien, `503` si la base est injoignable. Render
+retire alors l'instance du trafic.
+
+> Ne pas utiliser `/api/auth/me` : cette route répond `401` quand personne n'est
+> connecté, ce que Render interprète comme un échec du service.
 
 ---
 

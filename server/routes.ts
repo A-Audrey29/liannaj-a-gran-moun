@@ -1,4 +1,4 @@
-import type { Express } from "express";
+import type { Express, Request } from "express";
 import { createServer, type Server } from "http";
 import passport from "passport";
 import bcrypt from "bcryptjs";
@@ -9,6 +9,7 @@ import fs from "fs";
 import rateLimit from "express-rate-limit";
 import { fileTypeFromFile } from "file-type";
 import { requireAuth, requireAdmin } from "./auth";
+import { pool } from "./db";
 import { storage } from "./storage";
 import { sendEmail } from "./lib/email";
 import {
@@ -25,6 +26,7 @@ import type { MeetingHistoryScope } from "./storage";
 import { createRecurringAvailabilities, createDateException, deleteAvailability, isWithinAvailability, hasInterventionConflict } from "./lib/availability";
 import { addSSEClient, sendSSEEvent, isUserConnected } from "./lib/sse";
 import { fmtDayNumeric, fmtTime } from "../shared/dates";
+import { PLATFORM_NAME } from "../shared/branding";
 import { sendPushNotification, getVapidPublicKey } from "./lib/push";
 
 const uploadStorage = multer.diskStorage({
@@ -56,6 +58,26 @@ const upload = multer({
 function sanitizeUser(user: any) {
   const { password, validationToken, validationExpiry, ...safe } = user;
   return safe;
+}
+
+/**
+ * Lit un paramètre de route en le garantissant scalaire.
+ *
+ * Express 5 type req.params en `string | string[]` : une route à joker
+ * (`/files/*path`) peut produire un tableau. Aucune route de cette API n'en
+ * utilise — les paramètres y sont donc toujours des chaînes — mais le
+ * typage ne peut pas le savoir.
+ *
+ * Plutôt que de forcer le type par un `as string` répété (qui masquerait un
+ * vrai tableau si une route à joker était ajoutée un jour), on normalise :
+ * un tableau inattendu donne sa première valeur, et l'absence donne "" —
+ * ce qui échoue proprement à la validation en aval au lieu de propager
+ * `undefined` dans une requête SQL.
+ */
+function getParam(req: Request, name: string): string {
+  const value = req.params[name];
+  if (Array.isArray(value)) return value[0] ?? "";
+  return value ?? "";
 }
 
 function sanitizeUserPublic(user: any) {
@@ -252,6 +274,25 @@ export async function registerRoutes(
   app: Express
 ): Promise<Server> {
 
+  /**
+   * Sonde de santé pour l'hébergeur (Render : Health Check Path).
+   * Publique et sans effet de bord : c'est le seul endpoint qui doit répondre
+   * 200 sans authentification.
+   *
+   * Vérifie aussi la base : un serveur qui répond mais dont la base est
+   * injoignable est en panne du point de vue de l'utilisateur, et doit être
+   * signalé comme tel plutôt que de recevoir du trafic.
+   */
+  app.get("/api/health", async (_req, res) => {
+    try {
+      await pool.query("SELECT 1");
+      res.status(200).json({ status: "ok", database: "up" });
+    } catch (err) {
+      console.error("[HEALTH] Base de données injoignable:", err);
+      res.status(503).json({ status: "error", database: "down" });
+    }
+  });
+
   app.post("/api/auth/register", registerLimiter, upload.single("photo"), async (req, res) => {
     try {
       const body = typeof req.body.data === "string" ? JSON.parse(req.body.data) : req.body;
@@ -314,7 +355,7 @@ export async function registerRoutes(
 
       await sendEmail({
         to: data.validatorEmail,
-        subject: `FEVES - Validation d'inscription de ${userName}`,
+        subject: `${PLATFORM_NAME} - Validation d'inscription de ${userName}`,
         htmlContent: getValidationEmailHtml(null, userName, validationUrl),
       });
 
@@ -499,7 +540,7 @@ export async function registerRoutes(
   };
 
   app.get("/api/photos/:filename", requireAuth, (req, res) => {
-    const { filename } = req.params;
+    const filename = getParam(req, "filename");
     if (!VALID_PHOTO_FILENAME.test(filename)) {
       return res.status(400).json({ message: "Nom de fichier invalide" });
     }
@@ -535,11 +576,11 @@ export async function registerRoutes(
       if (user.role !== "SENIOR") {
         return res.status(403).json({ message: "Réservé aux seniors" });
       }
-      const junior = await storage.getUser(req.params.juniorId);
+      const junior = await storage.getUser(getParam(req, "juniorId"));
       if (!junior || junior.role !== "JUNIOR") {
         return res.status(404).json({ message: "Jeune non trouvé" });
       }
-      const favorite = await storage.addFavorite(user.id, req.params.juniorId);
+      const favorite = await storage.addFavorite(user.id, getParam(req, "juniorId"));
       res.status(201).json(favorite);
     } catch (err) {
       console.error("[FAVORITE_ADD] Error:", err);
@@ -553,7 +594,7 @@ export async function registerRoutes(
       if (user.role !== "SENIOR") {
         return res.status(403).json({ message: "Réservé aux seniors" });
       }
-      await storage.removeFavorite(user.id, req.params.juniorId);
+      await storage.removeFavorite(user.id, getParam(req, "juniorId"));
       res.json({ message: "Favori supprimé" });
     } catch (err) {
       console.error("[FAVORITE_REMOVE] Error:", err);
@@ -647,11 +688,11 @@ export async function registerRoutes(
   app.patch("/api/notifications/:id/read", requireAuth, async (req, res) => {
     try {
       const notifications = await storage.getNotifications(req.user!.id);
-      const owns = notifications.some((n) => n.id === req.params.id);
+      const owns = notifications.some((n) => n.id === getParam(req, "id"));
       if (!owns) {
         return res.status(403).json({ message: "Accès refusé" });
       }
-      const notification = await storage.markNotificationRead(req.params.id);
+      const notification = await storage.markNotificationRead(getParam(req, "id"));
       res.json(notification);
     } catch (err) {
       res.status(500).json({ message: "Erreur" });
@@ -685,7 +726,7 @@ export async function registerRoutes(
         const userName = `${user.firstName} ${user.lastName}`;
         await sendEmail({
           to: user.validatorEmail,
-          subject: `FEVES - Nouvelle demande de validation d'inscription de ${userName}`,
+          subject: `${PLATFORM_NAME} - Nouvelle demande de validation d'inscription de ${userName}`,
           htmlContent: getValidationEmailHtml(null, userName, validationUrl),
         });
       }
@@ -744,7 +785,7 @@ export async function registerRoutes(
 
   app.get("/api/relations/:id", requireAuth, async (req, res) => {
     try {
-      const relation = await storage.getRelationWithUsers(req.params.id);
+      const relation = await storage.getRelationWithUsers(getParam(req, "id"));
       if (!relation) {
         return res.status(404).json({ message: "Relation non trouvée" });
       }
@@ -814,7 +855,7 @@ export async function registerRoutes(
 
   app.patch("/api/relations/:id/accept", requireAuth, async (req, res) => {
     try {
-      const relation = await storage.getRelation(req.params.id);
+      const relation = await storage.getRelation(getParam(req, "id"));
       if (!relation) {
         return res.status(404).json({ message: "Relation non trouvée" });
       }
@@ -841,7 +882,7 @@ export async function registerRoutes(
         const juniorName = `${req.user!.firstName} ${req.user!.lastName}`;
         sendEmail({
           to: senior.email,
-          subject: `FEVES - Votre demande de relation a été acceptée`,
+          subject: `${PLATFORM_NAME} - Votre demande de relation a été acceptée`,
           htmlContent: getRelationAcceptedEmailHtml(seniorName, juniorName, `${getBaseUrl(req)}/relations/${relation.id}`),
         }).catch(console.error);
       }
@@ -855,7 +896,7 @@ export async function registerRoutes(
 
   app.patch("/api/relations/:id/reject", requireAuth, async (req, res) => {
     try {
-      const relation = await storage.getRelation(req.params.id);
+      const relation = await storage.getRelation(getParam(req, "id"));
       if (!relation) {
         return res.status(404).json({ message: "Relation non trouvée" });
       }
@@ -885,7 +926,7 @@ export async function registerRoutes(
 
   app.patch("/api/relations/:id/close", requireAuth, async (req, res) => {
     try {
-      const relation = await storage.getRelation(req.params.id);
+      const relation = await storage.getRelation(getParam(req, "id"));
       if (!relation) {
         return res.status(404).json({ message: "Relation non trouvée" });
       }
@@ -919,7 +960,7 @@ export async function registerRoutes(
 
   app.post("/api/relations/:relationId/interventions", requireAuth, async (req, res) => {
     try {
-      const relation = await storage.getRelationWithUsers(req.params.relationId);
+      const relation = await storage.getRelationWithUsers(getParam(req, "relationId"));
       if (!relation) {
         return res.status(404).json({ message: "Relation non trouvée" });
       }
@@ -939,7 +980,7 @@ export async function registerRoutes(
 
       const parsed = insertInterventionSchema.safeParse({
         ...req.body,
-        relationId: req.params.relationId,
+        relationId: getParam(req, "relationId"),
       });
       if (!parsed.success) {
         return res.status(400).json({
@@ -988,7 +1029,7 @@ export async function registerRoutes(
         const locationStr = parsed.data.location || "Non précisé";
         sendEmail({
           to: junior.email,
-          subject: `FEVES - Nouvelle intervention proposée pour le ${dateStr}`,
+          subject: `${PLATFORM_NAME} - Nouvelle intervention proposée pour le ${dateStr}`,
           htmlContent: getInterventionProposedEmailHtml(juniorName, dateStr, locationStr, `${getBaseUrl(req)}/relations/${relation.id}`),
         }).catch(console.error);
       }
@@ -1002,7 +1043,7 @@ export async function registerRoutes(
 
   app.patch("/api/interventions/:id/confirm", requireAuth, async (req, res) => {
     try {
-      const intervention = await storage.getInterventionWithRelation(req.params.id);
+      const intervention = await storage.getInterventionWithRelation(getParam(req, "id"));
       if (!intervention) {
         return res.status(404).json({ message: "Intervention non trouvée" });
       }
@@ -1029,7 +1070,7 @@ export async function registerRoutes(
         const dateStr = fmtDayNumeric(intervention.scheduledDate);
         sendEmail({
           to: senior.email,
-          subject: `FEVES - Intervention confirmée pour le ${dateStr}`,
+          subject: `${PLATFORM_NAME} - Intervention confirmée pour le ${dateStr}`,
           htmlContent: getInterventionConfirmedEmailHtml(seniorName, dateStr, `${getBaseUrl(req)}/relations/${intervention.relationId}`),
         }).catch(console.error);
       }
@@ -1043,7 +1084,7 @@ export async function registerRoutes(
 
   app.patch("/api/interventions/:id/done", requireAdmin, async (req, res) => {
     try {
-      const intervention = await storage.getInterventionWithRelation(req.params.id);
+      const intervention = await storage.getInterventionWithRelation(getParam(req, "id"));
       if (!intervention) {
         return res.status(404).json({ message: "Intervention non trouvée" });
       }
@@ -1082,7 +1123,7 @@ export async function registerRoutes(
       if (seniorUser?.email) {
         sendEmail({
           to: seniorUser.email,
-          subject: `FEVES - Donnez votre avis sur l'intervention du ${dateStr}`,
+          subject: `${PLATFORM_NAME} - Donnez votre avis sur l'intervention du ${dateStr}`,
           htmlContent: getFeedbackReminderEmailHtml(`${seniorUser.firstName} ${seniorUser.lastName}`, dateStr, `${getBaseUrl(req)}/relations/${intervention.relationId}`),
         }).catch(console.error);
       }
@@ -1090,7 +1131,7 @@ export async function registerRoutes(
       if (juniorUser?.email) {
         sendEmail({
           to: juniorUser.email,
-          subject: `FEVES - Donnez votre avis sur l'intervention du ${dateStr}`,
+          subject: `${PLATFORM_NAME} - Donnez votre avis sur l'intervention du ${dateStr}`,
           htmlContent: getFeedbackReminderEmailHtml(`${juniorUser.firstName} ${juniorUser.lastName}`, dateStr, `${getBaseUrl(req)}/relations/${intervention.relationId}`),
         }).catch(console.error);
       }
@@ -1104,7 +1145,7 @@ export async function registerRoutes(
 
   app.patch("/api/interventions/:id/cancel", requireAuth, async (req, res) => {
     try {
-      const intervention = await storage.getInterventionWithRelation(req.params.id);
+      const intervention = await storage.getInterventionWithRelation(getParam(req, "id"));
       if (!intervention) {
         return res.status(404).json({ message: "Intervention non trouvée" });
       }
@@ -1211,7 +1252,7 @@ export async function registerRoutes(
       if (req.user!.role !== "JUNIOR") {
         return res.status(403).json({ message: "Seul un Junior peut supprimer une disponibilité" });
       }
-      const ok = await deleteAvailability(req.user!.id, req.params.id);
+      const ok = await deleteAvailability(req.user!.id, getParam(req, "id"));
       if (!ok) {
         return res.status(404).json({ message: "Disponibilité introuvable" });
       }
@@ -1225,7 +1266,7 @@ export async function registerRoutes(
   app.get("/api/users/:juniorId/availabilities", requireAuth, async (req, res) => {
     try {
       const user = req.user!;
-      const juniorId = req.params.juniorId;
+      const juniorId = getParam(req, "juniorId");
       if (user.role !== "ADMIN") {
         // Le référent consulte au nom du sénior auquel il est rattaché : il
         // propose des rencontres, il lui faut donc les mêmes créneaux.
@@ -1269,7 +1310,7 @@ export async function registerRoutes(
 
   app.post("/api/interventions/:id/feedback", requireAuth, async (req, res) => {
     try {
-      const intervention = await storage.getInterventionWithRelation(req.params.id);
+      const intervention = await storage.getInterventionWithRelation(getParam(req, "id"));
       if (!intervention) {
         return res.status(404).json({ message: "Intervention non trouvée" });
       }
@@ -1434,7 +1475,7 @@ export async function registerRoutes(
 
   app.delete("/api/admin/recommendations/:id", requireAdmin, async (req, res) => {
     try {
-      await storage.deleteAdminRecommendation(req.params.id);
+      await storage.deleteAdminRecommendation(getParam(req, "id"));
       res.json({ message: "Recommandation supprimée" });
     } catch (err) {
       console.error("[DELETE_RECOMMENDATION] Error:", err);
@@ -1456,7 +1497,7 @@ export async function registerRoutes(
 
   app.patch("/api/admin/users/:id/validate", requireAdmin, async (req, res) => {
     try {
-      const user = await storage.getUser(req.params.id);
+      const user = await storage.getUser(getParam(req, "id"));
       if (!user) return res.status(404).json({ message: "Utilisateur non trouvé" });
       if (user.status !== "PENDING_VALIDATION") {
         return res.status(400).json({ message: "Cet utilisateur n'est pas en attente de validation" });
@@ -1471,7 +1512,7 @@ export async function registerRoutes(
 
   app.patch("/api/admin/users/:id/suspend", requireAdmin, async (req, res) => {
     try {
-      const user = await storage.getUser(req.params.id);
+      const user = await storage.getUser(getParam(req, "id"));
       if (!user) return res.status(404).json({ message: "Utilisateur non trouvé" });
       if (user.role === "ADMIN") return res.status(403).json({ message: "Impossible de suspendre un administrateur" });
       const updated = await storage.updateUser(user.id, { status: "SUSPENDED" });
@@ -1484,7 +1525,7 @@ export async function registerRoutes(
 
   app.delete("/api/admin/users/:id", requireAdmin, async (req, res) => {
     try {
-      const user = await storage.getUser(req.params.id);
+      const user = await storage.getUser(getParam(req, "id"));
       if (!user) return res.status(404).json({ message: "Utilisateur non trouvé" });
       if (user.role === "ADMIN") return res.status(403).json({ message: "Impossible de supprimer un administrateur" });
       if (user.profilePhoto) {
@@ -1515,7 +1556,7 @@ export async function registerRoutes(
 
   app.patch("/api/admin/relations/:id/advance", requireAdmin, async (req, res) => {
     try {
-      const relation = await storage.getRelation(req.params.id);
+      const relation = await storage.getRelation(getParam(req, "id"));
       if (!relation) return res.status(404).json({ message: "Relation non trouvée" });
       if (relation.status !== "PENDING") {
         return res.status(400).json({ message: "Seules les relations en attente peuvent être avancées" });
@@ -1526,14 +1567,14 @@ export async function registerRoutes(
         user: { connect: { id: relation.seniorId } },
         type: "RELATION_REQUEST",
         title: "Demande acceptée",
-        message: "Un administrateur FEVES a validé l'accord du jeune. La première rencontre va être organisée.",
+        message: `Un administrateur ${PLATFORM_NAME} a validé l'accord du jeune. La première rencontre va être organisée.`,
         link: `/relations/${relation.id}`,
       });
       await storage.createNotification({
         user: { connect: { id: relation.juniorId } },
         type: "RELATION_REQUEST",
         title: "Relation confirmée",
-        message: "Un administrateur FEVES a confirmé votre participation. La première rencontre va être organisée.",
+        message: `Un administrateur ${PLATFORM_NAME} a confirmé votre participation. La première rencontre va être organisée.`,
         link: `/relations/${relation.id}`,
       });
 
@@ -1693,7 +1734,7 @@ export async function registerRoutes(
 
   app.get("/api/messages/conversations/:id", requireAuth, async (req, res) => {
     try {
-      const relationId = req.params.id as string;
+      const relationId = getParam(req, "id") as string;
       const relation = await storage.getRelationWithUsers(relationId);
       if (!relation) return res.status(404).json({ message: "Relation non trouvée" });
 
@@ -1726,7 +1767,7 @@ export async function registerRoutes(
         return res.status(400).json({ message: "Le message est trop long (max 2000 caractères)" });
       }
 
-      const relationId = req.params.id as string;
+      const relationId = getParam(req, "id") as string;
       const relation = await storage.getRelationWithUsers(relationId);
       if (!relation) return res.status(404).json({ message: "Relation non trouvée" });
 
@@ -1773,7 +1814,7 @@ export async function registerRoutes(
 
   app.patch("/api/messages/conversations/:id/read", requireAuth, async (req, res) => {
     try {
-      const relationId = req.params.id as string;
+      const relationId = getParam(req, "id") as string;
       const relation = await storage.getRelationWithUsers(relationId);
       if (!relation) return res.status(404).json({ message: "Relation non trouvée" });
 
@@ -1837,7 +1878,7 @@ export async function registerRoutes(
     try {
       const { prisma } = await import("./prisma");
       const conv = await prisma.conversation.findUnique({
-        where: { id: req.params.id },
+        where: { id: getParam(req, "id") },
         include: {
           relation: {
             include: {
@@ -1849,7 +1890,7 @@ export async function registerRoutes(
       });
       if (!conv) {
         const convByRelation = await prisma.conversation.findUnique({
-          where: { relationId: req.params.id },
+          where: { relationId: getParam(req, "id") },
           include: {
             relation: {
               include: {
@@ -1887,7 +1928,7 @@ export async function registerRoutes(
 
   app.delete("/api/admin/messages/:messageId", requireAdmin, async (req, res) => {
     try {
-      const message = await storage.deleteMessage(req.params.messageId);
+      const message = await storage.deleteMessage(getParam(req, "messageId"));
       const { prisma } = await import("./prisma");
       const conv = await prisma.conversation.findUnique({
         where: { id: message.conversationId },
@@ -1942,7 +1983,7 @@ export async function registerRoutes(
         // les admins ne recevaient jamais les signalements.
         sendEmail({
           to: admin.email,
-          subject: "Nouveau signalement reçu - FEVES",
+          subject: `Nouveau signalement reçu - ${PLATFORM_NAME}`,
           htmlContent: getNewReportEmailHtml(admin.firstName, reporterName, reason, message || null, adminUrl),
         }).catch((err) => console.error("[REPORT_EMAIL] Error sending to admin:", err));
       }
@@ -1977,7 +2018,7 @@ export async function registerRoutes(
       return res.status(400).json({ message: "Un commentaire de traitement est obligatoire." });
     }
     try {
-      const report = await storage.updateReportStatus(req.params.id, "HANDLED", handledNote.trim());
+      const report = await storage.updateReportStatus(getParam(req, "id"), "HANDLED", handledNote.trim());
       res.json(report);
     } catch (err) {
       console.error("[ADMIN_REPORT_HANDLE] Error:", err);
@@ -2060,10 +2101,10 @@ export async function registerRoutes(
   app.get("/api/teacher/students/:id", requireTeacher, async (req, res) => {
     try {
       const teacherId = (req.user as any).id;
-      const isLinked = await storage.isTeacherOfStudent(teacherId, req.params.id);
+      const isLinked = await storage.isTeacherOfStudent(teacherId, getParam(req, "id"));
       if (!isLinked) return res.status(403).json({ message: "Cet élève ne vous est pas affilié" });
 
-      const student = await storage.getUser(req.params.id);
+      const student = await storage.getUser(getParam(req, "id"));
       if (!student || student.role !== "JUNIOR") return res.status(404).json({ message: "Élève introuvable" });
 
       // Toutes les relations avec leur sénior et interventions complètes (feedback inclus)
@@ -2111,14 +2152,14 @@ export async function registerRoutes(
   app.patch("/api/teacher/students/:id/bio", requireTeacher, async (req, res) => {
     try {
       const teacherId = (req.user as any).id;
-      const isLinked = await storage.isTeacherOfStudent(teacherId, req.params.id);
+      const isLinked = await storage.isTeacherOfStudent(teacherId, getParam(req, "id"));
       if (!isLinked) return res.status(403).json({ message: "Cet élève ne vous est pas affilié" });
 
       const { updateStudentBioSchema } = await import("../shared/schema");
       const parsed = updateStudentBioSchema.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ message: "Données invalides", errors: parsed.error.flatten().fieldErrors });
 
-      const student = await storage.updateUser(req.params.id, parsed.data);
+      const student = await storage.updateUser(getParam(req, "id"), parsed.data);
       res.json(sanitizeUserPublic(student));
     } catch (err) {
       console.error("[TEACHER_UPDATE_BIO] Error:", err);
@@ -2130,18 +2171,18 @@ export async function registerRoutes(
   app.post("/api/teacher/students/:id/comments", requireTeacher, async (req, res) => {
     try {
       const teacherId = (req.user as any).id;
-      const isLinked = await storage.isTeacherOfStudent(teacherId, req.params.id);
+      const isLinked = await storage.isTeacherOfStudent(teacherId, getParam(req, "id"));
       if (!isLinked) return res.status(403).json({ message: "Cet élève ne vous est pas affilié" });
 
       const { createTeacherCommentSchema } = await import("../shared/schema");
       const parsed = createTeacherCommentSchema.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ message: "Données invalides", errors: parsed.error.flatten().fieldErrors });
 
-      const comment = await storage.createTeacherComment(teacherId, req.params.id, parsed.data.content);
+      const comment = await storage.createTeacherComment(teacherId, getParam(req, "id"), parsed.data.content);
 
       // Notification email aux admins
       const teacher = req.user as any;
-      const student = await storage.getUser(req.params.id);
+      const student = await storage.getUser(getParam(req, "id"));
       const admins = await storage.getAdmins();
       const teacherName = `${teacher.firstName} ${teacher.lastName}`;
       const studentName = student ? `${student.firstName} ${student.lastName}` : "un élève";
@@ -2149,7 +2190,7 @@ export async function registerRoutes(
       for (const admin of admins) {
         sendEmail({
           to: admin.email,
-          subject: `FEVES — Note professeur de ${teacherName} sur ${studentName}`,
+          subject: `${PLATFORM_NAME} — Note professeur de ${teacherName} sur ${studentName}`,
           htmlContent: `<h2 style="color:#16a34a">Nouvelle note professeur</h2><p><strong>Professeur :</strong> ${teacherName} (${teacher.email})</p><p><strong>Élève :</strong> ${studentName}</p><hr><p>${parsed.data.content.replace(/\n/g, "<br>")}</p><hr><p><a href="${baseUrl}/admin">Voir dans l'espace admin → onglet "Notes profs"</a></p>`,
         }).catch(console.error);
       }
@@ -2169,7 +2210,7 @@ export async function registerRoutes(
       const parsed = updateTeacherCommentSchema.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ message: "Données invalides", errors: parsed.error.flatten().fieldErrors });
 
-      const comment = await storage.updateTeacherComment(req.params.commentId, teacherId, parsed.data.content);
+      const comment = await storage.updateTeacherComment(getParam(req, "commentId"), teacherId, parsed.data.content);
       res.json(comment);
     } catch (err) {
       console.error("[TEACHER_UPDATE_COMMENT] Error:", err);
@@ -2181,7 +2222,7 @@ export async function registerRoutes(
   app.delete("/api/teacher/students/:studentId/comments/:commentId", requireTeacher, async (req, res) => {
     try {
       const teacherId = (req.user as any).id;
-      await storage.deleteTeacherComment(req.params.commentId, teacherId);
+      await storage.deleteTeacherComment(getParam(req, "commentId"), teacherId);
       res.json({ message: "Commentaire supprimé" });
     } catch (err) {
       console.error("[TEACHER_DELETE_COMMENT] Error:", err);
@@ -2193,10 +2234,10 @@ export async function registerRoutes(
   app.get("/api/teacher/students/:id/internships", requireTeacher, async (req, res) => {
     try {
       const teacherId = (req.user as any).id;
-      const isLinked = await storage.isTeacherOfStudent(teacherId, req.params.id);
+      const isLinked = await storage.isTeacherOfStudent(teacherId, getParam(req, "id"));
       if (!isLinked) return res.status(403).json({ message: "Cet élève ne vous est pas affilié" });
 
-      const internships = await storage.getStudentInternships(req.params.id);
+      const internships = await storage.getStudentInternships(getParam(req, "id"));
       res.json(internships);
     } catch (err) {
       res.status(500).json({ message: "Erreur" });
@@ -2207,7 +2248,7 @@ export async function registerRoutes(
   app.post("/api/teacher/students/:id/internships", requireTeacher, async (req, res) => {
     try {
       const teacherId = (req.user as any).id;
-      const isLinked = await storage.isTeacherOfStudent(teacherId, req.params.id);
+      const isLinked = await storage.isTeacherOfStudent(teacherId, getParam(req, "id"));
       if (!isLinked) return res.status(403).json({ message: "Cet élève ne vous est pas affilié" });
 
       const { createInternshipSchema } = await import("../shared/schema");
@@ -2215,7 +2256,7 @@ export async function registerRoutes(
       if (!parsed.success) return res.status(400).json({ message: "Données invalides", errors: parsed.error.flatten().fieldErrors });
 
       const internship = await storage.createInternship({
-        studentId: req.params.id,
+        studentId: getParam(req, "id"),
         companyName: parsed.data.companyName,
         companyAddress: parsed.data.companyAddress,
         supervisorName: parsed.data.supervisorName,
@@ -2237,7 +2278,7 @@ export async function registerRoutes(
   app.patch("/api/teacher/students/:studentId/internships/:internshipId", requireTeacher, async (req, res) => {
     try {
       const teacherId = (req.user as any).id;
-      const isLinked = await storage.isTeacherOfStudent(teacherId, req.params.studentId);
+      const isLinked = await storage.isTeacherOfStudent(teacherId, getParam(req, "studentId"));
       if (!isLinked) return res.status(403).json({ message: "Cet élève ne vous est pas affilié" });
 
       const { updateInternshipSchema } = await import("../shared/schema");
@@ -2248,7 +2289,7 @@ export async function registerRoutes(
       if (data.startDate) data.startDate = new Date(data.startDate);
       if (data.endDate) data.endDate = new Date(data.endDate);
 
-      const internship = await storage.updateInternship(req.params.internshipId, data);
+      const internship = await storage.updateInternship(getParam(req, "internshipId"), data);
       res.json(internship);
     } catch (err) {
       console.error("[TEACHER_UPDATE_INTERNSHIP] Error:", err);
@@ -2260,10 +2301,10 @@ export async function registerRoutes(
   app.delete("/api/teacher/students/:studentId/internships/:internshipId", requireTeacher, async (req, res) => {
     try {
       const teacherId = (req.user as any).id;
-      const isLinked = await storage.isTeacherOfStudent(teacherId, req.params.studentId);
+      const isLinked = await storage.isTeacherOfStudent(teacherId, getParam(req, "studentId"));
       if (!isLinked) return res.status(403).json({ message: "Cet élève ne vous est pas affilié" });
 
-      await storage.deleteInternship(req.params.internshipId);
+      await storage.deleteInternship(getParam(req, "internshipId"));
       res.json({ message: "Stage supprimé" });
     } catch (err) {
       res.status(500).json({ message: "Erreur" });
@@ -2312,7 +2353,7 @@ export async function registerRoutes(
 
   app.get("/api/admin/teachers/:teacherId/students", requireAdmin, async (req, res) => {
     try {
-      const links = await storage.getTeacherStudents(req.params.teacherId);
+      const links = await storage.getTeacherStudents(getParam(req, "teacherId"));
       res.json(links.map((l) => ({ ...sanitizeUser(l.student), linkedAt: l.createdAt })));
     } catch (err) {
       res.status(500).json({ message: "Erreur" });
@@ -2325,7 +2366,7 @@ export async function registerRoutes(
       if (!studentId) return res.status(400).json({ message: "studentId requis" });
       const student = await storage.getUser(studentId);
       if (!student || student.role !== "JUNIOR") return res.status(400).json({ message: "Élève invalide" });
-      const link = await storage.addTeacherStudent(req.params.teacherId, studentId);
+      const link = await storage.addTeacherStudent(getParam(req, "teacherId"), studentId);
       res.status(201).json(link);
     } catch (err: any) {
       if (err.code === "P2002") return res.status(409).json({ message: "Liaison déjà existante" });
@@ -2335,7 +2376,7 @@ export async function registerRoutes(
 
   app.delete("/api/admin/teachers/:teacherId/students/:studentId", requireAdmin, async (req, res) => {
     try {
-      await storage.removeTeacherStudent(req.params.teacherId, req.params.studentId);
+      await storage.removeTeacherStudent(getParam(req, "teacherId"), getParam(req, "studentId"));
       res.json({ message: "Liaison supprimée" });
     } catch (err) {
       res.status(500).json({ message: "Erreur" });
@@ -2488,12 +2529,12 @@ export async function registerRoutes(
       for (const admin of admins) {
         sendEmail({
           to: admin.email,
-          subject: `FEVES — Message du référent sénior ${senderName} : ${subject}`,
+          subject: `${PLATFORM_NAME} — Message du référent sénior ${senderName} : ${subject}`,
           htmlContent: `<h2 style="color:#8b5cf6">Message du référent sénior</h2><p><strong>De :</strong> ${senderName} (${user.email})</p><p><strong>Sujet :</strong> ${subject}</p><hr><p>${message.replace(/\n/g, "<br>")}</p><hr><p><a href="${baseUrl}/admin">Voir dans l'espace admin</a></p>`,
         }).catch(console.error);
       }
 
-      res.json({ message: "Votre message a été envoyé à l'équipe FEVES." });
+      res.json({ message: `Votre message a été envoyé à l'équipe ${PLATFORM_NAME}.` });
     } catch (err) {
       console.error("[REFERENT_CONTACT] Error:", err);
       res.status(500).json({ message: "Erreur lors de l'envoi du message" });
