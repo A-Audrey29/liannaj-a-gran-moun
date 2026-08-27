@@ -9,3 +9,9 @@ vite.config.ts.*
 .env.*
 !.env.example
 .gstack/
+
+# Photos de profil envoyees par les utilisateurs : donnees personnelles
+# (dont celles de mineurs), elles n'ont rien a faire dans le depot.
+# (Une photo de demo est deja suivie dans l'historique : ce filtre ne
+# concerne que les nouveaux fichiers.)
+/uploads/*

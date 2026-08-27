@@ -1,4 +1,4 @@
-import type { Express, Request } from "express";
+import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import passport from "passport";
 import bcrypt from "bcryptjs";
@@ -41,9 +41,11 @@ const uploadStorage = multer.diskStorage({
   },
 });
 
+const TAILLE_MAX_PHOTO = 5 * 1024 * 1024;
+
 const upload = multer({
   storage: uploadStorage,
-  limits: { fileSize: 5 * 1024 * 1024 },
+  limits: { fileSize: TAILLE_MAX_PHOTO },
   fileFilter: (_req, file, cb) => {
     const allowed = [".jpg", ".jpeg", ".png", ".webp"];
     const ext = path.extname(file.originalname).toLowerCase();
@@ -54,6 +56,44 @@ const upload = multer({
     }
   },
 });
+
+/**
+ * `upload.single()` dont les refus deviennent des réponses 400.
+ *
+ * multer signale un rejet (extension interdite, fichier trop lourd) en passant
+ * une Error à next(). Sans cette enveloppe, elle atteint le gestionnaire
+ * d'erreur global qui répond 500 : l'utilisateur voit « erreur serveur » alors
+ * que son fichier a simplement été refusé, et le message expliquant les
+ * formats acceptés est perdu.
+ *
+ * Enveloppe plutôt que middleware d'erreur séparé : un 4e handler dans la
+ * chaîne fait perdre à Express l'inférence de types sur req/res.
+ */
+function uploadSinglePhoto(champ: string) {
+  const middleware = upload.single(champ);
+
+  return (req: Request, res: Response, next: NextFunction) => {
+    middleware(req, res, (err: any) => {
+      if (!err) return next();
+
+      if (err instanceof multer.MulterError) {
+        if (err.code === "LIMIT_FILE_SIZE") {
+          return res.status(400).json({
+            message: `Fichier trop volumineux (maximum ${TAILLE_MAX_PHOTO / 1024 / 1024} Mo).`,
+          });
+        }
+        return res.status(400).json({ message: "Fichier invalide." });
+      }
+
+      // Erreur de notre fileFilter : le message est destiné à l'utilisateur.
+      if (err instanceof Error && err.message.startsWith("Format non supporté")) {
+        return res.status(400).json({ message: err.message });
+      }
+
+      return next(err);
+    });
+  };
+}
 
 function sanitizeUser(user: any) {
   const { password, validationToken, validationExpiry, ...safe } = user;
@@ -293,7 +333,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/auth/register", registerLimiter, upload.single("photo"), async (req, res) => {
+  app.post("/api/auth/register", registerLimiter, uploadSinglePhoto("photo"), async (req, res) => {
     try {
       const body = typeof req.body.data === "string" ? JSON.parse(req.body.data) : req.body;
       const parsed = insertUserSchema.safeParse(body);
@@ -484,7 +524,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/auth/me/photo", requireAuth, upload.single("photo"), async (req, res) => {
+  app.post("/api/auth/me/photo", requireAuth, uploadSinglePhoto("photo"), async (req, res) => {
     try {
       if (!req.file) {
         return res.status(400).json({ message: "Aucun fichier envoyé" });
