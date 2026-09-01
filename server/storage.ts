@@ -109,6 +109,22 @@ export interface IStorage {
   removeFavorite(seniorId: string, juniorId: string): Promise<void>;
   getFavoriteJuniorIds(seniorId: string): Promise<string[]>;
 
+  /**
+   * Remplace la photo de profil d'un utilisateur, octets et clé logique en une
+   * seule transaction. Sans cela, un échec entre les deux écritures laisserait
+   * User.profilePhoto pointer sur une photo inexistante.
+   */
+  replaceProfilePhoto(
+    userId: string,
+    photo: { filename: string; data: Buffer; mimeType: string }
+  ): Promise<User>;
+  /** Supprime la photo et remet User.profilePhoto à null. */
+  deleteProfilePhoto(userId: string): Promise<User>;
+  /** Octets d'une photo, par son nom de fichier logique. */
+  getProfilePhotoByFilename(
+    filename: string
+  ): Promise<{ data: Buffer; mimeType: string } | null>;
+
   getOrCreateConversation(relationId: string): Promise<Conversation>;
   getConversationsForUser(userId: string): Promise<any[]>;
   getMessages(conversationId: string, limit: number, cursor?: string): Promise<Message[]>;
@@ -652,6 +668,58 @@ class DatabaseStorage implements IStorage {
       select: { juniorId: true },
     });
     return favs.map((f) => f.juniorId);
+  }
+
+  async replaceProfilePhoto(
+    userId: string,
+    photo: { filename: string; data: Buffer; mimeType: string }
+  ): Promise<User> {
+    // Les deux écritures dans la même transaction : User.profilePhoto ne doit
+    // jamais désigner une photo absente de ProfilePhoto, ni l'inverse.
+    return prisma.$transaction(async (tx) => {
+      await tx.profilePhoto.upsert({
+        where: { userId },
+        create: {
+          userId,
+          filename: photo.filename,
+          data: photo.data,
+          mimeType: photo.mimeType,
+          byteSize: photo.data.byteLength,
+        },
+        update: {
+          filename: photo.filename,
+          data: photo.data,
+          mimeType: photo.mimeType,
+          byteSize: photo.data.byteLength,
+        },
+      });
+
+      return tx.user.update({
+        where: { id: userId },
+        data: { profilePhoto: `/uploads/${photo.filename}` },
+      });
+    });
+  }
+
+  async deleteProfilePhoto(userId: string): Promise<User> {
+    return prisma.$transaction(async (tx) => {
+      await tx.profilePhoto.deleteMany({ where: { userId } });
+      return tx.user.update({
+        where: { id: userId },
+        data: { profilePhoto: null },
+      });
+    });
+  }
+
+  async getProfilePhotoByFilename(
+    filename: string
+  ): Promise<{ data: Buffer; mimeType: string } | null> {
+    const photo = await prisma.profilePhoto.findUnique({
+      where: { filename },
+      select: { data: true, mimeType: true },
+    });
+    if (!photo) return null;
+    return { data: Buffer.from(photo.data), mimeType: photo.mimeType };
   }
 
   async getOrCreateConversation(relationId: string): Promise<Conversation> {

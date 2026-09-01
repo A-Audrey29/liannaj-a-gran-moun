@@ -7,7 +7,8 @@ import multer from "multer";
 import path from "path";
 import fs from "fs";
 import rateLimit from "express-rate-limit";
-import { fileTypeFromFile } from "file-type";
+import { fileTypeFromBuffer } from "file-type";
+import sharp from "sharp";
 import { requireAuth, requireAdmin } from "./auth";
 import { pool } from "./db";
 import { storage } from "./storage";
@@ -29,22 +30,14 @@ import { fmtDayNumeric, fmtTime } from "../shared/dates";
 import { PLATFORM_NAME } from "../shared/branding";
 import { sendPushNotification, getVapidPublicKey } from "./lib/push";
 
-const uploadStorage = multer.diskStorage({
-  destination: (_req, _file, cb) => {
-    const dir = path.join(process.cwd(), "uploads");
-    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-    cb(null, dir);
-  },
-  filename: (_req, file, cb) => {
-    const ext = path.extname(file.originalname).toLowerCase();
-    cb(null, `${crypto.randomUUID()}${ext}`);
-  },
-});
-
 const TAILLE_MAX_PHOTO = 5 * 1024 * 1024;
 
+// Les photos sont gardées en mémoire puis écrites en base : le système de
+// fichiers de l'hébergeur est éphémère (tout uploads/ disparaît à chaque
+// redéploiement). Effet de bord utile : plus de fichier temporaire orphelin
+// quand la validation échoue.
 const upload = multer({
-  storage: uploadStorage,
+  storage: multer.memoryStorage(),
   limits: { fileSize: TAILLE_MAX_PHOTO },
   fileFilter: (_req, file, cb) => {
     const allowed = [".jpg", ".jpeg", ".png", ".webp"];
@@ -254,13 +247,51 @@ const registerLimiter = rateLimit({
   legacyHeaders: false,
 });
 
-async function validateImageMagicBytes(filePath: string): Promise<void> {
-  const type = await fileTypeFromFile(filePath);
+/** Côté le plus long d'une photo de profil après redimensionnement. */
+const PHOTO_TAILLE_MAX_PX = 800;
+
+/**
+ * Valide et normalise une photo reçue.
+ *
+ * L'extension d'un fichier ne prouve rien : la vérification porte sur les
+ * octets de tête (magic bytes), pas sur le nom.
+ *
+ * L'image est ensuite redimensionnée et convertie en WebP. Deux bénéfices :
+ * une photo de 5 Mo tombe à ~150 Ko (elle est stockée en base, donc sa taille
+ * compte), et le ré-encodage supprime toutes les métadonnées EXIF — dont la
+ * géolocalisation, que les téléphones inscrivent par défaut. Sur une
+ * plateforme utilisée par des mineurs, publier la position du domicile
+ * dans un fichier serait un vrai problème.
+ */
+async function validateAndProcessImage(
+  buffer: Buffer
+): Promise<{ data: Buffer; mimeType: string; filename: string }> {
+  const type = await fileTypeFromBuffer(buffer);
   const allowedMimes = ["image/jpeg", "image/png", "image/webp"];
   if (!type || !allowedMimes.includes(type.mime)) {
-    fs.unlinkSync(filePath);
     throw new Error("Fichier invalide : seuls les formats JPG, PNG et WebP sont acceptés.");
   }
+
+  let data: Buffer;
+  try {
+    data = await sharp(buffer)
+      .rotate() // applique l'orientation EXIF avant de la supprimer
+      .resize(PHOTO_TAILLE_MAX_PX, PHOTO_TAILLE_MAX_PX, {
+        fit: "inside",
+        withoutEnlargement: true,
+      })
+      .webp({ quality: 82 })
+      .toBuffer();
+  } catch {
+    // Magic bytes corrects mais contenu illisible : fichier tronqué ou forgé.
+    throw new Error("Image illisible ou corrompue.");
+  }
+
+  return {
+    data,
+    mimeType: "image/webp",
+    filename: `${crypto.randomUUID()}.webp`,
+  };
 }
 
 function getBaseUrl(req: any): string {
@@ -351,9 +382,10 @@ export async function registerRoutes(
         return res.status(409).json({ message: "Cet email est déjà utilisé" });
       }
 
+      let photo: { data: Buffer; mimeType: string; filename: string } | null = null;
       if (req.file) {
         try {
-          await validateImageMagicBytes(req.file.path);
+          photo = await validateAndProcessImage(req.file.buffer);
         } catch (validationErr: any) {
           return res.status(400).json({ message: validationErr.message });
         }
@@ -365,8 +397,6 @@ export async function registerRoutes(
 
       const { categoryIds, birthDate, ...userData } = data;
 
-      const profilePhoto = req.file ? `/uploads/${req.file.filename}` : undefined;
-
       const user = await storage.createUser({
         ...userData,
         email: userData.email.toLowerCase().trim(),
@@ -376,8 +406,11 @@ export async function registerRoutes(
         role: userData.role,
         validationToken,
         validationExpiry,
-        ...(profilePhoto ? { profilePhoto } : {}),
       });
+
+      if (photo) {
+        await storage.replaceProfilePhoto(user.id, photo);
+      }
 
       if (categoryIds && categoryIds.length > 0) {
         for (const categoryId of categoryIds) {
@@ -529,18 +562,16 @@ export async function registerRoutes(
       if (!req.file) {
         return res.status(400).json({ message: "Aucun fichier envoyé" });
       }
+      let photo: { data: Buffer; mimeType: string; filename: string };
       try {
-        await validateImageMagicBytes(req.file.path);
+        photo = await validateAndProcessImage(req.file.buffer);
       } catch (validationErr: any) {
         return res.status(400).json({ message: validationErr.message });
       }
       const user = req.user!;
-      if (user.profilePhoto) {
-        const oldPath = path.join(process.cwd(), user.profilePhoto.replace(/^\//, ""));
-        if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
-      }
-      const photoPath = `/uploads/${req.file.filename}`;
-      const updated = await storage.updateUser(user.id, { profilePhoto: photoPath });
+      // L'upsert de replaceProfilePhoto remplace l'ancienne photo : rien à
+      // supprimer sur disque, et pas de résidu possible.
+      const updated = await storage.replaceProfilePhoto(user.id, photo);
       const safeUser = sanitizeUser(updated);
       req.login(safeUser, (err) => {
         if (err) return res.status(500).json({ message: "Erreur session" });
@@ -555,11 +586,7 @@ export async function registerRoutes(
   app.delete("/api/auth/me/photo", requireAuth, async (req, res) => {
     try {
       const user = req.user!;
-      if (user.profilePhoto) {
-        const oldPath = path.join(process.cwd(), user.profilePhoto.replace(/^\//, ""));
-        if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
-      }
-      const updated = await storage.updateUser(user.id, { profilePhoto: null });
+      const updated = await storage.deleteProfilePhoto(user.id);
       const safeUser = sanitizeUser(updated);
       req.login(safeUser, (err) => {
         if (err) return res.status(500).json({ message: "Erreur session" });
@@ -579,21 +606,48 @@ export async function registerRoutes(
     webp: "image/webp",
   };
 
-  app.get("/api/photos/:filename", requireAuth, (req, res) => {
-    const filename = getParam(req, "filename");
-    if (!VALID_PHOTO_FILENAME.test(filename)) {
-      return res.status(400).json({ message: "Nom de fichier invalide" });
-    }
-    const filePath = path.join(process.cwd(), "uploads", filename);
-    if (!fs.existsSync(filePath)) {
+  app.get("/api/photos/:filename", requireAuth, async (req, res) => {
+    try {
+      const filename = getParam(req, "filename");
+      // Le nom doit être exactement un UUID suivi d'une extension connue :
+      // c'est ce qui rend impossible toute traversée de répertoire pour les
+      // photos encore servies depuis le disque.
+      if (!VALID_PHOTO_FILENAME.test(filename)) {
+        return res.status(400).json({ message: "Nom de fichier invalide" });
+      }
+
+      const enTetesImage = (contentType: string) => {
+        res.setHeader("Content-Type", contentType);
+        // Empêche un navigateur de réinterpréter le contenu autrement que
+        // comme une image.
+        res.setHeader("X-Content-Type-Options", "nosniff");
+        // `private` : la photo est réservée aux utilisateurs authentifiés,
+        // aucun cache partagé ne doit la conserver.
+        res.setHeader("Cache-Control", "private, max-age=3600");
+        res.setHeader("Content-Disposition", "inline");
+      };
+
+      const photo = await storage.getProfilePhotoByFilename(filename);
+      if (photo) {
+        enTetesImage(photo.mimeType);
+        return res.send(photo.data);
+      }
+
+      // Photos d'avant la bascule en base : encore sur le disque tant que le
+      // script de migration n'a pas tourné. À retirer une fois la migration
+      // faite sur tous les environnements.
+      const filePath = path.join(process.cwd(), "uploads", filename);
+      if (fs.existsSync(filePath)) {
+        const ext = path.extname(filename).toLowerCase().slice(1);
+        enTetesImage(PHOTO_CONTENT_TYPES[ext] || "application/octet-stream");
+        return res.sendFile(filePath);
+      }
+
       return res.status(404).json({ message: "Photo non trouvée" });
+    } catch (err) {
+      console.error("[PHOTO_SERVE] Error:", err);
+      return res.status(500).json({ message: "Erreur lors du chargement de la photo" });
     }
-    const ext = path.extname(filename).toLowerCase().slice(1);
-    res.setHeader("Content-Type", PHOTO_CONTENT_TYPES[ext] || "application/octet-stream");
-    res.setHeader("X-Content-Type-Options", "nosniff");
-    res.setHeader("Cache-Control", "private, max-age=3600");
-    res.setHeader("Content-Disposition", "inline");
-    res.sendFile(filePath);
   });
 
   app.get("/api/favorites", requireAuth, async (req, res) => {
@@ -1568,6 +1622,9 @@ export async function registerRoutes(
       const user = await storage.getUser(getParam(req, "id"));
       if (!user) return res.status(404).json({ message: "Utilisateur non trouvé" });
       if (user.role === "ADMIN") return res.status(403).json({ message: "Impossible de supprimer un administrateur" });
+      // La photo en base part avec l'utilisateur (ProfilePhoto est en cascade).
+      // Ce nettoyage ne concerne que les photos d'avant la bascule, encore
+      // présentes sur le disque.
       if (user.profilePhoto) {
         const photoPath = path.join(process.cwd(), user.profilePhoto.replace(/^\//, ""));
         if (fs.existsSync(photoPath)) fs.unlinkSync(photoPath);

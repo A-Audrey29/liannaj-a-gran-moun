@@ -71,7 +71,12 @@ model User {
   postalCode          String?
   bio                 String?
   desiredActivity     String?
+  // Cle logique de la photo, de la forme "/uploads/<uuid>.webp". Les octets
+  // vivent dans ProfilePhoto (le disque de l'hebergeur est ephemere), mais on
+  // garde ce champ : le client construit ses URL a partir de lui et les
+  // donnees existantes le referencent deja.
   profilePhoto        String?
+  photo               ProfilePhoto?
 
   schoolName          String?
   referentTitle       String?
@@ -126,6 +131,32 @@ model User {
 
   @@index([role, status])
   @@index([city])
+}
+
+/// Photo de profil stockee en base.
+///
+/// Le systeme de fichiers de Render est ephemere : tout ce qui est ecrit dans
+/// uploads/ disparait a chaque redeploiement. Les octets vivent donc en base,
+/// ce qui les fait aussi entrer dans les sauvegardes PostgreSQL — un disque
+/// monte n'y serait pas.
+///
+/// Les images sont redimensionnees et converties en WebP a l'upload
+/// (~150 Ko au lieu de 5 Mo), ce qui garde la table legere.
+model ProfilePhoto {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  /// Nom de fichier logique ("<uuid>.webp"), correspond a User.profilePhoto.
+  filename  String   @unique
+  data      Bytes
+  mimeType  String
+  byteSize  Int
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([filename])
 }
 
 model Category {
