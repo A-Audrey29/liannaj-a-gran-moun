@@ -129,22 +129,35 @@ retire alors l'instance du trafic.
 
 ---
 
-## 6. Persistance des fichiers uploadés
+## 6. Persistance des photos de profil
 
-> **Attention** : Sur Render en plan Free/Starter, le système de fichiers est **éphémère**. Les photos de profil uploadées dans `uploads/` sont perdues à chaque déploiement.
+Le système de fichiers de Render est **éphémère** : tout ce qui est écrit dans
+`uploads/` disparaît à chaque déploiement.
 
-**Solutions :**
+Les photos sont donc **stockées en base de données** (table `ProfilePhoto`).
+Aucun disque à monter, aucun service externe à configurer, et les photos
+entrent dans les sauvegardes PostgreSQL — ce qu'un disque monté ne permet pas.
 
-| Option | Recommandation |
-|---|---|
-| **Render Disks** (payant) | Monter un disque persistant sur `/uploads` dans les paramètres du service |
-| **Stockage objet externe** | Migrer vers AWS S3, Cloudflare R2 ou Backblaze B2 (nécessite refactoring) |
-| **Plan Free** | Acceptable pour les tests, pas pour la production |
+Chaque photo est redimensionnée (800 px max) et convertie en WebP à l'upload :
+environ 150 Ko par photo, soit ~75 Mo pour 500 utilisateurs.
 
-Pour configurer un **Render Disk** :
-1. Dans les paramètres du service → **Disks**
-2. **Mount Path** : `/uploads` (dans le dossier racine du projet)
-3. **Size** : 1 GB minimum
+### Migration des photos existantes
+
+Si une base contient déjà des photos référencées sur le disque, les importer
+une fois, via le shell Render :
+
+```bash
+npx tsx prisma/migrate-photos-to-db.ts            # simulation
+npx tsx prisma/migrate-photos-to-db.ts --apply    # import réel
+```
+
+Le script est additif et rejouable : il ne supprime aucun fichier et ignore
+les photos déjà en base. Les URL externes (avatars de démonstration) sont
+laissées telles quelles.
+
+> Tant que la migration n'a pas tourné, la route `/api/photos/:filename` sert
+> encore les photos depuis le disque en dernier recours. Cette compatibilité
+> pourra être retirée une fois tous les environnements migrés.
 
 ---
 
