@@ -20,6 +20,7 @@ import {
   getInterventionConfirmedEmailHtml,
   getFeedbackReminderEmailHtml,
   getNewReportEmailHtml,
+  getCreditPurchaseConfirmedEmailHtml,
 } from "./lib/email-templates";
 import { insertUserSchema, createRelationSchema, insertInterventionSchema, feedbackSchema, createPaymentSchema, changePasswordSchema, createAdminSchema, insertReportSchema, createAvailabilitySchema, createRecurringAvailabilitiesSchema, createDateExceptionSchema, updateUserCategoriesSchema, meetingHistoryQuerySchema, COMPLETED_STATUSES } from "../shared/schema";
 import type { MeetingHistoryEntry, MeetingHistoryResponse, MeetingHistorySummary, Role } from "../shared/schema";
@@ -29,6 +30,9 @@ import { addSSEClient, sendSSEEvent, isUserConnected } from "./lib/sse";
 import { fmtDayNumeric, fmtTime } from "../shared/dates";
 import { PLATFORM_NAME } from "../shared/branding";
 import { sendPushNotification, getVapidPublicKey } from "./lib/push";
+import { paymentProvider } from "./lib/payment-provider";
+import { findCreditOffer } from "../shared/credit-offers";
+import { env } from "./env";
 
 const TAILLE_MAX_PHOTO = 5 * 1024 * 1024;
 
@@ -243,6 +247,14 @@ const registerLimiter = rateLimit({
   windowMs: 60 * 60 * 1000,
   limit: isDev ? 1000 : 5,
   message: { message: "Trop d'inscriptions depuis cette adresse. Réessayez dans une heure." },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+const checkoutLimiter = rateLimit({
+  windowMs: 10 * 60 * 1000,
+  limit: isDev ? 1000 : 10,
+  message: { message: "Trop de tentatives d'achat. Réessayez dans 10 minutes." },
   standardHeaders: true,
   legacyHeaders: false,
 });
@@ -2673,6 +2685,115 @@ export async function registerRoutes(
     } catch (err) {
       console.error("[CREDITS_BALANCE] Error:", err);
       res.status(500).json({ message: "Erreur" });
+    }
+  });
+
+  app.post("/api/credits/checkout", requireAuth, checkoutLimiter, async (req, res) => {
+    try {
+      if (!paymentProvider.isConfigured()) {
+        return res.status(503).json({ message: "Le paiement en ligne n'est pas disponible actuellement." });
+      }
+
+      const { offerId } = req.body as { offerId?: string };
+      const offer = offerId ? findCreditOffer(offerId) : undefined;
+      if (!offer) {
+        return res.status(400).json({ message: "Offre invalide" });
+      }
+
+      const user = req.user as any;
+      let seniorId: string;
+      if (user.role === "SENIOR") {
+        seniorId = user.id;
+      } else if (user.role === "REFERENT_SENIOR" && user.linkedSeniorId) {
+        seniorId = user.linkedSeniorId;
+      } else {
+        return res.status(400).json({ message: "Seul un sénior ou un référent lié à un sénior peut acheter des crédits" });
+      }
+
+      const baseUrl = getBaseUrl(req);
+      const { url } = await paymentProvider.createCheckoutSession({
+        offerId: offer.id,
+        offerLabel: offer.label,
+        priceEuros: offer.priceEuros,
+        seniorId,
+        purchasedByUserId: user.id,
+        successUrl: `${baseUrl}/credits/success`,
+        cancelUrl: `${baseUrl}/credits/cancel`,
+      });
+
+      res.json({ url });
+    } catch (err) {
+      console.error("[CREDITS_CHECKOUT] Error:", err);
+      res.status(500).json({ message: "Erreur lors de la création du paiement" });
+    }
+  });
+
+  app.post("/api/webhooks/payment", async (req, res) => {
+    if (!paymentProvider.isConfigured()) return res.status(503).send();
+
+    const event = paymentProvider.verifyWebhookAndExtract(
+      req.rawBody as Buffer,
+      req.headers["stripe-signature"] as string | undefined
+    );
+    if (!event) {
+      return res.status(400).send("Webhook invalide");
+    }
+
+    // Événement valide à partir d'ici : toujours 200, même en cas d'erreur
+    // métier, pour éviter que le prestataire ne réessaie indéfiniment un
+    // événement qu'on ne pourra jamais traiter différemment.
+    try {
+      const existing = await storage.getPaymentByStripeSessionId(event.externalSessionId);
+      if (existing) {
+        return res.status(200).send();
+      }
+
+      const offer = findCreditOffer(event.metadata.offerId);
+      if (!offer) {
+        console.error(`[PAYMENT_WEBHOOK] Offre inconnue "${event.metadata.offerId}" sur ${event.externalSessionId}`);
+        return res.status(200).send();
+      }
+
+      const { seniorId, purchasedByUserId } = event.metadata;
+
+      await storage.createPayment({
+        userId: purchasedByUserId,
+        amount: event.amountPaidEuros,
+        label: `Achat en ligne — ${offer.label}`,
+        credits: offer.credits,
+        creditSeniorId: seniorId,
+        triggeredById: purchasedByUserId,
+        stripeSessionId: event.externalSessionId,
+      });
+
+      try {
+        const senior = await storage.getUser(seniorId);
+        const balance = await storage.getCreditBalance(seniorId);
+        if (senior) {
+          await sendEmail({
+            to: senior.email,
+            subject: `Confirmation de votre achat — ${PLATFORM_NAME}`,
+            htmlContent: getCreditPurchaseConfirmedEmailHtml(`${senior.firstName} ${senior.lastName}`, offer.label, balance),
+          });
+        }
+        if (purchasedByUserId !== seniorId) {
+          const payeur = await storage.getUser(purchasedByUserId);
+          if (payeur) {
+            await sendEmail({
+              to: payeur.email,
+              subject: `Confirmation de votre achat — ${PLATFORM_NAME}`,
+              htmlContent: getCreditPurchaseConfirmedEmailHtml(`${payeur.firstName} ${payeur.lastName}`, offer.label, balance),
+            });
+          }
+        }
+      } catch (emailErr) {
+        console.error("[PAYMENT_WEBHOOK] Échec envoi email:", emailErr);
+      }
+
+      res.status(200).send();
+    } catch (err) {
+      console.error("[PAYMENT_WEBHOOK] Erreur de traitement:", err);
+      res.status(200).send();
     }
   });
 

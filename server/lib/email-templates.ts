@@ -207,6 +207,29 @@ export function getInterventionConfirmedEmailHtml(
   return emailWrapper(`Intervention confirm\u00e9e - ${PLATFORM_NAME}`, body);
 }
 
+export function getCreditPurchaseConfirmedEmailHtml(
+  userName: string,
+  offerLabel: string,
+  newBalance: number
+): string {
+  const body = `
+    <p style="margin:0 0 18px;color:#1f1f1f;font-size:15px;line-height:1.6;">Bonjour ${userName},</p>
+    <p style="margin:0 0 18px;color:#1f1f1f;font-size:15px;line-height:1.6;">
+      Votre achat <strong>${offerLabel}</strong> a &eacute;t&eacute; confirm&eacute;.
+    </p>
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 24px;background-color:#f8f4fc;border-radius:6px;">
+      <tr>
+        <td style="padding:16px;color:#1f1f1f;font-size:15px;">
+          Nouveau solde : <strong>${newBalance} cr&eacute;dit${newBalance > 1 ? "s" : ""}</strong>
+        </td>
+      </tr>
+    </table>
+    <p style="margin:0 0 18px;color:#1f1f1f;font-size:15px;line-height:1.6;">
+      Merci de votre confiance !
+    </p>`;
+  return emailWrapper(`Confirmation d'achat - ${PLATFORM_NAME}`, body);
+}
+
 export function getFeedbackReminderEmailHtml(
   userName: string,
   interventionDate: string,

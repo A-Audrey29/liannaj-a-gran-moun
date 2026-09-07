@@ -30,6 +30,7 @@ import { useSSE } from "@/hooks/use-sse";
 import { useUnreadMessageCount } from "@/hooks/use-unread-count";
 import { usePushNotifications } from "@/hooks/use-push";
 import { fmtTime, gpParts, MOIS_LONGS } from "@/lib/availability-format";
+import { CreditOffersCard } from "@/components/credit-offers-card";
 
 type RelationWithUsers = Relation & { senior: UserType; junior: UserType; interventions?: Intervention[] };
 type MatchSuggestion = { user: UserType; commonCategories: string[]; isRecommended: boolean; isFavorite: boolean };
@@ -187,6 +188,12 @@ export default function Home() {
           </button>
         )}
       </div>
+
+      {user?.role === "SENIOR" && creditData && (
+        <div className="mb-6">
+          <CreditOffersCard />
+        </div>
+      )}
 
       {user?.role === "SENIOR" && relLoading && (
         <Skeleton className="w-full mb-6 rounded-2xl h-14" data-testid="skeleton-proposer-rencontre-permanent" />

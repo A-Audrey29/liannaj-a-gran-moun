@@ -24,6 +24,7 @@ import { useSSE } from "@/hooks/use-sse";
 import { MobileTabsMenu } from "@/components/mobile-tabs-menu";
 import MeetingHistory from "@/components/meeting-history";
 import { fmtTime, fmtDayLongMonthYear } from "@/lib/availability-format";
+import { CreditOffersCard } from "@/components/credit-offers-card";
 
 type RelationWithUsers = Relation & { senior: UserType; junior: UserType; interventions?: Intervention[] };
 
@@ -121,12 +122,14 @@ function DashboardTab({ senior, relations }: { senior: UserType | null; relation
             </div>
             {creditData && creditData.balance <= 0 && (
               <p className="text-sm text-amber-700 bg-amber-50 rounded-lg px-3 py-2 mt-4">
-                Le solde de crédits est épuisé. Contactez l'équipe pour recharger un pack.
+                Le solde de crédits est épuisé. Achetez un nouveau pack ci-dessous.
               </p>
             )}
           </CardContent>
         </Card>
       )}
+
+      {senior && creditData && <CreditOffersCard />}
 
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
         <Card>

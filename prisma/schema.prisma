@@ -280,6 +280,11 @@ model PaymentRecord {
   date      DateTime @default(now())
   createdAt DateTime @default(now())
 
+  // Rempli uniquement pour un achat en ligne (Stripe Checkout). Unique :
+  // garantit qu'un webhook rejoue ne credite jamais deux fois le meme achat.
+  // Null pour les paiements manuels admin.
+  stripeSessionId String? @unique
+
   creditLedgerEntries CreditLedger[]
 
   @@index([userId])
