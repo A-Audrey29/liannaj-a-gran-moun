@@ -890,6 +890,13 @@ function CadrageTab() {
 // ==================== FICHE PROFIL DIALOG ====================
 
 function ProfileDialog({ user, open, onOpenChange }: { user: SafeUser | null; open: boolean; onOpenChange: (v: boolean) => void }) {
+  const creditSeniorId = user?.role === "SENIOR" ? user.id : user?.role === "REFERENT_SENIOR" ? user.linkedSeniorId : null;
+  const { data: creditData } = useQuery<{ balance: number }>({
+    queryKey: ["/api/credits/balance", creditSeniorId],
+    queryFn: () => apiRequest("GET", `/api/credits/balance?seniorId=${creditSeniorId}`).then((res) => res.json()),
+    enabled: open && !!creditSeniorId,
+  });
+
   if (!user) return null;
 
   const fields: { label: string; value: string | null | undefined; show?: boolean }[] = [
@@ -908,6 +915,7 @@ function ProfileDialog({ user, open, onOpenChange }: { user: SafeUser | null; op
     { label: "Personne de confiance", value: user.trustedPersonName },
     { label: "Email personne de confiance", value: user.trustedPersonEmail },
     { label: "Abonnement", value: user.subscriptionActive ? "Actif" : "Inactif" },
+    { label: "Solde de crédits", value: creditData ? `${creditData.balance} crédit(s)` : null, show: !!creditSeniorId },
     { label: "Inscrit le", value: formatDate(user.createdAt) },
   ];
 
@@ -1116,6 +1124,7 @@ function PaiementsTab() {
     amount: "",
     label: "",
     date: new Date().toISOString().split("T")[0],
+    credits: "",
   });
 
   const { data: payments = [], isLoading } = useQuery<PaymentWithUser[]>({ queryKey: ["/api/admin/payments"] });
@@ -1124,13 +1133,13 @@ function PaiementsTab() {
   const eligibleUsers = users.filter((u) => u.role !== "ADMIN" && u.status === "ACTIVE");
 
   const createMut = useMutation({
-    mutationFn: (data: { userId: string; amount: number; label: string; date?: string }) =>
+    mutationFn: (data: { userId: string; amount: number; label: string; date?: string; credits?: number }) =>
       apiRequest("POST", "/api/admin/payments", data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/payments"] });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
       setDialogOpen(false);
-      setFormData({ userId: "", amount: "", label: "", date: new Date().toISOString().split("T")[0] });
+      setFormData({ userId: "", amount: "", label: "", date: new Date().toISOString().split("T")[0], credits: "" });
       toast({ title: "Paiement enregistré", description: "L'abonnement a été activé." });
     },
     onError: () => {
@@ -1146,6 +1155,7 @@ function PaiementsTab() {
       amount: parseFloat(formData.amount),
       label: formData.label,
       date: formData.date || undefined,
+      credits: formData.credits ? parseInt(formData.credits, 10) : undefined,
     });
   }
 
@@ -1256,6 +1266,22 @@ function PaiementsTab() {
                 onChange={(e) => setFormData({ ...formData, date: e.target.value })}
                 data-testid="input-payment-date"
               />
+            </div>
+            <div>
+              <Label htmlFor="payment-credits">Crédits accordés (ateliers)</Label>
+              <Input
+                id="payment-credits"
+                type="number"
+                step="1"
+                min="1"
+                value={formData.credits}
+                onChange={(e) => setFormData({ ...formData, credits: e.target.value })}
+                placeholder="Ex: 5 (laisser vide si aucun crédit)"
+                data-testid="input-payment-credits"
+              />
+              <p className="text-xs text-muted-foreground mt-1">
+                Si l'utilisateur est un référent, les crédits sont attribués à son senior lié.
+              </p>
             </div>
             <DialogFooter>
               <Button type="submit" className="bg-[#dc4256] hover:bg-[#c53a4d]" disabled={createMut.isPending} data-testid="btn-submit-payment">

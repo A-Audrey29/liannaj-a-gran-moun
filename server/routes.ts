@@ -324,17 +324,41 @@ async function validateSlot(
 
 const SLOT_CONFLICT_MESSAGE = "Une autre rencontre est déjà prévue sur ce créneau.";
 const LOCK_CONTENTION_MESSAGE = "Une autre action est en cours sur ce créneau, veuillez réessayer dans un instant.";
+const NO_CREDITS_MESSAGE = "Le solde de crédits du senior est épuisé. Veuillez acheter un nouveau pack pour continuer.";
+const FREE_FIRST_MEETING_MAX_MINUTES = 30;
+
+/**
+ * La toute première rencontre d'une relation est gratuite tant qu'elle ne
+ * dépasse pas 30 minutes prévues — au-delà, elle consomme un crédit comme
+ * n'importe quelle rencontre suivante. Seule la durée prévue à la création
+ * compte, pas une durée réelle mesurée après coup.
+ */
+function isFreeFirstMeeting(relationStatus: string, durationMinutes: number): boolean {
+  return relationStatus === "PENDING_FIRST_MEETING" && durationMinutes <= FREE_FIRST_MEETING_MAX_MINUTES;
+}
 
 /**
  * Crée la rencontre via createInterventionSafe (verrou + re-check du conflit
  * dans la transaction), pour fermer la fenêtre de course entre validateSlot()
  * et l'insertion : deux requêtes concurrentes sur le même jeune ne peuvent
  * plus toutes les deux passer la vérification.
+ *
+ * Vérifie aussi le solde de crédits du Senior avant création, sauf pour la
+ * première rencontre gratuite (cf isFreeFirstMeeting) — un seul point d'entrée
+ * pour ce contrôle, partagé par les trois chemins de création.
  */
 async function createInterventionOrConflict(
   juniorId: string,
+  seniorId: string,
+  relationStatus: string,
   data: { relationId: string; scheduledDate: Date; durationMinutes: number; location?: string; tasks?: string[] }
 ) {
+  if (!isFreeFirstMeeting(relationStatus, data.durationMinutes)) {
+    const balance = await storage.getCreditBalance(seniorId);
+    if (balance <= 0) {
+      return { noCredits: true as const };
+    }
+  }
   return storage.createInterventionSafe(juniorId, data, (tx) =>
     hasInterventionConflict(juniorId, data.scheduledDate, data.durationMinutes, tx)
   );
@@ -1093,13 +1117,16 @@ export async function registerRoutes(
         return res.status(400).json({ message: slotError });
       }
 
-      const result = await createInterventionOrConflict(relation.juniorId, {
+      const result = await createInterventionOrConflict(relation.juniorId, relation.seniorId, relation.status, {
         relationId: parsed.data.relationId,
         scheduledDate,
         durationMinutes: parsed.data.durationMinutes,
         location: parsed.data.location,
         tasks: parsed.data.tasks,
       });
+      if ("noCredits" in result) {
+        return res.status(402).json({ message: NO_CREDITS_MESSAGE, code: "INSUFFICIENT_CREDITS" });
+      }
       if ("conflict" in result) {
         return res.status(400).json({ message: SLOT_CONFLICT_MESSAGE });
       }
@@ -1186,7 +1213,12 @@ export async function registerRoutes(
         return res.status(400).json({ message: "L'intervention doit être confirmée avant d'être marquée comme réalisée" });
       }
 
-      const updated = await storage.updateIntervention(intervention.id, { status: "COMPLETED_PENDING_FEEDBACK" });
+      const updated = await storage.completeIntervention(
+        intervention.id,
+        intervention.relation.seniorId,
+        req.user!.id,
+        isFreeFirstMeeting(intervention.relation.status, intervention.durationMinutes),
+      );
 
       if (intervention.relation.status === "PENDING_FIRST_MEETING") {
         await storage.updateRelationStatus(intervention.relationId, "ACTIVE");
@@ -1776,11 +1808,28 @@ export async function registerRoutes(
       }
       const user = await storage.getUser(parsed.data.userId);
       if (!user) return res.status(404).json({ message: "Utilisateur non trouvé" });
+
+      let creditSeniorId: string | null = null;
+      if (parsed.data.credits) {
+        if (user.role === "SENIOR") {
+          creditSeniorId = user.id;
+        } else if (user.role === "REFERENT_SENIOR" && user.linkedSeniorId) {
+          creditSeniorId = user.linkedSeniorId;
+        } else {
+          return res.status(400).json({
+            message: "Impossible d'attribuer des crédits : cet utilisateur n'est ni un senior, ni un référent lié à un senior",
+          });
+        }
+      }
+
       const payment = await storage.createPayment({
         userId: parsed.data.userId,
         amount: parsed.data.amount,
         label: parsed.data.label,
         date: parsed.data.date ? new Date(parsed.data.date) : undefined,
+        credits: parsed.data.credits,
+        creditSeniorId,
+        triggeredById: req.user!.id,
       });
       res.status(201).json(payment);
     } catch (err) {
@@ -2570,13 +2619,16 @@ export async function registerRoutes(
         return res.status(400).json({ message: slotError });
       }
 
-      const result = await createInterventionOrConflict(relation.juniorId, {
+      const result = await createInterventionOrConflict(relation.juniorId, relation.seniorId, relation.status, {
         relationId: parsed.data.relationId,
         scheduledDate,
         durationMinutes: parsed.data.durationMinutes,
         location: parsed.data.location,
         tasks: parsed.data.tasks,
       });
+      if ("noCredits" in result) {
+        return res.status(402).json({ message: NO_CREDITS_MESSAGE, code: "INSUFFICIENT_CREDITS" });
+      }
       if ("conflict" in result) {
         return res.status(400).json({ message: SLOT_CONFLICT_MESSAGE });
       }
@@ -2600,6 +2652,27 @@ export async function registerRoutes(
     } catch (err) {
       console.error("[REFERENT_INTERVENTION] Error:", err);
       res.status(500).json({ message: "Erreur lors de la création de l'intervention" });
+    }
+  });
+
+  app.get("/api/credits/balance", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as any;
+      let seniorId: string;
+      if (user.role === "SENIOR") {
+        seniorId = user.id;
+      } else if (user.role === "REFERENT_SENIOR" && user.linkedSeniorId) {
+        seniorId = user.linkedSeniorId;
+      } else if (user.role === "ADMIN" && typeof req.query.seniorId === "string") {
+        seniorId = req.query.seniorId;
+      } else {
+        return res.status(400).json({ message: "Impossible de déterminer le solde de crédits pour cet utilisateur" });
+      }
+      const balance = await storage.getCreditBalance(seniorId);
+      res.json({ balance });
+    } catch (err) {
+      console.error("[CREDITS_BALANCE] Error:", err);
+      res.status(500).json({ message: "Erreur" });
     }
   });
 

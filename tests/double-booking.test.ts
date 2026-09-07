@@ -12,7 +12,7 @@
  * concurrentes : un test sequentiel ne prouverait rien.
  */
 import { describe, it, expect, beforeEach, afterAll } from "vitest";
-import { resetDatabase, createUser, loginAs, createRelation } from "./helpers";
+import { resetDatabase, createUser, loginAs, createRelation, crediterSenior } from "./helpers";
 import { prisma } from "../server/prisma";
 
 /** Creneau de test : 15 juin 2026, 14h00 UTC, 90 minutes. */
@@ -41,6 +41,8 @@ async function contexteDeuxSeniors() {
   const relationA = await createRelation(seniorA.id, junior.id);
   const relationB = await createRelation(seniorB.id, junior.id);
   await declarerDisponibilite(junior.id);
+  await crediterSenior(seniorA.id);
+  await crediterSenior(seniorB.id);
   return { junior, seniorA, seniorB, relationA, relationB };
 }
 
@@ -158,6 +160,7 @@ describe("Concurrence reelle sur le meme creneau", () => {
     const relations = await Promise.all(
       seniors.map((s) => createRelation(s.id, junior.id))
     );
+    await Promise.all(seniors.map((s) => crediterSenior(s.id)));
     const agents = await Promise.all(seniors.map((s) => loginAs(s)));
 
     const resultats = await Promise.all(
