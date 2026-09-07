@@ -54,7 +54,6 @@ export default function Register() {
       city: "",
       postalCode: "",
       bio: "",
-      desiredActivity: "",
       schoolName: "",
       referentTitle: "",
       referentFirstName: "",
@@ -360,19 +359,6 @@ export default function Register() {
                     </FormItem>
                   )}
                 />
-                <FormField
-                  control={form.control}
-                  name="desiredActivity"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Activité souhaitée</FormLabel>
-                      <FormControl>
-                        <Input placeholder="Quelle activité vous intéresse ?" {...field} data-testid="input-desiredActivity" />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
               </div>
 
               <div className="space-y-4">
@@ -388,7 +374,7 @@ export default function Register() {
 
               <div className="space-y-4">
                 <h3 className="text-base font-semibold" data-testid="text-section-categories">
-                  Catégories d'intérêt
+                  Je peux animer les ateliers suivant :
                 </h3>
                 {categoriesQuery.isLoading ? (
                   <div className="flex items-center gap-2 text-muted-foreground text-sm">
@@ -401,10 +387,11 @@ export default function Register() {
                     name="categoryIds"
                     render={({ field }) => (
                       <FormItem>
-                        <div className="grid grid-cols-2 gap-3">
+                        <div className="grid grid-cols-1 gap-3">
                           {(categoriesQuery.data ?? []).map((cat) => (
-                            <div key={cat.id} className="flex items-center gap-2">
+                            <div key={cat.id} className="flex items-start gap-2">
                               <Checkbox
+                                className="mt-0.5"
                                 checked={field.value?.includes(cat.id) ?? false}
                                 onCheckedChange={(checked) => {
                                   const current = field.value ?? [];

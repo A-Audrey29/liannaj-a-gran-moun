@@ -1,3 +1,5 @@
+import { PLATFORM_NAME } from "../../shared/branding";
+
 export async function sendEmail({
   to,
   subject,
@@ -8,8 +10,10 @@ export async function sendEmail({
   htmlContent: string;
 }) {
   const apiKey = process.env.BREVO_API_KEY;
-  const senderEmail = process.env.BREVO_SENDER_EMAIL || "noreply@feves.fr";
-  const senderName = process.env.BREVO_SENDER_NAME || "FEVES";
+  // Ces valeurs par défaut ne servent qu'en développement : server/env.ts
+  // impose que le trio BREVO_* soit fourni en entier ou pas du tout.
+  const senderEmail = process.env.BREVO_SENDER_EMAIL || "noreply@lyannaj.fr";
+  const senderName = process.env.BREVO_SENDER_NAME || PLATFORM_NAME;
 
   if (!apiKey) {
     console.warn("[BREVO] BREVO_API_KEY non configurée - email non envoyé:", {

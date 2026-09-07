@@ -1,10 +1,50 @@
-# Base de données — FEVES
+# Base de données — Lyannaj
 
 ## Technologie
 
 - **PostgreSQL** (version 14+)
 - **Prisma 7** comme ORM (schéma dans `prisma/schema.prisma`)
 - Le client Prisma est généré dans `generated/prisma/` — ne jamais modifier ce dossier
+- Les migrations versionnées vivent dans `prisma/migrations/` — **toujours committées**
+
+---
+
+## Règle : migrations, jamais `db push`
+
+`prisma db push` synchronise la base sur le schéma sans laisser de trace et
+**sans demander confirmation avant de supprimer une colonne**. Aucun historique,
+aucun rollback possible.
+
+Toute évolution de schéma passe donc par une migration versionnée :
+
+```bash
+# 1. Modifier prisma/schema.prisma
+
+# 2. Générer ET appliquer la migration (dev)
+npx prisma migrate dev --name description_du_changement
+
+# 3. Relire le SQL généré dans prisma/migrations/<timestamp>_<nom>/migration.sql
+#    et y ajouter le SQL de rollback en commentaire
+
+# 4. Committer le dossier de migration avec le changement de schéma
+```
+
+En production, seule cette commande est utilisée — elle applique les migrations
+en attente et ne fait rien d'autre :
+
+```bash
+npx prisma migrate deploy
+```
+
+### Migration réversible
+
+Chaque migration doit porter son SQL de rollback en commentaire de fin. Pour
+qu'un rollback reste possible sans perte :
+
+- Ajouter une colonne → toujours nullable, ou avec valeur par défaut
+- Renommer → ajouter la nouvelle, migrer les données, supprimer l'ancienne
+  dans une migration **ultérieure** (jamais dans la même)
+- Supprimer une colonne → vérifier d'abord qu'aucun code déployé ne la lit
 
 ---
 
@@ -14,20 +54,41 @@
 # Générer le client Prisma après modification du schéma
 npx prisma generate
 
-# Appliquer le schéma à la base de données (dev)
-npx prisma db push
+# Créer et appliquer une migration (dev)
+npx prisma migrate dev --name mon_changement
+
+# Appliquer les migrations en attente (prod, CI)
+npx prisma migrate deploy
+
+# Vérifier une dérive entre le schéma et la base
+npx prisma migrate diff --from-schema prisma/schema.prisma --to-config-datasource --script
 
 # Ouvrir l'interface visuelle de la base de données
 npx prisma studio
 
-# Peupler la base avec les données de test
+# Peupler la base avec des données de test (DEV UNIQUEMENT — vide toutes les tables)
 npx tsx prisma/seed.ts
-
-# Réinitialiser la base et re-seeder (attention : supprime toutes les données)
-npx prisma db push --force-reset && npx tsx prisma/seed.ts
 ```
 
-> En production sur Render, la commande de build inclut `prisma generate && prisma db push` pour appliquer les migrations automatiquement.
+> **Jamais en production** : `db push`, `--force-reset`, et `prisma/seed.ts`.
+> Le seed commence par vider toutes les tables. Pour créer le compte
+> administrateur initial en production, utiliser `prisma/create-admin.ts`,
+> qui est additif.
+
+---
+
+## Historique des migrations
+
+| Migration | Contenu |
+|---|---|
+| `20260824000000_init` | Baseline. Schéma complet à la mise en place des migrations, **marquée comme déjà appliquée** (`migrate resolve --applied`) sur la base existante qui contenait déjà des données. Inclut la table `session` de `connect-pg-simple`. |
+| `20260824000100_add_reminder_and_email_tracking` | `Intervention.reminderSentAt` (idempotence du rappel J-1), `Notification.emailSentAt` / `emailError` (traçabilité des envois Brevo). |
+
+> **Note sur la table `session`** : elle est créée par `connect-pg-simple` et
+> n'existe pas dans `schema.prisma` (aucun accès via le client Prisma). Une
+> comparaison schéma ↔ base la signalera donc toujours comme « manquante » :
+> c'est normal et sans conséquence. Elle est incluse dans la migration init
+> pour qu'une base neuve soit complète.
 
 ---
 

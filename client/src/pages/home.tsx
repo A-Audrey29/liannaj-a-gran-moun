@@ -16,15 +16,20 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Checkbox } from "@/components/ui/checkbox";
 import StatusBadge from "@/components/status-badge";
-import { Calendar, MessageCircle, Mail, User, LayoutGrid, ChevronRight, ChevronLeft, Plus, Check, X, Pencil, Heart, Camera, Trash2, AlertTriangle, Star, Users, ClipboardCheck, Eye, EyeOff, List, GalleryHorizontalEnd, MapPin, Lock, HelpCircle, Loader2 } from "lucide-react";
+import { Calendar, MessageCircle, Mail, User, LayoutGrid, ChevronRight, ChevronLeft, Plus, Check, X, Pencil, Heart, Camera, Trash2, AlertTriangle, Star, Users, ClipboardCheck, List, GalleryHorizontalEnd, MapPin, Lock, HelpCircle, Loader2, CalendarClock } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 import { updateProfileSchema, type UpdateProfileInput, changePasswordSchema, type ChangePasswordInput } from "@shared/schema";
-import type { Relation, User as UserType, Intervention } from "@shared/schema";
+import type { Relation, User as UserType, Intervention, Category } from "@shared/schema";
 import MessagesTab from "@/components/messages-tab";
+import MeetingHistory from "@/components/meeting-history";
+import DisponibilitesTab from "@/components/disponibilites-tab";
+import { MobileTabsMenu } from "@/components/mobile-tabs-menu";
 import { useSSE } from "@/hooks/use-sse";
 import { useUnreadMessageCount } from "@/hooks/use-unread-count";
 import { usePushNotifications } from "@/hooks/use-push";
+import { fmtTime, gpParts, MOIS_LONGS } from "@/lib/availability-format";
 
 type RelationWithUsers = Relation & { senior: UserType; junior: UserType; interventions?: Intervention[] };
 type MatchSuggestion = { user: UserType; commonCategories: string[]; isRecommended: boolean; isFavorite: boolean };
@@ -32,9 +37,10 @@ type MatchSuggestion = { user: UserType; commonCategories: string[]; isRecommend
 const ALL_TABS = [
   { id: "dashboard", label: "Tableau de bord", icon: LayoutGrid },
   { id: "rencontres", label: "Mes rencontres", icon: Calendar },
+  { id: "disponibilites", label: "Mes disponibilités", icon: CalendarClock },
   { id: "messages", label: "Messagerie", icon: Mail },
   { id: "demandes", label: "Trouver un profil", icon: MessageCircle },
-  { id: "profil", label: "Mon informations", icon: User },
+  { id: "profil", label: "Mes informations", icon: User },
   { id: "aide", label: "Aide", icon: HelpCircle },
 ] as const;
 
@@ -74,16 +80,17 @@ function useDashboardCounts(relations?: RelationWithUsers[], pendingFB?: Interve
 
 export default function Home() {
   const { user } = useAuth();
+  const [, setLocation] = useLocation();
   const [activeTab, setActiveTabState] = useState<string>("dashboard");
   const [openRelationId, setOpenRelationId] = useState<string | null>(null);
   const isNotAdmin = user?.role !== "ADMIN";
   const tabs = user?.role === "ADMIN"
-    ? ALL_TABS.filter((t) => t.id !== "profil" && t.id !== "messages" && t.id !== "aide")
+    ? ALL_TABS.filter((t) => t.id !== "profil" && t.id !== "messages" && t.id !== "aide" && t.id !== "disponibilites")
     : user?.role === "JUNIOR"
     ? ALL_TABS.filter((t) => t.id !== "aide").map((t) =>
         t.id === "demandes" ? { ...t, label: "Demandes reçues" } : t
       )
-    : ALL_TABS.filter((t) => t.id !== "aide");
+    : ALL_TABS.filter((t) => t.id !== "aide" && t.id !== "disponibilites");
   const { toast } = useToast();
 
   function setActiveTab(tab: string) {
@@ -126,7 +133,7 @@ export default function Home() {
 
   const urgentAlerts: { message: string; tab: string }[] = [];
   if (user?.role === "JUNIOR" && counts.proposedInterventions.length > 0) {
-    urgentAlerts.push({ message: `${counts.proposedInterventions.length} intervention${counts.proposedInterventions.length > 1 ? "s" : ""} à confirmer !`, tab: "rencontres" });
+    urgentAlerts.push({ message: `${counts.proposedInterventions.length} rencontre${counts.proposedInterventions.length > 1 ? "s" : ""} à confirmer !`, tab: "rencontres" });
   }
   if (counts.feedbackCount > 0) {
     urgentAlerts.push({ message: `${counts.feedbackCount} feedback${counts.feedbackCount > 1 ? "s" : ""} à donner`, tab: "rencontres" });
@@ -167,7 +174,28 @@ export default function Home() {
         )}
       </div>
 
-      <div className="flex flex-wrap gap-2 mb-8">
+      {user?.role === "SENIOR" && relLoading && (
+        <Skeleton className="w-full mb-6 rounded-2xl h-14" data-testid="skeleton-proposer-rencontre-permanent" />
+      )}
+      {user?.role === "SENIOR" && !relLoading && counts.activeRelations.length > 0 && (
+        <Button
+          className="w-full mb-6 rounded-2xl h-14 text-base font-semibold bg-[#dc4256] hover:bg-[#c73848] text-white shadow-sm"
+          onClick={() => {
+            if (counts.activeRelations.length === 1) {
+              setLocation(`/relations/${counts.activeRelations[0].id}`);
+            } else {
+              setActiveTab("rencontres");
+            }
+          }}
+          data-testid="button-proposer-rencontre-permanent"
+        >
+          <Calendar className="w-5 h-5 mr-2" /> Proposer une rencontre
+        </Button>
+      )}
+
+      <MobileTabsMenu tabs={tabs} activeTab={activeTab} onSelect={setActiveTab} getBadgeCount={getTabBadge} />
+
+      <div className="hidden md:flex flex-wrap gap-2 mb-8">
         {tabs.map((tab) => {
           const isActive = activeTab === tab.id;
           const Icon = tab.icon;
@@ -195,6 +223,7 @@ export default function Home() {
 
       {activeTab === "dashboard" && <DashboardTab counts={counts} isLoading={relLoading} user={user} onSwitchTab={setActiveTab} />}
       {activeTab === "rencontres" && <RencontresTab relations={relations} isLoading={relLoading} user={user} onOpenMessage={(relationId) => { setOpenRelationId(relationId); setActiveTab("messages"); }} />}
+      {activeTab === "disponibilites" && user?.role === "JUNIOR" && <DisponibilitesTab />}
       {activeTab === "messages" && <MessagesTab user={user} openRelationId={openRelationId} />}
       {activeTab === "demandes" && <DemandesTab relations={relations} isLoading={relLoading} user={user} />}
       {activeTab === "profil" && <ProfilTab user={user} />}
@@ -234,7 +263,11 @@ function DashboardTab({ counts, isLoading, user, onSwitchTab }: { counts: Dashbo
   }
 
   const nextDate = counts.nextIntervention
-    ? new Date(counts.nextIntervention.scheduledDate).toLocaleDateString("fr-FR", { day: "numeric", month: "long" })
+    ? (() => {
+        const d = new Date(counts.nextIntervention.scheduledDate);
+        const p = gpParts(d);
+        return `${p.d} ${MOIS_LONGS[p.mo]} à ${fmtTime(d)}`;
+      })()
     : null;
   const nextPartner = counts.nextIntervention?.partnerName || null;
   const nextLocation = counts.nextIntervention?.location || null;
@@ -256,6 +289,16 @@ function DashboardTab({ counts, isLoading, user, onSwitchTab }: { counts: Dashbo
       : `${counts.proposedInterventions.length} propositions`
     : "Aucune";
 
+  const relationRequests = counts.pendingDemandes.length;
+  const meetingRequests = counts.proposedInterventions.length;
+  const juniorRequests = relationRequests + meetingRequests;
+  const juniorRequestsDetail = juniorRequests === 0
+    ? "Aucune"
+    : [
+        relationRequests > 0 ? `${relationRequests} relation${relationRequests > 1 ? "s" : ""}` : null,
+        meetingRequests > 0 ? `${meetingRequests} rencontre${meetingRequests > 1 ? "s" : ""}` : null,
+      ].filter(Boolean).join(" · ");
+
   const activePartners = counts.activeRelations.slice(0, 2).map((r) => {
     const partner = r.seniorId === user?.id ? r.junior : r.senior;
     return partner.firstName;
@@ -272,11 +315,11 @@ function DashboardTab({ counts, isLoading, user, onSwitchTab }: { counts: Dashbo
           <>
             <DashboardCard
               icon={MessageCircle}
-              count={counts.pendingDemandes.length}
+              count={juniorRequests}
               label="Demandes reçues"
-              detail={counts.pendingDemandes.length > 0 ? `${counts.pendingDemandes.length} en attente` : "Aucune"}
-              onClick={() => onSwitchTab("demandes")}
-              highlight={counts.pendingDemandes.length > 0 ? "orange" : undefined}
+              detail={juniorRequestsDetail}
+              onClick={() => onSwitchTab(relationRequests > 0 ? "demandes" : meetingRequests > 0 ? "rencontres" : "demandes")}
+              highlight={juniorRequests > 0 ? "orange" : undefined}
               testId="card-demandes-recues"
             />
             <DashboardCard
@@ -336,7 +379,6 @@ function DashboardTab({ counts, isLoading, user, onSwitchTab }: { counts: Dashbo
 
 function RencontresTab({ relations, isLoading, user, onOpenMessage }: { relations?: RelationWithUsers[]; isLoading: boolean; user: any; onOpenMessage: (relationId: string) => void }) {
   const [, setLocation] = useLocation();
-  const [collapsedIds, setCollapsedIds] = useState<Set<string>>(new Set());
   const { toast } = useToast();
 
   const confirmMutation = useMutation({
@@ -345,6 +387,7 @@ function RencontresTab({ relations, isLoading, user, onOpenMessage }: { relation
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/relations"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/meetings/history"] });
       toast({ title: "Rencontre confirmée !", description: "Le sénior et l'équipe FEVES ont été notifiés." });
     },
     onError: () => toast({ title: "Erreur", description: "Impossible de confirmer la rencontre.", variant: "destructive" }),
@@ -367,13 +410,12 @@ function RencontresTab({ relations, isLoading, user, onOpenMessage }: { relation
   }
 
   return (
-    <div className="space-y-3">
-      {activeRelations.map((rel) => {
-        const partner = rel.seniorId === user?.id ? rel.junior : rel.senior;
-        const isExpanded = !collapsedIds.has(rel.id);
-        const interventions = (rel.interventions || []).sort((a, b) => new Date(b.scheduledDate).getTime() - new Date(a.scheduledDate).getTime());
+    <div className="space-y-6">
+      <div className="space-y-3">
+        {activeRelations.map((rel) => {
+          const partner = rel.seniorId === user?.id ? rel.junior : rel.senior;
 
-        return (
+          return (
           <Card key={rel.id} className="rounded-2xl border-0 shadow-sm overflow-hidden" data-testid={`card-relation-${rel.id}`}>
             <CardContent className="p-0">
               <div
@@ -411,108 +453,39 @@ function RencontresTab({ relations, isLoading, user, onOpenMessage }: { relation
                 </div>
               </div>
 
-              {interventions.length === 0 && (
-                <div className="border-t px-4 py-3">
-                  <p className="text-xs text-muted-foreground text-center">Aucune rencontre planifiée</p>
-                </div>
-              )}
-
-              {interventions.length > 0 && (
-                <div>
-                  <div className="border-t" />
-                  <div className="pt-3 pb-4 pr-4" style={{ marginLeft: "10%" }}>
-                    <div className="border-l-2 border-primary/20 pl-4">
-                      <div className="flex items-center justify-between mb-3">
-                        <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Historique des rencontres</h4>
-                        <Button
-                          variant={isExpanded ? "outline" : "default"}
-                          size="sm"
-                          className="rounded-full text-xs gap-1.5"
-                          aria-expanded={isExpanded}
-                          onClick={() => {
-                            setCollapsedIds((prev) => {
-                              const next = new Set(prev);
-                              if (next.has(rel.id)) {
-                                next.delete(rel.id);
-                              } else {
-                                next.add(rel.id);
-                              }
-                              return next;
-                            });
-                          }}
-                          data-testid={`toggle-history-${rel.id}`}
-                        >
-                          {isExpanded ? (
-                            <><EyeOff className="w-3.5 h-3.5" /> Masquer l'historique</>
-                          ) : (
-                            <><Eye className="w-3.5 h-3.5" /> Voir l'historique ({interventions.length})</>
-                          )}
-                        </Button>
-                      </div>
-
-                      {isExpanded && (
-                        <div className="space-y-3">
-                          {interventions.map((interv) => {
-                            const isJunior = user?.role === "JUNIOR";
-                            const isProposed = interv.status === "PROPOSED";
-                            const tasks: string[] = interv.tasks || [];
-                            return (
-                              <div
-                                key={interv.id}
-                                className={`py-3 px-3 rounded-xl text-sm ${isProposed && isJunior ? "bg-orange-50 border border-orange-200" : "bg-muted/30"}`}
-                                data-testid={`intervention-${interv.id}`}
-                              >
-                                <div className="flex items-start justify-between gap-2">
-                                  <div className="flex-1 min-w-0">
-                                    <p className="font-semibold text-xs">
-                                      {new Date(interv.scheduledDate).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })}
-                                    </p>
-                                    <p className="text-[11px] text-muted-foreground mt-0.5">
-                                      {interv.durationMinutes} min{interv.location ? ` · 📍 ${interv.location}` : ""}
-                                    </p>
-                                    {tasks.length > 0 && (
-                                      <div className="mt-1.5">
-                                        <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-1">Activités prévues</p>
-                                        <div className="flex flex-wrap gap-1">
-                                          {tasks.map((task, i) => (
-                                            <span key={i} className="inline-block bg-primary/10 text-primary text-[10px] px-2 py-0.5 rounded-full">
-                                              {task}
-                                            </span>
-                                          ))}
-                                        </div>
-                                      </div>
-                                    )}
-                                  </div>
-                                  <StatusBadge status={interv.status} />
-                                </div>
-                                {isProposed && isJunior && (
-                                  <div className="mt-3 pt-2 border-t border-orange-200">
-                                    <p className="text-[11px] text-orange-700 mb-2">Cette rencontre attend votre confirmation.</p>
-                                    <Button
-                                      size="sm"
-                                      className="w-full bg-[#dc4256] hover:bg-[#c73848] text-white text-xs"
-                                      onClick={() => confirmMutation.mutate(interv.id)}
-                                      disabled={confirmMutation.isPending}
-                                      data-testid={`button-confirm-intervention-${interv.id}`}
-                                    >
-                                      <Check className="w-3.5 h-3.5 mr-1.5" />
-                                      {confirmMutation.isPending ? "Confirmation..." : "Confirmer la rencontre"}
-                                    </Button>
-                                  </div>
-                                )}
-                              </div>
-                            );
-                          })}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              )}
             </CardContent>
           </Card>
-        );
-      })}
+          );
+        })}
+      </div>
+
+      <div>
+        <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3">
+          Historique des rencontres
+        </h3>
+        <MeetingHistory
+          scope={{ kind: "me" }}
+          viewerRole={user?.role}
+          emptyLabel="Aucune rencontre pour le moment."
+          renderActions={(entry) =>
+            entry.status === "PROPOSED" && user?.role === "JUNIOR" ? (
+              <div>
+                <p className="text-[11px] text-orange-700 mb-2">Cette rencontre attend votre confirmation.</p>
+                <Button
+                  size="sm"
+                  className="w-full bg-[#dc4256] hover:bg-[#c73848] text-white text-xs"
+                  onClick={() => confirmMutation.mutate(entry.id)}
+                  disabled={confirmMutation.isPending}
+                  data-testid={`button-confirm-intervention-${entry.id}`}
+                >
+                  <Check className="w-3.5 h-3.5 mr-1.5" />
+                  {confirmMutation.isPending ? "Confirmation..." : "Confirmer la rencontre"}
+                </Button>
+              </div>
+            ) : null
+          }
+        />
+      </div>
     </div>
   );
 }
@@ -1027,6 +1000,18 @@ function ProfilTab({ user }: { user: AuthUser | null }) {
   const { toast } = useToast();
   const [editOpen, setEditOpen] = useState(false);
 
+  const categoriesQuery = useQuery<Category[]>({
+    queryKey: ["/api/categories"],
+    enabled: !!user,
+  });
+  const myCategoriesQuery = useQuery<{ categoryIds: string[] }>({
+    queryKey: ["/api/auth/me/categories"],
+    enabled: !!user,
+  });
+  const selectedCategories = (categoriesQuery.data ?? []).filter((cat) =>
+    (myCategoriesQuery.data?.categoryIds ?? []).includes(cat.id)
+  );
+
   const handleLogout = async () => {
     try {
       await apiRequest("POST", "/api/auth/logout");
@@ -1075,8 +1060,25 @@ function ProfilTab({ user }: { user: AuthUser | null }) {
           <SectionTitle>Profil</SectionTitle>
           <div className="space-y-1 text-sm">
             <ProfileField label="Bio" value={user.bio} />
-            <ProfileField label="Activite souhaitee" value={user.desiredActivity} />
           </div>
+          {user.role === "JUNIOR" && (
+            <div className="mt-4">
+              <div className="text-xs text-muted-foreground uppercase tracking-wide mb-2">
+                Ateliers que je peux animer
+              </div>
+              {selectedCategories.length > 0 ? (
+                <div className="flex flex-wrap gap-2">
+                  {selectedCategories.map((cat) => (
+                    <Badge key={cat.id} variant="secondary" data-testid={`badge-category-${cat.id}`}>
+                      {cat.name}
+                    </Badge>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">Aucun atelier sélectionné.</p>
+              )}
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -1218,6 +1220,38 @@ function ChangePasswordSection() {
 function EditProfileDialog({ user, open, onOpenChange }: { user: AuthUser; open: boolean; onOpenChange: (v: boolean) => void }) {
   const { toast } = useToast();
 
+  const categoriesQuery = useQuery<Category[]>({
+    queryKey: ["/api/categories"],
+    enabled: open,
+  });
+  const myCategoriesQuery = useQuery<{ categoryIds: string[] }>({
+    queryKey: ["/api/auth/me/categories"],
+    enabled: open,
+  });
+  const [selectedCategoryIds, setSelectedCategoryIds] = useState<string[]>([]);
+
+  useEffect(() => {
+    if (myCategoriesQuery.data) {
+      setSelectedCategoryIds(myCategoriesQuery.data.categoryIds);
+    }
+  }, [myCategoriesQuery.data]);
+
+  function toggleCategory(categoryId: string) {
+    setSelectedCategoryIds((prev) =>
+      prev.includes(categoryId) ? prev.filter((id) => id !== categoryId) : [...prev, categoryId]
+    );
+  }
+
+  const updateCategoriesMutation = useMutation({
+    mutationFn: async (categoryIds: string[]) => {
+      const res = await apiRequest("PATCH", "/api/auth/me/categories", { categoryIds });
+      return await res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/auth/me/categories"] });
+    },
+  });
+
   const form = useForm<UpdateProfileInput>({
     resolver: zodResolver(updateProfileSchema),
     defaultValues: {
@@ -1228,7 +1262,6 @@ function EditProfileDialog({ user, open, onOpenChange }: { user: AuthUser; open:
       city: user.city || "",
       postalCode: user.postalCode || "",
       bio: user.bio || "",
-      desiredActivity: user.desiredActivity || "",
       trustedPersonName: user.trustedPersonName || "",
       trustedPersonEmail: user.trustedPersonEmail || "",
       schoolName: user.schoolName || "",
@@ -1241,7 +1274,8 @@ function EditProfileDialog({ user, open, onOpenChange }: { user: AuthUser; open:
   const updateMutation = useMutation({
     mutationFn: async (data: UpdateProfileInput) => {
       const res = await apiRequest("PATCH", "/api/auth/me", data);
-      return await res.json();
+      await res.json();
+      await updateCategoriesMutation.mutateAsync(selectedCategoryIds);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
@@ -1335,13 +1369,26 @@ function EditProfileDialog({ user, open, onOpenChange }: { user: AuthUser; open:
                     <FormMessage />
                   </FormItem>
                 )} />
-                <FormField control={form.control} name="desiredActivity" render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Activite souhaitee</FormLabel>
-                    <FormControl><Input {...field} placeholder="Ex: Jardinage, Lecture..." data-testid="input-edit-desiredActivity" /></FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )} />
+                {user.role === "JUNIOR" && (
+                  <div>
+                    <Label>Ateliers que je peux animer</Label>
+                    <div className="grid grid-cols-1 gap-3 mt-2">
+                      {(categoriesQuery.data ?? []).map((cat) => (
+                        <div key={cat.id} className="flex items-start gap-2">
+                          <Checkbox
+                            className="mt-0.5"
+                            checked={selectedCategoryIds.includes(cat.id)}
+                            onCheckedChange={() => toggleCategory(cat.id)}
+                            data-testid={`checkbox-edit-category-${cat.id}`}
+                          />
+                          <label className="text-sm" data-testid={`text-edit-category-${cat.id}`}>
+                            {cat.name}
+                          </label>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
 

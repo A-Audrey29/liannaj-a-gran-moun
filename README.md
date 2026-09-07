@@ -1,8 +1,12 @@
-# FEVES — liannaj a gran moun
+# Lyannaj — lyannaj a gran moun
 
 Application web de mise en relation entre **seniors** et **jeunes** pour des activités sociales en Guadeloupe.
 
-> "liannaj a gran moun" signifie "lien avec les personnes âgées" en créole guadeloupéen.
+> "lyannaj a gran moun" signifie "lien avec les personnes âgées" en créole guadeloupéen.
+
+Lyannaj est la plateforme ; **FEVES** est l'association qui la porte. Les deux
+noms sont centralisés dans [shared/branding.ts](shared/branding.ts) — ne jamais
+les écrire en dur.
 
 ---
 
@@ -85,6 +89,41 @@ client/src/
 uploads/             # Photos de profil (NON servi publiquement — via /api/photos/:filename)
 docs/                # Documentation technique détaillée
 ```
+
+---
+
+## Tests
+
+```bash
+npm test          # suite complète
+npm run test:watch
+npm test -- tests/permissions.test.ts   # un seul fichier
+```
+
+Tests d'intégration sur une vraie base PostgreSQL : ils montent l'application
+Express en mémoire (supertest) et exercent les routes avec de vraies sessions.
+
+**Prérequis** : un PostgreSQL local et une base `lyannaj_test`.
+
+```bash
+createdb lyannaj_test
+```
+
+Le schéma est appliqué automatiquement via `prisma migrate deploy` avant la
+suite — ce qui vérifie au passage que les migrations reconstruisent bien une
+base complète depuis zéro.
+
+Pour cibler une autre base, définir `TEST_DATABASE_URL`. Par sécurité, les
+tests **refusent de démarrer** si la base n'est pas locale ou si son nom ne
+finit pas par `_test` : ils effacent des tables entre chaque test.
+
+| Fichier | Couverture |
+|---|---|
+| `tests/permissions.test.ts` | Cloisonnement des 5 rôles, isolation horizontale |
+| `tests/feedback-visibility.test.ts` | Un jeune et un sénior ne voient que leur propre avis |
+| `tests/double-booking.test.ts` | Verrou anti-double-réservation, y compris en concurrence réelle |
+| `tests/auth.test.ts` | Statuts de compte, énumération, session, déconnexion |
+| `tests/uploads.test.ts` | Magic bytes, traversée de répertoire, accès aux photos |
 
 ---
 

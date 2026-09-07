@@ -2,6 +2,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { useLocation } from "wouter";
 import { getPhotoUrl } from "@/lib/photo-url";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -16,9 +17,13 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { referentInterventionSchema, referentContactSchema, type ReferentInterventionInput, type ReferentContactInput } from "@shared/schema";
 import type { User as UserType, Relation, Intervention } from "@shared/schema";
+import { ATELIERS } from "@shared/ateliers";
 import { LayoutGrid, Calendar, Plus, Mail, User, CheckCircle, Clock, Loader2, ChevronRight } from "lucide-react";
 import { useState } from "react";
 import { useSSE } from "@/hooks/use-sse";
+import { MobileTabsMenu } from "@/components/mobile-tabs-menu";
+import MeetingHistory from "@/components/meeting-history";
+import { fmtTime, fmtDayLongMonthYear } from "@/lib/availability-format";
 
 type RelationWithUsers = Relation & { senior: UserType; junior: UserType; interventions?: Intervention[] };
 
@@ -56,8 +61,10 @@ const INTERVENTION_STATUS_COLORS: Record<string, string> = {
   COMPLETED: "bg-green-100 text-green-800",
 };
 
+/** Rencontres : wall-clock Guadeloupe, jamais la timezone du navigateur. */
 function formatDate(d: string | Date) {
-  return new Date(d).toLocaleDateString("fr-FR", { day: "2-digit", month: "long", year: "numeric" });
+  const date = new Date(d);
+  return `${fmtDayLongMonthYear(date)} à ${fmtTime(date)}`;
 }
 
 const TABS = [
@@ -160,22 +167,30 @@ function DashboardTab({ senior, relations }: { senior: UserType | null; relation
 // ==================== SUIVI TAB ====================
 
 function SuiviTab({ relations }: { relations: RelationWithUsers[] }) {
+  const [, setLocation] = useLocation();
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
   if (relations.length === 0) {
     return (
-      <div className="text-center py-12 text-muted-foreground">
-        <Calendar className="w-10 h-10 mx-auto mb-3 opacity-30" />
-        <p>Aucune relation pour ce sénior.</p>
+      <div className="space-y-6">
+        <div className="text-center py-12 text-muted-foreground">
+          <Calendar className="w-10 h-10 mx-auto mb-3 opacity-30" />
+          <p>Aucune relation pour ce sénior.</p>
+        </div>
+        <MeetingHistory
+          scope={{ kind: "me" }}
+          viewerRole="REFERENT_SENIOR"
+          emptyLabel="Aucune rencontre pour le moment."
+        />
       </div>
     );
   }
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-6">
+      <div className="space-y-3">
       {relations.map((r) => {
         const isExpanded = expandedId === r.id;
-        const interventions = r.interventions || [];
         return (
           <Card key={r.id} data-testid={`card-relation-${r.id}`}>
             <CardContent className="pt-5">
@@ -193,7 +208,7 @@ function SuiviTab({ relations }: { relations: RelationWithUsers[] }) {
                     />
                     <div>
                       <p className="font-medium">{r.junior.firstName} {r.junior.lastName}</p>
-                      <p className="text-xs text-muted-foreground">{interventions.length} intervention{interventions.length > 1 ? "s" : ""}</p>
+                      <p className="text-xs text-muted-foreground">{(r.interventions || []).length} intervention{(r.interventions || []).length > 1 ? "s" : ""}</p>
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
@@ -207,40 +222,44 @@ function SuiviTab({ relations }: { relations: RelationWithUsers[] }) {
 
               {isExpanded && (
                 <div className="mt-4 pt-4 border-t space-y-2">
-                  {interventions.length === 0 ? (
-                    <p className="text-sm text-muted-foreground text-center py-2">Aucune intervention planifiée</p>
-                  ) : (
-                    interventions.map((i) => (
-                      <div key={i.id} className="flex items-start justify-between p-3 rounded-lg bg-muted/40" data-testid={`intervention-${i.id}`}>
-                        <div>
-                          <p className="text-sm font-medium">{formatDate(i.scheduledDate)}</p>
-                          {i.location && <p className="text-xs text-muted-foreground">{i.location}</p>}
-                          {i.tasks && i.tasks.length > 0 && (
-                            <p className="text-xs text-muted-foreground">{i.tasks.join(", ")}</p>
-                          )}
-                        </div>
-                        <Badge className={`text-xs ml-2 shrink-0 ${INTERVENTION_STATUS_COLORS[i.status] || ""}`}>
-                          {INTERVENTION_STATUS_LABELS[i.status] || i.status}
-                        </Badge>
-                      </div>
-                    ))
+                  {r.status === "ACTIVE" && (
+                    <Button
+                      size="sm"
+                      className="w-full rounded-full text-xs bg-[#8b5cf6] hover:bg-[#7c3aed] text-white mb-2"
+                      onClick={() => setLocation(`/relations/${r.id}`)}
+                      data-testid={`button-proposer-rencontre-${r.id}`}
+                    >
+                      Proposer une rencontre à {r.junior.firstName}
+                    </Button>
                   )}
+                  <p className="text-xs text-muted-foreground text-center py-1">
+                    Le détail des rencontres est dans l'historique ci-dessous.
+                  </p>
                 </div>
               )}
             </CardContent>
           </Card>
         );
       })}
+      </div>
+
+      <div>
+        <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3">
+          Historique des rencontres
+        </h3>
+        <MeetingHistory
+          scope={{ kind: "me" }}
+          viewerRole="REFERENT_SENIOR"
+          emptyLabel="Aucune rencontre pour le moment."
+        />
+      </div>
     </div>
   );
 }
 
 // ==================== DEMANDER PRESTATION TAB ====================
 
-const TASK_OPTIONS = [
-  "Jardinage", "Bricolage", "Informatique", "Cuisine",
-  "Lecture", "Promenade", "Courses", "Démarches administratives",
-];
+const TASK_OPTIONS = ATELIERS;
 
 function PrestationTab({ relations }: { relations: RelationWithUsers[] }) {
   const { toast } = useToast();
@@ -543,6 +562,7 @@ function ProfilTab() {
 
 export default function ReferentHome() {
   const { user } = useAuth();
+  const [, setLocation] = useLocation();
   const [activeTab, setActiveTab] = useState<TabId>("dashboard");
   const { toast } = useToast();
 
@@ -562,6 +582,7 @@ export default function ReferentHome() {
   if (!user) return null;
 
   const isLoading = seniorLoading || relLoading;
+  const activeRelations = relations.filter((r) => r.status === "ACTIVE");
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-8">
@@ -575,7 +596,28 @@ export default function ReferentHome() {
         <Badge className="bg-violet-100 text-violet-800">Référent</Badge>
       </div>
 
-      <div className="flex flex-wrap gap-2 mb-8">
+      {isLoading && (
+        <Skeleton className="w-full mb-6 rounded-2xl h-14" data-testid="skeleton-proposer-rencontre-permanent" />
+      )}
+      {!isLoading && activeRelations.length > 0 && (
+        <Button
+          className="w-full mb-6 rounded-2xl h-14 text-base font-semibold bg-[#8b5cf6] hover:bg-[#7c3aed] text-white shadow-sm"
+          onClick={() => {
+            if (activeRelations.length === 1) {
+              setLocation(`/relations/${activeRelations[0].id}`);
+            } else {
+              setActiveTab("suivi");
+            }
+          }}
+          data-testid="button-proposer-rencontre-permanent"
+        >
+          <Calendar className="w-5 h-5 mr-2" /> Proposer une rencontre
+        </Button>
+      )}
+
+      <MobileTabsMenu tabs={TABS} activeTab={activeTab} onSelect={(id) => setActiveTab(id as TabId)} accentClassName="bg-[#8b5cf6] text-white" />
+
+      <div className="hidden md:flex flex-wrap gap-2 mb-8">
         {TABS.map((tab) => {
           const isActive = activeTab === tab.id;
           const Icon = tab.icon;

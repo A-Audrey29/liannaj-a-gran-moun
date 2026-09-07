@@ -6,6 +6,7 @@ export type UserStatus = "PENDING_VALIDATION" | "ACTIVE" | "SUSPENDED" | "BANNED
 export type RelationStatus = "PENDING" | "PENDING_FIRST_MEETING" | "ACTIVE" | "PAUSED" | "CLOSED";
 export type InterventionStatus = "PROPOSED" | "CONFIRMED" | "CANCELLED" | "DONE" | "COMPLETED_PENDING_FEEDBACK" | "COMPLETED";
 export type NotificationType = "RELATION_REQUEST" | "INTERVENTION_PROPOSED" | "INTERVENTION_CONFIRMED" | "FEEDBACK_REMINDER" | "NEW_MESSAGE" | "SYSTEM";
+export type AvailabilityKind = "AVAILABLE" | "UNAVAILABLE";
 
 export interface User {
   id: string;
@@ -72,6 +73,15 @@ export interface Intervention {
   juniorRating: number | null;
   juniorComment: string | null;
   feedbackReminderSentAt: Date | null;
+  createdAt: Date;
+}
+
+export interface Availability {
+  id: string;
+  userId: string;
+  startAt: Date;
+  endAt: Date;
+  kind: AvailabilityKind;
   createdAt: Date;
 }
 
@@ -231,9 +241,24 @@ export const insertUserSchema = insertUserBaseSchema.refine(
   { message: "Le validateur Junior doit utiliser un email professionnel ou institutionnel", path: ["validatorEmail"] }
 );
 
+/**
+ * Datetime ISO complet, heure obligatoire.
+ *
+ * Une date seule ("2026-08-17") était jusqu'ici acceptée et interprétée à
+ * minuit — inexploitable dès lors qu'on contraint la proposition aux plages
+ * horaires déclarées par le jeune.
+ */
+const isoDateTime = z
+  .string()
+  .regex(
+    /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/,
+    "Date et heure requises (format ISO, ex. 2026-08-17T14:00)",
+  )
+  .refine((v) => !Number.isNaN(new Date(v).getTime()), "Date invalide");
+
 export const insertInterventionSchema = z.object({
   relationId: z.string().min(1),
-  scheduledDate: z.string().min(1),
+  scheduledDate: isoDateTime,
   durationMinutes: z.number().min(30).max(480).default(120),
   location: z.string().optional(),
   tasks: z.array(z.string()).default([]),
@@ -244,9 +269,67 @@ export const feedbackSchema = z.object({
   comment: z.string().max(1000).optional(),
 });
 
+export const createAvailabilitySchema = z
+  .object({
+    startAt: z.string().min(1),
+    endAt: z.string().min(1),
+    kind: z.enum(["AVAILABLE", "UNAVAILABLE"]).default("AVAILABLE"),
+  })
+  .refine((data) => new Date(data.endAt) > new Date(data.startAt), {
+    message: "endAt doit être après startAt",
+    path: ["endAt"],
+  });
+
+const timeHHMM = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Format attendu HH:MM");
+const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Format attendu YYYY-MM-DD");
+
+export const createDateExceptionSchema = z
+  .object({
+    date: isoDate,
+    kind: z.enum(["AVAILABLE", "UNAVAILABLE"]),
+    startTime: timeHHMM.optional(),
+    endTime: timeHHMM.optional(),
+  })
+  .refine(
+    (data) => (data.startTime === undefined) === (data.endTime === undefined),
+    { message: "startTime et endTime doivent être fournis ensemble ou omis tous les deux", path: ["endTime"] }
+  );
+
+export const recurringSlotSchema = z.object({
+  dayOfWeek: z.number().min(0).max(6),
+  startTime: timeHHMM,
+  endTime: timeHHMM,
+});
+
+const MAX_RECURRING_RANGE_DAYS = 90;
+
+export const createRecurringAvailabilitiesSchema = z
+  .object({
+    from: isoDate,
+    to: isoDate,
+    slots: z.array(recurringSlotSchema).min(1),
+  })
+  .refine((data) => data.to >= data.from, {
+    message: "to doit être après from",
+    path: ["to"],
+  })
+  .refine(
+    (data) => {
+      const days = (new Date(data.to).getTime() - new Date(data.from).getTime()) / 86_400_000;
+      return days <= MAX_RECURRING_RANGE_DAYS;
+    },
+    { message: `Plage limitée à ${MAX_RECURRING_RANGE_DAYS} jours`, path: ["to"] }
+  );
+
 export const createRelationSchema = z.object({
   juniorId: z.string().min(1, "ID du Junior requis"),
 });
+
+export const updateUserCategoriesSchema = z.object({
+  categoryIds: z.array(z.string()),
+});
+
+export type UpdateUserCategoriesInput = z.infer<typeof updateUserCategoriesSchema>;
 
 export const updateProfileSchema = z.object({
   firstName: z.string().min(1, "Prénom requis").optional(),
@@ -307,7 +390,7 @@ export const createReferentSchema = z.object({
 
 export const referentInterventionSchema = z.object({
   relationId: z.string().min(1, "Relation requise"),
-  scheduledDate: z.string().min(1, "Date requise"),
+  scheduledDate: isoDateTime,
   durationMinutes: z.number().min(30).max(480).default(120),
   location: z.string().optional(),
   tasks: z.array(z.string()).default([]),
@@ -321,6 +404,77 @@ export const referentContactSchema = z.object({
 export type CreateReferentInput = z.infer<typeof createReferentSchema>;
 export type ReferentInterventionInput = z.infer<typeof referentInterventionSchema>;
 export type ReferentContactInput = z.infer<typeof referentContactSchema>;
+
+/**
+ * Historique des rencontres, partagé par toutes les interfaces.
+ *
+ * Le périmètre (quelles rencontres) ET la visibilité des feedbacks sont décidés
+ * serveur à partir du rôle de l'appelant. Un feedback à `null` peut donc
+ * signifier « non renseigné » ou « pas le droit de le lire » : le client ne fait
+ * pas la différence, et c'est voulu — la réponse JSON ne transporte jamais un
+ * commentaire que le viewer n'a pas le droit de voir.
+ */
+export interface MeetingHistoryEntry {
+  id: string;
+  relationId: string;
+  scheduledDate: string; // ISO
+  durationMinutes: number;
+  location: string | null;
+  tasks: string[]; // = services / ateliers
+  status: InterventionStatus;
+  seniorId: string;
+  juniorId: string;
+  seniorName: string;
+  juniorName: string;
+  seniorRating: number | null;
+  seniorComment: string | null;
+  juniorRating: number | null;
+  juniorComment: string | null;
+}
+
+/**
+ * Agrégats calculés sur les seules rencontres effectivement réalisées
+ * (COMPLETED et COMPLETED_PENDING_FEEDBACK) : une rencontre annulée ou encore
+ * au stade de proposition ne représente aucune heure passée.
+ *
+ * ⚠️ `byService` : une rencontre porte plusieurs ateliers, et sa durée est
+ * comptée entière pour chacun. La somme des `minutes` de byService peut donc
+ * dépasser `totalMinutes` — ce sont des heures par service, pas une partition.
+ */
+export interface MeetingHistorySummary {
+  totalMeetings: number;
+  totalMinutes: number;
+  byService: { service: string; count: number; minutes: number }[];
+}
+
+export interface MeetingHistoryResponse {
+  entries: MeetingHistoryEntry[]; // triées par scheduledDate DESC
+  summary: MeetingHistorySummary;
+}
+
+export const INTERVENTION_STATUSES = [
+  "PROPOSED",
+  "CONFIRMED",
+  "CANCELLED",
+  "DONE",
+  "COMPLETED_PENDING_FEEDBACK",
+  "COMPLETED",
+] as const;
+
+/** Statuts comptabilisés dans le récap heures/services. */
+export const COMPLETED_STATUSES: InterventionStatus[] = ["COMPLETED", "COMPLETED_PENDING_FEEDBACK"];
+
+export const meetingHistoryQuerySchema = z.object({
+  userId: z.string().min(1).optional(),
+  status: z
+    .union([z.enum(INTERVENTION_STATUSES), z.array(z.enum(INTERVENTION_STATUSES))])
+    .optional()
+    .transform((v) => (v === undefined ? undefined : Array.isArray(v) ? v : [v])),
+  from: isoDate.optional(),
+  to: isoDate.optional(),
+});
+
+export type MeetingHistoryQuery = z.infer<typeof meetingHistoryQuerySchema>;
 
 export type ReportReason = "PERSON" | "QUESTION" | "OTHER";
 export type ReportStatus = "OPEN" | "HANDLED";
@@ -348,6 +502,9 @@ export type LoginInput = z.infer<typeof loginSchema>;
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type InsertIntervention = z.infer<typeof insertInterventionSchema>;
 export type FeedbackInput = z.infer<typeof feedbackSchema>;
+export type CreateAvailabilityInput = z.infer<typeof createAvailabilitySchema>;
+export type CreateDateExceptionInput = z.infer<typeof createDateExceptionSchema>;
+export type CreateRecurringAvailabilitiesInput = z.infer<typeof createRecurringAvailabilitiesSchema>;
 export type CreateRelationInput = z.infer<typeof createRelationSchema>;
 export type UpdateProfileInput = z.infer<typeof updateProfileSchema>;
 export type CreatePaymentInput = z.infer<typeof createPaymentSchema>;
