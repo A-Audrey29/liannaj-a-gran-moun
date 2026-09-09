@@ -235,7 +235,6 @@ async function main() {
     data: [
       { userId: senior5.id, categoryId: cuisine.id },
       { userId: senior5.id, categoryId: promenade.id },
-      { userId: senior5.id, categoryId: jardinage.id },
       { userId: senior5.id, categoryId: bienEtre.id },
       { userId: senior5.id, categoryId: jeux.id },
     ],

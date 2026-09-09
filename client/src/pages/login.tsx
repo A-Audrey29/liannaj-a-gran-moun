@@ -36,7 +36,7 @@ export default function LoginPage() {
       return await res.json();
     },
     onSuccess: (data: any) => {
-      queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
+      queryClient.setQueryData(["/api/auth/me"], { user: data.user });
       const role = data?.user?.role;
       setLocation(
         role === "ADMIN" ? "/admin" :
