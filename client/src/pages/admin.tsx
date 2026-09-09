@@ -706,7 +706,7 @@ function CadrageTab() {
   const [selectedRelation, setSelectedRelation] = useState<RelationWithUsers | null>(null);
   const [formData, setFormData] = useState({
     scheduledDate: "",
-    durationMinutes: 120,
+    durationMinutes: 30,
     location: "",
     tasks: [] as string[],
   });
@@ -732,7 +732,7 @@ function CadrageTab() {
       queryClient.invalidateQueries({ queryKey: ["/api/relations"] });
       setDialogOpen(false);
       setSelectedRelation(null);
-      setFormData({ scheduledDate: "", durationMinutes: 120, location: "", tasks: [] });
+      setFormData({ scheduledDate: "", durationMinutes: 30, location: "", tasks: [] });
       toast({ title: "1ère rencontre organisée" });
     },
     onError: () => {
@@ -837,7 +837,7 @@ function CadrageTab() {
                 min={30}
                 max={480}
                 value={formData.durationMinutes}
-                onChange={(e) => setFormData({ ...formData, durationMinutes: parseInt(e.target.value) || 120 })}
+                onChange={(e) => setFormData({ ...formData, durationMinutes: parseInt(e.target.value) || 30 })}
                 data-testid="input-cadrage-duration"
               />
             </div>
