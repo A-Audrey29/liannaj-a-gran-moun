@@ -157,32 +157,34 @@ export default function LoginPage() {
           </div>
         </CardContent>
       </Card>
-      <div className="w-full max-w-md mt-4 rounded-2xl bg-muted/50 p-4">
-        <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3 text-center">Comptes de test</p>
-        <div className="flex flex-col gap-2">
-          {[
-            { label: "Admin", email: "admin@feves.fr" },
-            { label: "Senior", email: "senior@test.fr" },
-            { label: "Jeune", email: "junior@test.fr" },
-            { label: "Référent", email: "referent@test.fr" },
-            { label: "Professeur", email: "professeur@test.fr" },
-          ].map((account) => (
-            <button
-              key={account.email}
-              type="button"
-              className="flex items-center justify-between px-3 py-2 rounded-lg bg-white hover:bg-[#f3eaff] border border-border/50 text-sm transition-colors"
-              onClick={() => {
-                form.setValue("email", account.email);
-                form.setValue("password", "password");
-              }}
-              data-testid={`button-test-${account.label.toLowerCase()}`}
-            >
-              <span className="font-medium">{account.label}</span>
-              <span className="text-muted-foreground text-xs">{account.email}</span>
-            </button>
-          ))}
+      {import.meta.env.DEV && (
+        <div className="w-full max-w-md mt-4 rounded-2xl bg-muted/50 p-4">
+          <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3 text-center">Comptes de test</p>
+          <div className="flex flex-col gap-2">
+            {[
+              { label: "Admin", email: "admin@feves.fr" },
+              { label: "Senior", email: "senior@test.fr" },
+              { label: "Jeune", email: "junior@test.fr" },
+              { label: "Référent", email: "referent@test.fr" },
+              { label: "Professeur", email: "professeur@test.fr" },
+            ].map((account) => (
+              <button
+                key={account.email}
+                type="button"
+                className="flex items-center justify-between px-3 py-2 rounded-lg bg-white hover:bg-[#f3eaff] border border-border/50 text-sm transition-colors"
+                onClick={() => {
+                  form.setValue("email", account.email);
+                  form.setValue("password", "password");
+                }}
+                data-testid={`button-test-${account.label.toLowerCase()}`}
+              >
+                <span className="font-medium">{account.label}</span>
+                <span className="text-muted-foreground text-xs">{account.email}</span>
+              </button>
+            ))}
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }
