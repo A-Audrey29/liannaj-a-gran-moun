@@ -19,6 +19,7 @@ import { Calendar as CalendarWidget } from "@/components/ui/calendar";
 import { Calendar, Plus, Trash2, AlertTriangle } from "lucide-react";
 import type { Availability } from "@shared/schema";
 import { fmtDayLong, fmtTime, gpDecimalHour, JOURS_LONGS } from "@/lib/availability-format";
+import { gpDateTimeToUtc, gpDayISO } from "@shared/dates";
 
 const GRID_START_HOUR = 8;
 const GRID_END_HOUR = 20;
@@ -326,8 +327,9 @@ function CalendarView({ availabilities }: { availabilities: Availability[] }) {
     mutationFn: async ({ date, startTime, endTime }: { date: Date; startTime: string; endTime: string }) => {
       const [sh, sm] = startTime.split(":").map(Number);
       const [eh, em] = endTime.split(":").map(Number);
-      const startAt = new Date(date.getFullYear(), date.getMonth(), date.getDate(), sh, sm);
-      const endAt = new Date(date.getFullYear(), date.getMonth(), date.getDate(), eh, em);
+      const dayISO = gpDayISO(date);
+      const startAt = gpDateTimeToUtc(dayISO, sh, sm);
+      const endAt = gpDateTimeToUtc(dayISO, eh, em);
       await apiRequest("POST", "/api/availabilities", {
         startAt: startAt.toISOString(),
         endAt: endAt.toISOString(),
