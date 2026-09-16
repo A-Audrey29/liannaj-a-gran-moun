@@ -207,6 +207,25 @@ export function getInterventionConfirmedEmailHtml(
   return emailWrapper(`Intervention confirm\u00e9e - ${PLATFORM_NAME}`, body);
 }
 
+export function getNegativeCreditBalanceEmailHtml(
+  userName: string,
+  seniorName: string,
+  balance: number
+): string {
+  const body = `
+    <p style="margin:0 0 18px;color:#1f1f1f;font-size:15px;line-height:1.6;">Bonjour ${userName},</p>
+    <p style="margin:0 0 18px;color:#1f1f1f;font-size:15px;line-height:1.6;">
+      Le solde de cr&eacute;dits de <strong>${seniorName}</strong> est n&eacute;gatif
+      (<strong>${balance}</strong>) suite &agrave; une rencontre r&eacute;alis&eacute;e.
+    </p>
+    <p style="margin:0 0 18px;color:#1f1f1f;font-size:15px;line-height:1.6;">
+      Un rattrapage est n&eacute;cessaire pour continuer &agrave; organiser de nouvelles
+      rencontres. Aucune nouvelle rencontre ne pourra &ecirc;tre propos&eacute;e tant que
+      le solde n'est pas r&eacute;gularis&eacute;.
+    </p>`;
+  return emailWrapper(`Solde de crédits négatif - ${PLATFORM_NAME}`, body);
+}
+
 export function getCreditPurchaseConfirmedEmailHtml(
   userName: string,
   offerLabel: string,

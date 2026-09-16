@@ -181,6 +181,63 @@ describe("Decompte a la completion", () => {
     expect(consommation?.interventionId).toBe(interventionId);
     expect(consommation?.amount).toBe(-1);
   });
+
+  it("solde negatif apres completion : notifie le senior et son referent sans bloquer", async () => {
+    const junior = await createUser("JUNIOR");
+    const senior = await createUser("SENIOR");
+    const referent = await createUser("REFERENT_SENIOR", { linkedSeniorId: senior.id });
+    const admin = await createUser("ADMIN");
+    const relation = await createRelation(senior.id, junior.id, "ACTIVE");
+    await declarerDisponibilite(junior.id);
+    await crediterSenior(senior.id, 1);
+
+    const seniorAgent = await loginAs(senior);
+    const juniorAgent = await loginAs(junior);
+    const adminAgent = await loginAs(admin);
+
+    // Deux interventions creees sur le meme solde de 1 (le check a la
+    // creation ne redecremente pas immediatement) puis confirmees toutes
+    // les deux : la seconde completion fera passer le solde a -1.
+    const premiere = await seniorAgent.post(`/api/relations/${relation.id}/interventions`).send({
+      scheduledDate: "2026-06-15T14:00:00Z",
+      durationMinutes: 90,
+      location: "Chez le senior",
+      tasks: ["Jardinage"],
+    });
+    expect(premiere.status).toBe(201);
+    await juniorAgent.patch(`/api/interventions/${premiere.body.id}/confirm`);
+
+    const seconde = await seniorAgent.post(`/api/relations/${relation.id}/interventions`).send({
+      scheduledDate: "2026-06-15T16:00:00Z",
+      durationMinutes: 90,
+      location: "Chez le senior",
+      tasks: ["Jardinage"],
+    });
+    expect(seconde.status).toBe(201);
+    await juniorAgent.patch(`/api/interventions/${seconde.body.id}/confirm`);
+
+    const premierDone = await adminAgent.patch(`/api/interventions/${premiere.body.id}/done`);
+    expect(premierDone.status).toBe(200);
+
+    const secondDone = await adminAgent.patch(`/api/interventions/${seconde.body.id}/done`);
+    expect(secondDone.status).toBe(200);
+
+    const balance = await prisma.creditLedger.aggregate({
+      where: { seniorId: senior.id },
+      _sum: { amount: true },
+    });
+    expect(balance._sum.amount).toBe(-1);
+
+    const notifSenior = await prisma.notification.findFirst({
+      where: { userId: senior.id, type: "SYSTEM", title: "Solde de crédits négatif" },
+    });
+    expect(notifSenior).not.toBeNull();
+
+    const notifReferent = await prisma.notification.findFirst({
+      where: { userId: referent.id, type: "SYSTEM", title: "Solde de crédits négatif" },
+    });
+    expect(notifReferent).not.toBeNull();
+  });
 });
 
 describe("Achat de credits par l'admin", () => {

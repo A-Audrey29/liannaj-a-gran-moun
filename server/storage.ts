@@ -21,6 +21,7 @@ export interface MeetingHistoryFilters {
 export interface IStorage {
   getUser(id: string): Promise<User | null>;
   getUserByEmail(email: string): Promise<User | null>;
+  getReferentsBySeniorId(seniorId: string): Promise<User[]>;
   getUserByValidationToken(token: string): Promise<User | null>;
   createUser(data: Prisma.UserCreateInput): Promise<User>;
   updateUser(id: string, data: Prisma.UserUpdateInput): Promise<User>;
@@ -179,6 +180,10 @@ class DatabaseStorage implements IStorage {
 
   async getUserByEmail(email: string): Promise<User | null> {
     return prisma.user.findUnique({ where: { email } });
+  }
+
+  async getReferentsBySeniorId(seniorId: string): Promise<User[]> {
+    return prisma.user.findMany({ where: { linkedSeniorId: seniorId } });
   }
 
   async getUserByValidationToken(token: string): Promise<User | null> {

@@ -76,6 +76,7 @@ import {
 import { useAuth } from "@/hooks/use-auth";
 import type { User, Relation, Intervention, PaymentRecord, Notification } from "@shared/schema";
 import { ATELIERS } from "@shared/ateliers";
+import { CREDIT_OFFERS } from "@shared/credit-offers";
 import MessagerieAdminTab from "@/components/admin-messages-tab";
 import { fmtTime, fmtDayLongMonthYear, gpParts } from "@/lib/availability-format";
 
@@ -946,6 +947,11 @@ function ProfileDialog({ user, open, onOpenChange }: { user: SafeUser | null; op
             </div>
           ))}
         </div>
+        {creditData && creditData.balance < 0 && (
+          <p className="text-sm text-red-700 bg-red-50 rounded-lg px-3 py-2 mt-4" data-testid="alert-negative-credit-balance">
+            Solde de crédits négatif — un rattrapage est nécessaire.
+          </p>
+        )}
       </DialogContent>
     </Dialog>
   );
@@ -1165,6 +1171,24 @@ function PaiementsTab() {
 
   return (
     <div>
+      <div className="rounded-2xl border bg-muted/30 p-4 mb-6" data-testid="section-credit-offers">
+        <p className="text-sm font-semibold mb-1">Offres de crédits en ligne (Stripe)</p>
+        <p className="text-xs text-muted-foreground mb-3">
+          Lecture seule — ces prix sont fixés dans le code (<code>shared/credit-offers.ts</code>),
+          pas modifiables depuis cet écran. Changer un montant nécessite un déploiement.
+        </p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {CREDIT_OFFERS.map((offer) => (
+            <div key={offer.id} className="rounded-xl border bg-background px-4 py-3" data-testid={`row-offer-${offer.id}`}>
+              <p className="text-sm font-medium">{offer.label}</p>
+              <p className="text-xs text-muted-foreground mt-1">
+                {offer.credits} crédit{offer.credits > 1 ? "s" : ""} — {offer.priceEuros} €
+              </p>
+            </div>
+          ))}
+        </div>
+      </div>
+
       <div className="flex justify-end mb-4">
         <Button
           className="bg-[#dc4256] hover:bg-[#c53a4d] text-white"

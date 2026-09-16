@@ -21,8 +21,9 @@ import {
   getFeedbackReminderEmailHtml,
   getNewReportEmailHtml,
   getCreditPurchaseConfirmedEmailHtml,
+  getNegativeCreditBalanceEmailHtml,
 } from "./lib/email-templates";
-import { insertUserSchema, createRelationSchema, insertInterventionSchema, feedbackSchema, createPaymentSchema, changePasswordSchema, createAdminSchema, insertReportSchema, createAvailabilitySchema, createRecurringAvailabilitiesSchema, createDateExceptionSchema, updateUserCategoriesSchema, meetingHistoryQuerySchema, COMPLETED_STATUSES } from "../shared/schema";
+import { insertUserSchema, createRelationSchema, insertInterventionSchema, feedbackSchema, createPaymentSchema, checkoutSchema, changePasswordSchema, createAdminSchema, insertReportSchema, createAvailabilitySchema, createRecurringAvailabilitiesSchema, createDateExceptionSchema, updateUserCategoriesSchema, meetingHistoryQuerySchema, COMPLETED_STATUSES } from "../shared/schema";
 import type { MeetingHistoryEntry, MeetingHistoryResponse, MeetingHistorySummary, Role } from "../shared/schema";
 import type { MeetingHistoryScope } from "./storage";
 import { createRecurringAvailabilities, createDateException, deleteAvailability, isWithinAvailability, hasInterventionConflict } from "./lib/availability";
@@ -1239,6 +1240,42 @@ export async function registerRoutes(
 
       const seniorId = intervention.relation.seniorId;
       const juniorId = intervention.relation.juniorId;
+
+      // Cas rare : plusieurs interventions CONFIRMED simultanées sur un solde
+      // insuffisant peuvent faire passer le solde en négatif à la validation.
+      // On ne bloque jamais la complétion elle-même (l'intervention n'a plus
+      // de porte de sortie une fois COMPLETED_PENDING_FEEDBACK, CANCELLED
+      // n'étant plus possible) — on se contente d'avertir le sénior et son
+      // référent, le blocage réel se fait déjà à la création de toute
+      // nouvelle intervention (solde <= 0 → 402).
+      const balanceAfter = await storage.getCreditBalance(seniorId);
+      if (balanceAfter < 0) {
+        const seniorForAlert = await storage.getUser(seniorId);
+        const referents = await storage.getReferentsBySeniorId(seniorId);
+        const alertRecipients = [seniorForAlert, ...referents].filter(
+          (u): u is NonNullable<typeof u> => !!u
+        );
+        for (const recipient of alertRecipients) {
+          await storage.createNotification({
+            user: { connect: { id: recipient.id } },
+            type: "SYSTEM",
+            title: "Solde de crédits négatif",
+            message: `Le solde de crédits est de ${balanceAfter}. Un rattrapage est nécessaire pour organiser de nouvelles rencontres.`,
+            link: `/relations/${intervention.relationId}`,
+          });
+          if (recipient.email && seniorForAlert) {
+            sendEmail({
+              to: recipient.email,
+              subject: `Solde de crédits négatif — ${PLATFORM_NAME}`,
+              htmlContent: getNegativeCreditBalanceEmailHtml(
+                `${recipient.firstName} ${recipient.lastName}`,
+                `${seniorForAlert.firstName} ${seniorForAlert.lastName}`,
+                balanceAfter
+              ),
+            }).catch(console.error);
+          }
+        }
+      }
 
       await storage.createNotification({
         user: { connect: { id: seniorId } },
@@ -2694,8 +2731,11 @@ export async function registerRoutes(
         return res.status(503).json({ message: "Le paiement en ligne n'est pas disponible actuellement." });
       }
 
-      const { offerId } = req.body as { offerId?: string };
-      const offer = offerId ? findCreditOffer(offerId) : undefined;
+      const parsed = checkoutSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: "Données invalides", errors: parsed.error.flatten() });
+      }
+      const offer = findCreditOffer(parsed.data.offerId);
       if (!offer) {
         return res.status(400).json({ message: "Offre invalide" });
       }

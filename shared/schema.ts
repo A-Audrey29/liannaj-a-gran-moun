@@ -368,6 +368,10 @@ export const createPaymentSchema = z.object({
   credits: z.number().int().positive().optional(),
 });
 
+export const checkoutSchema = z.object({
+  offerId: z.string().min(1, "Offre requise"),
+});
+
 export const changePasswordSchema = z.object({
   currentPassword: z.string().min(6, "Mot de passe actuel requis"),
   newPassword: z.string().min(6, "Le nouveau mot de passe doit faire au moins 6 caractères"),
