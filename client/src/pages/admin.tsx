@@ -95,13 +95,8 @@ const ADMIN_TABS = [
   { id: "paiements", label: "Paiements", icon: CreditCard },
   { id: "signalements", label: "Signalements", icon: Flag },
   { id: "notifications", label: "Notifications", icon: Bell },
-  { id: "professeurs", label: "Professeurs", icon: GraduationCap },
-  { id: "notes-profs", label: "Notes profs", icon: MessageSquare },
   { id: "stages", label: "Stages", icon: Briefcase },
   { id: "mon-compte", label: "Mon compte", icon: UserCog },
-  { id: "creer-admin", label: "Créer un admin", icon: UserPlus },
-  { id: "creer-referent", label: "Créer un référent", icon: Users },
-  { id: "creer-professeur", label: "Créer un prof", icon: UserPlus },
 ] as const;
 
 const STATUS_COLORS: Record<string, string> = {
@@ -250,6 +245,7 @@ function UsersTab() {
   const [searchUserId, setSearchUserId] = useState<string | null>(null);
   const [selectedUser, setSelectedUser] = useState<SafeUser | null>(null);
   const [profileOpen, setProfileOpen] = useState(false);
+  const [createOpen, setCreateOpen] = useState(false);
 
   const { data: users = [], isLoading } = useQuery<SafeUser[]>({ queryKey: ["/api/admin/users"] });
 
@@ -305,6 +301,7 @@ function UsersTab() {
     { id: "all", label: "Tous les rôles" },
     { id: "SENIOR", label: "Seniors" },
     { id: "JUNIOR", label: "Jeunes" },
+    { id: "TEACHER", label: "Profs" },
     { id: "ADMIN", label: "Admins" },
   ];
 
@@ -314,6 +311,14 @@ function UsersTab() {
 
   return (
     <div>
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="text-xl font-bold">Utilisateurs</h2>
+        <Button size="sm" className="bg-[#dc4256] hover:bg-[#c53a4d]" onClick={() => setCreateOpen(true)} data-testid="button-create-user">
+          <UserPlus className="w-4 h-4 mr-1" />
+          Créer un utilisateur
+        </Button>
+      </div>
+
       {pendingCount > 0 && (
         <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 mb-4 text-amber-800 text-sm font-medium" data-testid="text-pending-count">
           {pendingCount} utilisateur{pendingCount > 1 ? "s" : ""} en attente de validation
@@ -470,6 +475,14 @@ function UsersTab() {
         )}
       </div>
       <ProfileDialog user={selectedUser} open={profileOpen} onOpenChange={setProfileOpen} />
+      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+        <DialogContent className="sm:max-w-md max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Créer un utilisateur</DialogTitle>
+          </DialogHeader>
+          <CreerCompteTab />
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -900,6 +913,8 @@ function ProfileDialog({ user, open, onOpenChange }: { user: SafeUser | null; op
 
   if (!user) return null;
 
+  const isTeacher = user.role === "TEACHER";
+
   const fields: { label: string; value: string | null | undefined; show?: boolean }[] = [
     { label: "Email", value: user.email },
     { label: "Rôle", value: user.role },
@@ -952,8 +967,131 @@ function ProfileDialog({ user, open, onOpenChange }: { user: SafeUser | null; op
             Solde de crédits négatif — un rattrapage est nécessaire.
           </p>
         )}
+        {isTeacher && open && <TeacherPanel teacher={user} />}
       </DialogContent>
     </Dialog>
+  );
+}
+
+function TeacherPanel({ teacher }: { teacher: SafeUser }) {
+  const { toast } = useToast();
+  const [assignStudentId, setAssignStudentId] = useState("");
+
+  const { data: allUsers = [] } = useQuery<SafeUser[]>({ queryKey: ["/api/admin/users"] });
+  const juniors = allUsers.filter((u) => u.role === "JUNIOR" && u.status === "ACTIVE");
+
+  const { data: teacherStudents = [], refetch: refetchStudents } = useQuery<SafeUser[]>({
+    queryKey: [`/api/admin/teachers/${teacher.id}/students`],
+  });
+
+  const { data: comments = [] } = useQuery<CommentWithUsers[]>({
+    queryKey: ["/api/admin/teacher-comments"],
+  });
+  const teacherComments = comments.filter((c) => c.teacher.id === teacher.id);
+
+  const assignMut = useMutation({
+    mutationFn: () =>
+      apiRequest("POST", `/api/admin/teachers/${teacher.id}/students`, { studentId: assignStudentId }),
+    onSuccess: () => {
+      refetchStudents();
+      setAssignStudentId("");
+      toast({ title: "Élève affilié" });
+    },
+    onError: async (err: any) => {
+      let msg = "Erreur";
+      try { const j = await err.response?.json?.(); msg = j?.message || msg; } catch {}
+      toast({ title: "Erreur", description: msg, variant: "destructive" });
+    },
+  });
+
+  const unassignMut = useMutation({
+    mutationFn: (studentId: string) =>
+      apiRequest("DELETE", `/api/admin/teachers/${teacher.id}/students/${studentId}`),
+    onSuccess: () => {
+      refetchStudents();
+      toast({ title: "Liaison supprimée" });
+    },
+  });
+
+  return (
+    <div className="mt-4 pt-4 border-t space-y-4">
+      <div>
+        <h4 className="text-sm font-semibold mb-2">Élèves affiliés</h4>
+        <div className="flex gap-2 mb-3">
+          <Select value={assignStudentId} onValueChange={setAssignStudentId}>
+            <SelectTrigger className="flex-1">
+              <SelectValue placeholder="Choisir un élève..." />
+            </SelectTrigger>
+            <SelectContent>
+              {juniors
+                .filter((j) => !teacherStudents.some((s) => s.id === j.id))
+                .map((j) => (
+                  <SelectItem key={j.id} value={j.id}>
+                    {j.firstName} {j.lastName}
+                  </SelectItem>
+                ))}
+            </SelectContent>
+          </Select>
+          <Button
+            size="sm"
+            className="bg-green-600 hover:bg-green-700 shrink-0"
+            disabled={!assignStudentId || assignMut.isPending}
+            onClick={() => assignMut.mutate()}
+          >
+            {assignMut.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : "Affilier"}
+          </Button>
+        </div>
+
+        {teacherStudents.length === 0 ? (
+          <p className="text-sm text-muted-foreground text-center py-3">Aucun élève affilié.</p>
+        ) : (
+          <div className="space-y-2">
+            {teacherStudents.map((s: SafeUser) => (
+              <div key={s.id} className="flex items-center justify-between p-2 rounded bg-muted/40">
+                <div className="flex items-center gap-2">
+                  <img src={getPhotoUrl(s.profilePhoto)} alt="" className="w-8 h-8 rounded-full object-cover" />
+                  <div>
+                    <p className="text-sm font-medium">{s.firstName} {s.lastName}</p>
+                    {s.schoolName && <p className="text-xs text-muted-foreground">{s.schoolName}</p>}
+                  </div>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-destructive hover:text-destructive"
+                  onClick={() => unassignMut.mutate(s.id)}
+                >
+                  <X className="w-3.5 h-3.5" />
+                </Button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div>
+        <h4 className="text-sm font-semibold mb-2">Notes laissées par ce prof</h4>
+        {teacherComments.length === 0 ? (
+          <p className="text-sm text-muted-foreground text-center py-3">Aucune note.</p>
+        ) : (
+          <div className="space-y-2">
+            {teacherComments.map((c) => (
+              <div key={c.id} className="p-2 rounded bg-muted/40 text-sm space-y-1">
+                <p>{c.content}</p>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <Badge className="bg-teal-100 text-teal-800 text-xs">
+                    Élève : {c.student.firstName} {c.student.lastName}
+                  </Badge>
+                  <span className="text-xs text-muted-foreground">
+                    {new Date(c.createdAt).toLocaleDateString("fr-FR")}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -1472,7 +1610,39 @@ function MonCompteTab() {
 
 // ==================== CREER UN ADMIN ====================
 
-function CreerAdminTab() {
+const CREER_COMPTE_ROLES = [
+  { id: "admin", label: "Admin" },
+  { id: "referent", label: "Référent sénior" },
+  { id: "professeur", label: "Professeur" },
+] as const;
+
+function CreerCompteTab() {
+  const [role, setRole] = useState<(typeof CREER_COMPTE_ROLES)[number]["id"]>("admin");
+
+  return (
+    <div className="max-w-md">
+      <div className="flex gap-1 mb-6 rounded-full bg-muted/50 p-1 w-fit">
+        {CREER_COMPTE_ROLES.map((r) => (
+          <button
+            key={r.id}
+            onClick={() => setRole(r.id)}
+            className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
+              role === r.id ? "bg-white shadow text-foreground" : "text-muted-foreground hover:text-foreground"
+            }`}
+            data-testid={`role-toggle-${r.id}`}
+          >
+            {r.label}
+          </button>
+        ))}
+      </div>
+      {role === "admin" && <CreerAdminForm />}
+      {role === "referent" && <CreerReferentForm />}
+      {role === "professeur" && <CreerProfesseurForm />}
+    </div>
+  );
+}
+
+function CreerAdminForm() {
   const { toast } = useToast();
   const [formData, setFormData] = useState({
     email: "",
@@ -1506,8 +1676,7 @@ function CreerAdminTab() {
   }
 
   return (
-    <div className="max-w-md">
-      <h3 className="text-lg font-semibold mb-4">Créer un compte administrateur</h3>
+    <>
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
           <Label htmlFor="admin-firstname">Prénom</Label>
@@ -1556,13 +1725,11 @@ function CreerAdminTab() {
           Créer le compte admin
         </Button>
       </form>
-    </div>
+    </>
   );
 }
 
-// ==================== CRÉER RÉFÉRENT TAB ====================
-
-function CreerReferentTab() {
+function CreerReferentForm() {
   const { toast } = useToast();
   const [formData, setFormData] = useState({
     email: "",
@@ -1602,8 +1769,7 @@ function CreerReferentTab() {
   }
 
   return (
-    <div className="max-w-md">
-      <h3 className="text-lg font-semibold mb-1">Créer un compte référent sénior</h3>
+    <>
       <p className="text-sm text-muted-foreground mb-4">
         Le référent peut suivre les demandes du sénior lié, demander des prestations et contacter l'équipe.
         Le compte est immédiatement actif, aucune validation par email n'est nécessaire.
@@ -1691,7 +1857,7 @@ function CreerReferentTab() {
           Créer le compte référent
         </Button>
       </form>
-    </div>
+    </>
   );
 }
 
@@ -1892,9 +2058,8 @@ function SignalementsTab() {
   );
 }
 
-// ==================== PROFESSEURS TAB ====================
+// ==================== STAGES TAB ====================
 
-type TeacherWithStudents = SafeUser & { students?: SafeUser[] };
 type InternshipWithStudent = { id: string; companyName: string; companyAddress: string | null; supervisorName: string | null; supervisorEmail: string | null; startDate: string; endDate: string | null; description: string | null; status: string; teacherNotes: string | null; createdAt: string; student: SafeUser };
 type CommentWithUsers = { id: string; content: string; createdAt: string; updatedAt: string; teacher: SafeUser; student: SafeUser };
 
@@ -1911,229 +2076,6 @@ const INTERNSHIP_STATUS_COLORS: Record<string, string> = {
   COMPLETED: "bg-gray-100 text-gray-600",
   CANCELLED: "bg-red-100 text-red-700",
 };
-
-function ProfesseursTab() {
-  const { toast } = useToast();
-  const [selectedTeacher, setSelectedTeacher] = useState<SafeUser | null>(null);
-  const [assignStudentId, setAssignStudentId] = useState("");
-
-  const { data: teachers = [], refetch: refetchTeachers } = useQuery<SafeUser[]>({
-    queryKey: ["/api/admin/teachers"],
-  });
-  const { data: allUsers = [] } = useQuery<SafeUser[]>({ queryKey: ["/api/admin/users"] });
-  const juniors = allUsers.filter((u) => u.role === "JUNIOR" && u.status === "ACTIVE");
-
-  const { data: teacherStudents = [], refetch: refetchStudents } = useQuery<SafeUser[]>({
-    queryKey: [`/api/admin/teachers/${selectedTeacher?.id}/students`],
-    enabled: !!selectedTeacher,
-  });
-
-  const assignMut = useMutation({
-    mutationFn: () =>
-      apiRequest("POST", `/api/admin/teachers/${selectedTeacher!.id}/students`, { studentId: assignStudentId }),
-    onSuccess: () => {
-      refetchStudents();
-      setAssignStudentId("");
-      toast({ title: "Élève affilié" });
-    },
-    onError: async (err: any) => {
-      let msg = "Erreur";
-      try { const j = await err.response?.json?.(); msg = j?.message || msg; } catch {}
-      toast({ title: "Erreur", description: msg, variant: "destructive" });
-    },
-  });
-
-  const unassignMut = useMutation({
-    mutationFn: (studentId: string) =>
-      apiRequest("DELETE", `/api/admin/teachers/${selectedTeacher!.id}/students/${studentId}`),
-    onSuccess: () => {
-      refetchStudents();
-      toast({ title: "Liaison supprimée" });
-    },
-  });
-
-  if (teachers.length === 0) {
-    return (
-      <div className="text-center py-16 text-muted-foreground">
-        <GraduationCap className="w-10 h-10 mx-auto mb-3 opacity-30" />
-        <p>Aucun professeur créé.</p>
-        <p className="text-sm mt-1">Utilisez l'onglet "Créer un prof" pour en ajouter.</p>
-      </div>
-    );
-  }
-
-  return (
-    <div className="space-y-6">
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-        {teachers.map((t) => (
-          <Card
-            key={t.id}
-            className={`cursor-pointer transition-colors ${selectedTeacher?.id === t.id ? "border-green-500 bg-green-50" : "hover:border-green-300"}`}
-            onClick={() => setSelectedTeacher(t)}
-          >
-            <CardContent className="pt-4 pb-4">
-              <div className="flex items-center gap-3">
-                <img
-                  src={getPhotoUrl(t.profilePhoto)}
-                  alt={`${t.firstName} ${t.lastName}`}
-                  className="w-10 h-10 rounded-full object-cover"
-                />
-                <div>
-                  <p className="font-medium text-sm">{t.firstName} {t.lastName}</p>
-                  <p className="text-xs text-muted-foreground">{t.email}</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-
-      {selectedTeacher && (
-        <Card>
-          <CardContent className="pt-5 space-y-4">
-            <h3 className="font-semibold">Élèves de {selectedTeacher.firstName} {selectedTeacher.lastName}</h3>
-
-            <div className="flex gap-2">
-              <Select value={assignStudentId} onValueChange={setAssignStudentId}>
-                <SelectTrigger className="flex-1">
-                  <SelectValue placeholder="Choisir un élève..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {juniors
-                    .filter((j) => !teacherStudents.some((s) => s.id === j.id))
-                    .map((j) => (
-                      <SelectItem key={j.id} value={j.id}>
-                        {j.firstName} {j.lastName}
-                      </SelectItem>
-                    ))}
-                </SelectContent>
-              </Select>
-              <Button
-                size="sm"
-                className="bg-green-600 hover:bg-green-700 shrink-0"
-                disabled={!assignStudentId || assignMut.isPending}
-                onClick={() => assignMut.mutate()}
-              >
-                {assignMut.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : "Affilier"}
-              </Button>
-            </div>
-
-            {teacherStudents.length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center py-4">Aucun élève affilié.</p>
-            ) : (
-              <div className="space-y-2">
-                {teacherStudents.map((s: SafeUser) => (
-                  <div key={s.id} className="flex items-center justify-between p-2 rounded bg-muted/40">
-                    <div className="flex items-center gap-2">
-                      <img src={getPhotoUrl(s.profilePhoto)} alt="" className="w-8 h-8 rounded-full object-cover" />
-                      <div>
-                        <p className="text-sm font-medium">{s.firstName} {s.lastName}</p>
-                        {s.schoolName && <p className="text-xs text-muted-foreground">{s.schoolName}</p>}
-                      </div>
-                    </div>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="text-destructive hover:text-destructive"
-                      onClick={() => unassignMut.mutate(s.id)}
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </Button>
-                  </div>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      )}
-    </div>
-  );
-}
-
-// ==================== NOTES PROFS TAB ====================
-
-function NotesProfTab() {
-  const { data: comments = [], isLoading } = useQuery<CommentWithUsers[]>({
-    queryKey: ["/api/admin/teacher-comments"],
-  });
-
-  const [filterTeacherId, setFilterTeacherId] = useState<string | null>(null);
-  const [filterStudentId, setFilterStudentId] = useState<string | null>(null);
-
-  const teachers = Array.from(new Map(comments.map((c) => [c.teacher.id, c.teacher])).values());
-  const students = Array.from(new Map(comments.map((c) => [c.student.id, c.student])).values());
-
-  const filtered = comments.filter(
-    (c) =>
-      (!filterTeacherId || c.teacher.id === filterTeacherId) &&
-      (!filterStudentId || c.student.id === filterStudentId)
-  );
-
-  if (isLoading) return <Skeleton className="h-40 w-full" />;
-
-  return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap gap-3">
-        <Select value={filterTeacherId ?? "__all"} onValueChange={(v) => setFilterTeacherId(v === "__all" ? null : v)}>
-          <SelectTrigger className="w-48">
-            <SelectValue placeholder="Tous les professeurs" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="__all">Tous les professeurs</SelectItem>
-            {teachers.map((t) => (
-              <SelectItem key={t.id} value={t.id}>{t.firstName} {t.lastName}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Select value={filterStudentId ?? "__all"} onValueChange={(v) => setFilterStudentId(v === "__all" ? null : v)}>
-          <SelectTrigger className="w-48">
-            <SelectValue placeholder="Tous les élèves" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="__all">Tous les élèves</SelectItem>
-            {students.map((s) => (
-              <SelectItem key={s.id} value={s.id}>{s.firstName} {s.lastName}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-
-      {filtered.length === 0 ? (
-        <div className="text-center py-12 text-muted-foreground">
-          <MessageSquare className="w-10 h-10 mx-auto mb-3 opacity-30" />
-          <p>Aucune note.</p>
-        </div>
-      ) : (
-        <div className="space-y-3">
-          {filtered.map((c) => (
-            <Card key={c.id} className="border-l-4 border-l-green-400">
-              <CardContent className="pt-4">
-                <div className="flex items-start justify-between gap-2">
-                  <div className="flex-1 space-y-1">
-                    <p className="text-sm leading-relaxed">{c.content}</p>
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <Badge className="bg-green-100 text-green-800 text-xs">
-                        Prof : {c.teacher.firstName} {c.teacher.lastName}
-                      </Badge>
-                      <Badge className="bg-teal-100 text-teal-800 text-xs">
-                        Élève : {c.student.firstName} {c.student.lastName}
-                      </Badge>
-                      <span className="text-xs text-muted-foreground">
-                        {new Date(c.createdAt).toLocaleDateString("fr-FR")}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ==================== STAGES TAB ====================
 
 function StagesTab() {
   const { data: internships = [], isLoading } = useQuery<InternshipWithStudent[]>({
@@ -2234,7 +2176,7 @@ function StagesTab() {
 
 // ==================== CRÉER PROFESSEUR TAB ====================
 
-function CreerProfesseurTab() {
+function CreerProfesseurForm() {
   const { toast } = useToast();
   const [form, setForm] = useState({ email: "", password: "", firstName: "", lastName: "", phone: "" });
 
@@ -2253,8 +2195,7 @@ function CreerProfesseurTab() {
   });
 
   return (
-    <div className="max-w-md space-y-4">
-      <h3 className="font-semibold text-base">Créer un compte professeur</h3>
+    <div className="space-y-4">
       <p className="text-sm text-muted-foreground">
         Le compte sera actif immédiatement. Le professeur peut se connecter sur <code>/espace-professeur</code>.
       </p>
@@ -2374,13 +2315,8 @@ export default function Admin() {
       {activeTab === "paiements" && <PaiementsTab />}
       {activeTab === "signalements" && <SignalementsTab />}
       {activeTab === "notifications" && <NotificationsAdminTab />}
-      {activeTab === "professeurs" && <ProfesseursTab />}
-      {activeTab === "notes-profs" && <NotesProfTab />}
       {activeTab === "stages" && <StagesTab />}
       {activeTab === "mon-compte" && <MonCompteTab />}
-      {activeTab === "creer-admin" && <CreerAdminTab />}
-      {activeTab === "creer-referent" && <CreerReferentTab />}
-      {activeTab === "creer-professeur" && <CreerProfesseurTab />}
     </div>
   );
 }
