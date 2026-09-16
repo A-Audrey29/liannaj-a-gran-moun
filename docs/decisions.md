@@ -3,6 +3,35 @@
 Journal des choix d'architecture et de leurs raisons. Une entrée par décision,
 la plus récente en haut.
 
+## 2026-09-14 — Paiement en ligne des crédits via Stripe Checkout
+
+**Contexte.** La décision du 2026-09-07 excluait Stripe du MVP (achat 100%
+admin manuel). Revenu dessus : le parcours admin-only demandait un
+aller-retour humain à chaque achat, non tenable au-delà de quelques seniors.
+
+**Décision — provider abstrait, pas de couplage direct au SDK Stripe.**
+`server/lib/payment-provider.ts` définit un contrat (`PaymentProvider`)
+indépendant du prestataire ; `server/lib/stripe-provider.ts` l'implémente.
+Routes et webhook n'importent jamais `stripe` directement — changer de
+prestataire = nouvelle implémentation du contrat + changer l'export dans
+`payment-provider.ts`.
+
+**Décision — webhook idempotent, toujours 200 après signature valide.**
+`POST /api/webhooks/payment` déduplique par `stripeSessionId` et renvoie 200
+même en cas d'erreur métier post-validation, pour éviter que Stripe ne
+retente indéfiniment un événement qu'on ne peut de toute façon pas traiter
+différemment. Nécessite le body brut (`req.rawBody`, capturé dans
+`server/app.ts`) pour la vérification de signature — jamais le body déjà
+parsé en JSON.
+
+**Le parcours admin manuel (`POST /api/admin/payments`) reste actif** en
+parallèle, pour les cas où un aidant paie hors ligne.
+
+**Non traité par ce changement** (voir `.agents/memory/blockers.md`) : le
+solde crédit peut passer négatif si un admin valide deux interventions
+`CONFIRMED` coup sur coup sur un solde à 1 — `completeIntervention` ne
+revérifie pas le solde au moment du décompte, seule la création le bloque.
+
 ## 2026-09-07 — Crédits prépayés : 1 crédit = 1 atelier, décompte à la complétion
 
 **Contexte.** La facturation était 100% manuelle et déclarative : un admin
