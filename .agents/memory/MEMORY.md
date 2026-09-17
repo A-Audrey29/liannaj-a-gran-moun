@@ -1,3 +1,3 @@
-- [Teacher feature](teacher-feature.md) — rôle TEACHER + TeacherStudent + TeacherComment + Internship ajoutés; db push utilisé (pas migrate) car pas de migration history.
+- [Teacher feature](teacher-feature.md) — rôle TEACHER + TeacherStudent + TeacherComment; Internship (stages) retiré 2026-09-16, hors sujet Lyannaj.
 - [Blockers connus](blockers.md) — 3 points de dette + zones jamais testées, trouvés lors du QA du 2026-09-09/10, à traiter avant prod.
 - [Roadmap](roadmap.md) — auto-inscription référent/prof avec mdp temporaire, reportée le 2026-09-16.

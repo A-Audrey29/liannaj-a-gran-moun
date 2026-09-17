@@ -15,13 +15,6 @@ enum Role {
   TEACHER
 }
 
-enum InternshipStatus {
-  UPCOMING
-  ONGOING
-  COMPLETED
-  CANCELLED
-}
-
 enum UserStatus {
   PENDING_VALIDATION
   ACTIVE
@@ -131,7 +124,6 @@ model User {
   studentTeachers     TeacherStudent[] @relation("StudentTeachers")
   teacherComments     TeacherComment[] @relation("TeacherComments")
   studentComments     TeacherComment[] @relation("StudentComments")
-  internships         Internship[]
 
   availabilities      Availability[] @relation("UserAvailabilities")
 
@@ -426,24 +418,4 @@ model TeacherComment {
 
   @@index([teacherId])
   @@index([studentId])
-}
-
-model Internship {
-  id              String           @id @default(cuid())
-  studentId       String
-  student         User             @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  companyName     String
-  companyAddress  String?
-  supervisorName  String?
-  supervisorEmail String?
-  startDate       DateTime
-  endDate         DateTime?
-  description     String?
-  status          InternshipStatus @default(UPCOMING)
-  teacherNotes    String?
-  createdAt       DateTime         @default(now())
-  updatedAt       DateTime         @updatedAt
-
-  @@index([studentId])
-  @@index([status])
 }

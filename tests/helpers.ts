@@ -35,7 +35,7 @@ export async function resetDatabase() {
       "Report", "Favorite", "UserCategory", "AdminRecommendation",
       "Message", "Conversation", "CreditLedger", "Intervention", "Availability",
       "Relation", "Notification", "PaymentRecord", "PushSubscription",
-      "TeacherComment", "TeacherStudent", "Internship", "Category", "User",
+      "TeacherComment", "TeacherStudent", "Category", "User",
       "session"
     RESTART IDENTITY CASCADE
   `);

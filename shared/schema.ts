@@ -1,7 +1,6 @@
 import { z } from "zod";
 
 export type Role = "ADMIN" | "SENIOR" | "JUNIOR" | "REFERENT_SENIOR" | "TEACHER";
-export type InternshipStatus = "UPCOMING" | "ONGOING" | "COMPLETED" | "CANCELLED";
 export type UserStatus = "PENDING_VALIDATION" | "ACTIVE" | "SUSPENDED" | "BANNED";
 export type RelationStatus = "PENDING" | "PENDING_FIRST_MEETING" | "ACTIVE" | "PAUSED" | "CLOSED";
 export type InterventionStatus = "PROPOSED" | "CONFIRMED" | "CANCELLED" | "DONE" | "COMPLETED_PENDING_FEEDBACK" | "COMPLETED";
@@ -119,22 +118,6 @@ export interface TeacherComment {
   updatedAt: Date;
 }
 
-export interface Internship {
-  id: string;
-  studentId: string;
-  companyName: string;
-  companyAddress: string | null;
-  supervisorName: string | null;
-  supervisorEmail: string | null;
-  startDate: Date;
-  endDate: Date | null;
-  description: string | null;
-  status: InternshipStatus;
-  teacherNotes: string | null;
-  createdAt: Date;
-  updatedAt: Date;
-}
-
 export const createTeacherCommentSchema = z.object({
   content: z.string().min(1, "Contenu requis").max(2000, "Commentaire trop long"),
 });
@@ -142,20 +125,6 @@ export const createTeacherCommentSchema = z.object({
 export const updateTeacherCommentSchema = z.object({
   content: z.string().min(1, "Contenu requis").max(2000, "Commentaire trop long"),
 });
-
-export const createInternshipSchema = z.object({
-  companyName: z.string().min(1, "Nom de l'entreprise requis"),
-  companyAddress: z.preprocess((v) => (v === "" ? undefined : v), z.string().optional()),
-  supervisorName: z.preprocess((v) => (v === "" ? undefined : v), z.string().optional()),
-  supervisorEmail: z.preprocess((v) => (v === "" ? undefined : v), z.string().email("Email invalide").optional()),
-  startDate: z.string().min(1, "Date de début requise"),
-  endDate: z.preprocess((v) => (v === "" ? undefined : v), z.string().optional()),
-  description: z.preprocess((v) => (v === "" ? undefined : v), z.string().max(1000).optional()),
-  status: z.enum(["UPCOMING", "ONGOING", "COMPLETED", "CANCELLED"]).default("UPCOMING"),
-  teacherNotes: z.preprocess((v) => (v === "" ? undefined : v), z.string().max(2000).optional()),
-});
-
-export const updateInternshipSchema = createInternshipSchema.partial();
 
 export const updateStudentBioSchema = z.object({
   bio: z.preprocess((v) => (v === "" ? undefined : v), z.string().max(500).optional()),
@@ -171,8 +140,6 @@ export const createTeacherSchema = z.object({
 });
 
 export type CreateTeacherCommentInput = z.infer<typeof createTeacherCommentSchema>;
-export type CreateInternshipInput = z.infer<typeof createInternshipSchema>;
-export type UpdateInternshipInput = z.infer<typeof updateInternshipSchema>;
 export type UpdateStudentBioInput = z.infer<typeof updateStudentBioSchema>;
 export type CreateTeacherInput = z.infer<typeof createTeacherSchema>;
 

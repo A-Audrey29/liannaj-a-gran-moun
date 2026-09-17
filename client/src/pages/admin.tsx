@@ -70,8 +70,6 @@ import {
   AlertTriangle,
   CheckCheck,
   GraduationCap,
-  Briefcase,
-  Building2,
 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import type { User, Relation, Intervention, PaymentRecord, Notification } from "@shared/schema";
@@ -95,7 +93,6 @@ const ADMIN_TABS = [
   { id: "paiements", label: "Paiements", icon: CreditCard },
   { id: "signalements", label: "Signalements", icon: Flag },
   { id: "notifications", label: "Notifications", icon: Bell },
-  { id: "stages", label: "Stages", icon: Briefcase },
   { id: "mon-compte", label: "Mon compte", icon: UserCog },
 ] as const;
 
@@ -2058,121 +2055,7 @@ function SignalementsTab() {
   );
 }
 
-// ==================== STAGES TAB ====================
-
-type InternshipWithStudent = { id: string; companyName: string; companyAddress: string | null; supervisorName: string | null; supervisorEmail: string | null; startDate: string; endDate: string | null; description: string | null; status: string; teacherNotes: string | null; createdAt: string; student: SafeUser };
 type CommentWithUsers = { id: string; content: string; createdAt: string; updatedAt: string; teacher: SafeUser; student: SafeUser };
-
-const INTERNSHIP_STATUS_LABELS: Record<string, string> = {
-  UPCOMING: "À venir",
-  ONGOING: "En cours",
-  COMPLETED: "Terminé",
-  CANCELLED: "Annulé",
-};
-
-const INTERNSHIP_STATUS_COLORS: Record<string, string> = {
-  UPCOMING: "bg-blue-100 text-blue-800",
-  ONGOING: "bg-green-100 text-green-800",
-  COMPLETED: "bg-gray-100 text-gray-600",
-  CANCELLED: "bg-red-100 text-red-700",
-};
-
-function StagesTab() {
-  const { data: internships = [], isLoading } = useQuery<InternshipWithStudent[]>({
-    queryKey: ["/api/admin/internships"],
-  });
-
-  const [filterStatus, setFilterStatus] = useState<string>("__all");
-  const [filterStudentId, setFilterStudentId] = useState<string | null>(null);
-
-  const students = Array.from(new Map(internships.map((i) => [i.student.id, i.student])).values());
-
-  const filtered = internships.filter(
-    (i) =>
-      (filterStatus === "__all" || i.status === filterStatus) &&
-      (!filterStudentId || i.student.id === filterStudentId)
-  );
-
-  if (isLoading) return <Skeleton className="h-40 w-full" />;
-
-  return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap gap-3">
-        <Select value={filterStatus} onValueChange={setFilterStatus}>
-          <SelectTrigger className="w-40">
-            <SelectValue placeholder="Tous les statuts" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="__all">Tous les statuts</SelectItem>
-            <SelectItem value="UPCOMING">À venir</SelectItem>
-            <SelectItem value="ONGOING">En cours</SelectItem>
-            <SelectItem value="COMPLETED">Terminé</SelectItem>
-            <SelectItem value="CANCELLED">Annulé</SelectItem>
-          </SelectContent>
-        </Select>
-        <Select value={filterStudentId ?? "__all"} onValueChange={(v) => setFilterStudentId(v === "__all" ? null : v)}>
-          <SelectTrigger className="w-48">
-            <SelectValue placeholder="Tous les élèves" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="__all">Tous les élèves</SelectItem>
-            {students.map((s) => (
-              <SelectItem key={s.id} value={s.id}>{s.firstName} {s.lastName}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-
-      {filtered.length === 0 ? (
-        <div className="text-center py-12 text-muted-foreground">
-          <Building2 className="w-10 h-10 mx-auto mb-3 opacity-30" />
-          <p>Aucun stage trouvé.</p>
-        </div>
-      ) : (
-        <div className="space-y-3">
-          {filtered.map((i) => (
-            <Card key={i.id}>
-              <CardContent className="pt-4">
-                <div className="flex items-start justify-between gap-2 flex-wrap">
-                  <div className="flex-1 space-y-1">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <p className="font-semibold">{i.companyName}</p>
-                      <Badge className={`text-xs ${INTERNSHIP_STATUS_COLORS[i.status] || ""}`}>
-                        {INTERNSHIP_STATUS_LABELS[i.status] || i.status}
-                      </Badge>
-                    </div>
-                    {i.companyAddress && (
-                      <p className="text-xs text-muted-foreground">{i.companyAddress}</p>
-                    )}
-                    <p className="text-xs text-muted-foreground">
-                      {new Date(i.startDate).toLocaleDateString("fr-FR")}
-                      {i.endDate ? ` → ${new Date(i.endDate).toLocaleDateString("fr-FR")}` : " → en cours"}
-                    </p>
-                    {i.supervisorName && (
-                      <p className="text-xs text-muted-foreground">
-                        Tuteur : {i.supervisorName}{i.supervisorEmail ? ` (${i.supervisorEmail})` : ""}
-                      </p>
-                    )}
-                    {i.description && <p className="text-sm mt-1">{i.description}</p>}
-                    {i.teacherNotes && (
-                      <div className="mt-1 p-2 bg-amber-50 border border-amber-200 rounded text-xs">
-                        <span className="font-medium text-amber-800">Notes prof : </span>
-                        <span className="text-amber-900">{i.teacherNotes}</span>
-                      </div>
-                    )}
-                  </div>
-                  <Badge className="bg-teal-100 text-teal-800 text-xs shrink-0">
-                    {i.student.firstName} {i.student.lastName}
-                  </Badge>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
 
 // ==================== CRÉER PROFESSEUR TAB ====================
 
@@ -2315,7 +2198,6 @@ export default function Admin() {
       {activeTab === "paiements" && <PaiementsTab />}
       {activeTab === "signalements" && <SignalementsTab />}
       {activeTab === "notifications" && <NotificationsAdminTab />}
-      {activeTab === "stages" && <StagesTab />}
       {activeTab === "mon-compte" && <MonCompteTab />}
     </div>
   );

@@ -665,27 +665,12 @@ async function main() {
     ],
   });
 
-  // Ajouter un commentaire et un stage de démo
+  // Ajouter un commentaire de démo
   await prisma.teacherComment.create({
     data: {
       teacherId: teacher.id,
       studentId: junior1.id,
       content: "Élève très motivé, à accompagner dans sa mise en relation. Famille engagée dans le suivi.",
-    },
-  });
-
-  await prisma.internship.create({
-    data: {
-      studentId: junior1.id,
-      companyName: "Mairie de Les Abymes",
-      companyAddress: "Les Abymes, Guadeloupe",
-      supervisorName: "Franck Céleste",
-      supervisorEmail: "f.celeste@mairie-lesabymes.fr",
-      startDate: new Date("2026-06-02"),
-      endDate: new Date("2026-06-27"),
-      description: "Stage d'observation service administratif",
-      status: "COMPLETED",
-      teacherNotes: "Stage bien déroulé. Bilan positif du tuteur.",
     },
   });
 
