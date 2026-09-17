@@ -327,6 +327,15 @@ export interface PaymentRecord {
   createdAt: Date;
 }
 
+export interface CreditLedgerEntry {
+  id: string;
+  seniorId: string;
+  type: "PURCHASE" | "CONSUMPTION" | "ADJUSTMENT";
+  amount: number;
+  reason: string;
+  createdAt: Date;
+}
+
 export const createPaymentSchema = z.object({
   userId: z.string().min(1, "Utilisateur requis"),
   amount: z.number().positive("Montant doit être positif"),
