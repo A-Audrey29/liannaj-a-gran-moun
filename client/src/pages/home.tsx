@@ -65,12 +65,14 @@ function useDashboardCounts(relations?: RelationWithUsers[], pendingFB?: Interve
     }));
   });
 
+  const now = Date.now();
   const allUpcoming = activeRelations.flatMap((r) => {
     const partner = r.seniorId === user?.id ? r.junior : r.senior;
     return (r.interventions || []).filter((i) => i.status === "CONFIRMED" || i.status === "PROPOSED").map((i) => ({
       ...i, partnerName: `${partner.firstName} ${partner.lastName}`, relationId: r.id,
     }));
-  }).sort((a, b) => new Date(a.scheduledDate).getTime() - new Date(b.scheduledDate).getTime());
+  }).filter((i) => new Date(i.scheduledDate).getTime() >= now)
+    .sort((a, b) => new Date(a.scheduledDate).getTime() - new Date(b.scheduledDate).getTime());
 
   const nextIntervention = allUpcoming[0] || null;
 
