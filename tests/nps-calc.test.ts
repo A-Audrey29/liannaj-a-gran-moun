@@ -7,7 +7,7 @@
 import { describe, it, expect } from "vitest";
 import { npsCategory, computeNps } from "../shared/nps";
 import { npsSchema } from "../shared/schema";
-import { csvSafeText } from "../client/src/lib/csv";
+import { buildCsv, csvSafeText } from "../client/src/lib/csv";
 
 describe("npsCategory", () => {
   it("classifies 0-6 as detractor", () => {
@@ -86,7 +86,7 @@ describe("npsSchema", () => {
 });
 
 describe("csvSafeText", () => {
-  it.each(['=HYPERLINK("http://evil","x")', "+33 6 00 00 00 00", "-1+1", "@SUM(A1)", "\tcmd", "\rcmd"])(
+  it.each(['=HYPERLINK("http://evil","x")', "+33 6 00 00 00 00", "-1+1", "@SUM(A1)", "\tcmd", "\rcmd", " =1+1", "\n=HYPERLINK(1)"])(
     "neutralises a formula prefix: %j",
     (value) => {
       expect(csvSafeText(value)).toBe(`'${value}`);
@@ -97,5 +97,17 @@ describe("csvSafeText", () => {
     for (const value of ["Très aimable", "10 sur 10 = parfait", "", "ok - merci"]) {
       expect(csvSafeText(value)).toBe(value);
     }
+  });
+});
+
+describe("buildCsv", () => {
+  it("neutralises formulas in every text cell, whatever the export", () => {
+    const csv = buildCsv(["Nom", "Commentaire"], [["Ana", "=HYPERLINK(\"http://evil\",\"x\")"]]);
+    expect(csv).toContain(`"'=HYPERLINK(""http://evil"",""x"")"`);
+  });
+
+  it("leaves numbers as numbers, including negative ones", () => {
+    const csv = buildCsv(["Solde"], [[-1], [0]]);
+    expect(csv.split("\n").slice(1)).toEqual(["-1", "0"]);
   });
 });

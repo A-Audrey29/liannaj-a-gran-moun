@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import { Download, Loader2 } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
-import { buildCsv, csvSafeText, downloadCsv } from "@/lib/csv";
+import { buildCsv, downloadCsv } from "@/lib/csv";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -104,7 +104,7 @@ export default function SatisfactionTab() {
       SEGMENT_LABELS[r.segment],
       r.score,
       CATEGORY_LABELS[r.category],
-      csvSafeText(r.reason ?? ""),
+      r.reason ?? "",
     ]);
     // Guadeloupe day, like every date inside the file (not the UTC date).
     downloadCsv(`nps_${todayISO()}.csv`, buildCsv(header, rows));
