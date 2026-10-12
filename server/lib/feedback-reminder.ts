@@ -57,11 +57,10 @@ export async function checkAndSendFeedbackReminders() {
       const feedbackUrl = `${baseUrl}/relations/${intervention.relationId}`;
       const subject = `Rappel : donnez votre avis - ${PLATFORM_NAME}`;
 
-      // Destinataires attendus pour cette rencontre. Le rappel n'est marqué
-      // comme envoyé que si TOUS ont été servis : sinon, un échec Brevo sur
-      // l'un des deux était masqué par le succès de l'autre, et la personne en
-      // échec ne recevait jamais de rappel (l'intervention étant marquée
-      // traitée, elle ne repassait plus dans la sélection).
+      // Une seule tentative par destinataire (décision du 2026-10-12) : la
+      // rencontre est marquée relancée même si un e-mail échoue. Rejouer
+      // renvoyait le rappel toutes les 6h à celui dont l'e-mail était passé,
+      // sans fin si l'autre adresse était invalide. L'échec est journalisé.
       const destinataires: { role: string; email: string; prenom: string }[] = [];
       if (intervention.seniorRating === null) {
         destinataires.push({
@@ -95,9 +94,8 @@ export async function checkAndSendFeedbackReminders() {
       if (echecs > 0) {
         console.warn(
           `[FEEDBACK-REMINDER] Intervention ${intervention.id} : ${echecs}/${destinataires.length} ` +
-            `envoi(s) en échec — non marquée comme relancée, nouvelle tentative à la prochaine passe.`
+            `envoi(s) en échec — non rejoué (une seule tentative).`
         );
-        continue;
       }
 
       await storage.updateInterventionFeedbackReminderSent(intervention.id);

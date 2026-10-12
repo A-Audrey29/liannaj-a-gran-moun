@@ -45,6 +45,10 @@ Fix : ajouter la vérif `status === "ACTIVE"` dans le handler, en profondeur.
 
 ## 4. Interventions passées restent CONFIRMED/PROPOSED sans transition automatique
 
+**Résolu le 2026-10-12** : les admins sont relancés 24h après la fin d'une
+rencontre non clôturée (pas de transition automatique, voulu). Voir
+`docs/decisions.md` et `docs/PROCESSUS-RENCONTRES.md`.
+
 Trouvé lors de la session QA du 2026-09-17 (exhaustive, 5 rôles).
 
 Rien ne fait transitionner une intervention `CONFIRMED` ou `PROPOSED` dont

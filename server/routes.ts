@@ -1326,17 +1326,20 @@ export async function registerRoutes(
 
       const updated = await storage.updateIntervention(intervention.id, { status: "CANCELLED" });
 
-      const otherId = intervention.relation.seniorId === user.id
-        ? intervention.relation.juniorId
-        : intervention.relation.seniorId;
+      // Senior who cancels: the junior is told. Admin who cancels: both are.
+      const recipients = intervention.relation.seniorId === user.id
+        ? [intervention.relation.juniorId]
+        : [intervention.relation.seniorId, intervention.relation.juniorId];
 
-      await storage.createNotification({
-        user: { connect: { id: otherId } },
-        type: "SYSTEM",
-        title: "Intervention annulée",
-        message: `L'intervention du ${fmtDayNumeric(intervention.scheduledDate)} a été annulée.`,
-        link: `/relations/${intervention.relationId}`,
-      });
+      for (const recipientId of recipients) {
+        await storage.createNotification({
+          user: { connect: { id: recipientId } },
+          type: "SYSTEM",
+          title: "Intervention annulée",
+          message: `L'intervention du ${fmtDayNumeric(intervention.scheduledDate)} a été annulée.`,
+          link: `/relations/${intervention.relationId}`,
+        });
+      }
 
       res.json(updated);
     } catch (err) {

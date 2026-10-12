@@ -163,7 +163,7 @@ export interface IStorage {
   getPendingFeedbackForReminder(): Promise<(Intervention & { relation: Relation & { senior: User; junior: User } })[]>;
   updateInterventionFeedbackReminderSent(id: string): Promise<Intervention>;
   getOverdueInterventionsForReminder(now?: Date): Promise<(Intervention & { relation: Relation & { senior: User; junior: User } })[]>;
-  updateInterventionMeetingCheckReminderSent(id: string): Promise<Intervention>;
+  markMeetingCheckReminderSent(ids: string[]): Promise<void>;
   /**
    * Historique des rencontres, périmètre décidé par l'appelant (jamais par un
    * paramètre client). Alimente /api/meetings/history pour tous les rôles.
@@ -500,9 +500,9 @@ class DatabaseStorage implements IStorage {
     return candidates.filter((intervention) => isMeetingOverdue(intervention, now));
   }
 
-  async updateInterventionMeetingCheckReminderSent(id: string): Promise<Intervention> {
-    return prisma.intervention.update({
-      where: { id },
+  async markMeetingCheckReminderSent(ids: string[]): Promise<void> {
+    await prisma.intervention.updateMany({
+      where: { id: { in: ids } },
       data: { meetingCheckReminderSentAt: new Date() },
     });
   }

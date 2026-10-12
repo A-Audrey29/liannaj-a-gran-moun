@@ -56,6 +56,10 @@ describe("chaque modele echappe ce qu'il insere", () => {
     ["rappel feedback", () => templates.getFeedbackReminderEmailHtml(PIEGE, PIEGE, PIEGE)],
     ["signalement", () => templates.getNewReportEmailHtml(PIEGE, PIEGE, "OTHER", PIEGE, PIEGE)],
     ["notification admin", () => templates.getNewAdminNotificationEmailHtml(PIEGE, PIEGE, PIEGE, PIEGE)],
+    [
+      "rencontres a cloturer",
+      () => templates.getMeetingCheckAdminEmailHtml(PIEGE, [{ date: PIEGE, seniorName: PIEGE, juniorName: PIEGE }], PIEGE),
+    ],
   ];
 
   it.each(cas)("%s", (_nom, rendre) => {

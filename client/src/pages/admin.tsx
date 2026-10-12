@@ -75,7 +75,7 @@ import {
 import { useAuth } from "@/hooks/use-auth";
 import type { User, Relation, Intervention, PaymentRecord, Notification } from "@shared/schema";
 import { ATELIERS } from "@shared/ateliers";
-import { isMeetingOverdue } from "@shared/meeting-check";
+import { isMeetingEnded } from "@shared/meeting-check";
 import { CREDIT_OFFERS } from "@shared/credit-offers";
 import MessagerieAdminTab from "@/components/admin-messages-tab";
 import SatisfactionTab from "@/components/admin-satisfaction-tab";
@@ -1144,7 +1144,9 @@ function RencontresTab() {
         viewerRole="ADMIN"
         emptyLabel="Aucune rencontre trouvée"
         renderActions={(entry) => {
-          if (!isMeetingOverdue(entry)) return null;
+          // Available as soon as the meeting has ended (e.g. after a phone
+          // call), not only once the 24h reminder delay has passed.
+          if (!isMeetingEnded(entry, new Date())) return null;
           return (
             <div className="flex gap-2">
               <Button
@@ -2178,6 +2180,9 @@ function CreerProfesseurForm() {
 
 export default function Admin() {
   const [activeTab, setActiveTabState] = useState<string>(() => {
+    // ?tab=rencontres: link from the "Rencontres à clôturer" reminder.
+    const fromUrl = new URLSearchParams(window.location.search).get("tab");
+    if (fromUrl && ADMIN_TABS.some((t) => t.id === fromUrl)) return fromUrl;
     return sessionStorage.getItem("feves_admin_tab") ?? "utilisateurs";
   });
 

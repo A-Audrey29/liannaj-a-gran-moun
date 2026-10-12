@@ -291,34 +291,46 @@ export function getFeedbackReminderEmailHtml(
   return emailWrapper(`Rappel : donnez votre avis - ${PLATFORM_NAME}`, body);
 }
 
-export function getMeetingCheckEmailHtml(
-  userName: string,
-  partnerName: string,
-  interventionDate: string,
-  relationUrl?: string
+/** Relance des admins : rencontres terminées depuis plus de 24h, jamais clôturées. */
+export function getMeetingCheckAdminEmailHtml(
+  adminName: string,
+  meetings: { date: string; seniorName: string; juniorName: string }[],
+  adminUrl: string
 ): string {
+  const rows = meetings
+    .map(
+      (m) => `
+      <tr>
+        <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;color:#1f1f1f;font-size:14px;">${escapeHtml(m.date)}</td>
+        <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;color:#1f1f1f;font-size:14px;">${escapeHtml(m.seniorName)}</td>
+        <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;color:#1f1f1f;font-size:14px;">${escapeHtml(m.juniorName)}</td>
+      </tr>`
+    )
+    .join("");
   const body = `
-    <p style="margin:0 0 18px;color:#1f1f1f;font-size:15px;line-height:1.6;">Bonjour ${escapeHtml(userName)},</p>
+    <p style="margin:0 0 18px;color:#1f1f1f;font-size:15px;line-height:1.6;">Bonjour ${escapeHtml(adminName)},</p>
     <p style="margin:0 0 18px;color:#1f1f1f;font-size:15px;line-height:1.6;">
-      La rencontre pr&eacute;vue le <strong>${escapeHtml(interventionDate)}</strong> avec ${escapeHtml(partnerName)} est pass&eacute;e,
-      mais rien ne nous indique si elle a bien eu lieu.
+      Ces rencontres sont termin&eacute;es depuis plus de 24h mais n&rsquo;ont pas &eacute;t&eacute; cl&ocirc;tur&eacute;es.
+      Merci de v&eacute;rifier avec les participants puis de les marquer <strong>r&eacute;alis&eacute;es</strong>
+      (le cr&eacute;dit est alors d&eacute;compt&eacute; et le feedback demand&eacute;) ou <strong>annul&eacute;es</strong>.
     </p>
-    <p style="margin:0 0 18px;color:#1f1f1f;font-size:15px;line-height:1.6;">
-      Merci de vous rendre sur votre espace pour confirmer ou annuler cette rencontre.
-    </p>
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 24px;border-collapse:collapse;">
+      <tr>
+        <th align="left" style="padding:8px 12px;color:#7c3aed;font-size:12px;text-transform:uppercase;">Date</th>
+        <th align="left" style="padding:8px 12px;color:#7c3aed;font-size:12px;text-transform:uppercase;">S&eacute;nior</th>
+        <th align="left" style="padding:8px 12px;color:#7c3aed;font-size:12px;text-transform:uppercase;">Jeune</th>
+      </tr>${rows}
+    </table>
     <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 auto 28px;">
       <tr>
         <td align="center" style="border-radius:6px;background:linear-gradient(135deg,#e91e8c,#7c3aed);">
-          <a href="${escapeHtml(relationUrl || '#')}" target="_blank" style="display:inline-block;padding:14px 36px;color:#ffffff;font-size:15px;font-weight:600;text-decoration:none;border-radius:6px;">
-            Voir la rencontre
+          <a href="${escapeHtml(adminUrl)}" target="_blank" style="display:inline-block;padding:14px 36px;color:#ffffff;font-size:15px;font-weight:600;text-decoration:none;border-radius:6px;">
+            Cl&ocirc;turer les rencontres
           </a>
         </td>
       </tr>
-    </table>
-    <p style="margin:0 0 18px;color:#6b7280;font-size:13px;line-height:1.5;">
-      Si vous ne faites rien, un administrateur ${PLATFORM_NAME} pourra traiter cette rencontre pour vous.
-    </p>`;
-  return emailWrapper(`La rencontre du ${escapeHtml(interventionDate)} a-t-elle eu lieu ? - ${PLATFORM_NAME}`, body);
+    </table>`;
+  return emailWrapper(`Rencontres à clôturer - ${PLATFORM_NAME}`, body);
 }
 
 export function getNewReportEmailHtml(

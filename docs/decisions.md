@@ -3,6 +3,36 @@
 Journal des choix d'architecture et de leurs raisons. Une entrée par décision,
 la plus récente en haut.
 
+## 2026-10-12 — Relance des rencontres non clôturées : aux admins, une seule fois
+
+**Contexte.** Les rencontres `PROPOSED`/`CONFIRMED` dont la date est passée
+restaient bloquées (blocker #4). La première version de la relance écrivait
+au sénior et au jeune « confirmez ou annulez », mais **seul un admin peut
+marquer une rencontre réalisée** (`PATCH /api/interventions/:id/done` est
+`requireAdmin`, et c'est elle qui débite le crédit) : les participants
+recevaient une demande sans pouvoir y répondre.
+
+**Décision — on relance les admins.** Pas de nouveau droit pour les
+participants : laisser un sénior déclencher lui-même le débit de son crédit
+est une décision métier sensible, non retenue. Une passe (toutes les 6h)
+envoie à chaque admin actif **une** notification et **un** e-mail
+récapitulatif (date, sénior, jeune), lien `/admin?tab=rencontres`.
+
+**Décision — quand.** « En retard » = toujours `PROPOSED`/`CONFIRMED` **24h
+après la fin** (début + durée), règle unique `shared/meeting-check.ts`
+(`isMeetingOverdue`) utilisée par le job, le badge et le filtre « À traiter ».
+Les boutons admin, eux, apparaissent dès la fin (`isMeetingEnded`) : le délai
+de 24h ne concerne que la relance. Badge réservé aux admins.
+
+**Décision — e-mails en une seule tentative** (relance des rencontres et
+rappel de feedback). La notification dans l'appli est la garantie ; un
+e-mail en échec est journalisé, pas rejoué. Avant, un échec empêchait le
+marquage et le destinataire servi recevait le même e-mail toutes les 6h,
+sans fin si l'autre adresse était invalide.
+
+**Processus côté équipe** : `docs/PROCESSUS-RENCONTRES.md`, à transmettre aux
+administrateurs FEVES.
+
 ## 2026-10-12 — Crédits : réservation à la réservation, une seule rencontre gratuite
 
 **Contexte.** Review avant mise en prod. Le contrôle à la création ne
