@@ -1,6 +1,6 @@
 import { useAuth } from "@/hooks/use-auth";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { apiRequest, apiErrorMessage, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useLocation } from "wouter";
 import { getPhotoUrl } from "@/lib/photo-url";
@@ -25,6 +25,9 @@ import { MobileTabsMenu } from "@/components/mobile-tabs-menu";
 import MeetingHistory from "@/components/meeting-history";
 import { fmtTime, fmtDayLongMonthYear } from "@/lib/availability-format";
 import { CreditOffersCard } from "@/components/credit-offers-card";
+import { NpsPrompt } from "@/components/nps-prompt";
+import type { CreditBalanceResponse } from "@shared/credits";
+import { isUpcomingOrOngoing } from "@shared/meeting-check";
 
 type RelationWithUsers = Relation & { senior: UserType; junior: UserType; interventions?: Intervention[] };
 
@@ -81,13 +84,15 @@ type TabId = typeof TABS[number]["id"];
 // ==================== DASHBOARD TAB ====================
 
 function DashboardTab({ senior, relations }: { senior: UserType | null; relations: RelationWithUsers[] }) {
-  const { data: creditData } = useQuery<{ balance: number }>({ queryKey: ["/api/credits/balance"] });
+  const [, setLocation] = useLocation();
+  const { data: creditData } = useQuery<CreditBalanceResponse>({ queryKey: ["/api/credits/balance"] });
   const activeRelations = relations.filter((r) => r.status === "ACTIVE");
   const pendingRelations = relations.filter((r) => r.status === "PENDING" || r.status === "PENDING_FIRST_MEETING");
 
+  const now = new Date();
   const upcomingInterventions = activeRelations
     .flatMap((r) => (r.interventions || [])
-      .filter((i) => i.status === "CONFIRMED" || i.status === "PROPOSED")
+      .filter((i) => isUpcomingOrOngoing(i, now))
       .map((i) => ({ ...i, juniorName: `${r.junior.firstName} ${r.junior.lastName}` })))
     .sort((a, b) => new Date(a.scheduledDate).getTime() - new Date(b.scheduledDate).getTime());
 
@@ -95,6 +100,7 @@ function DashboardTab({ senior, relations }: { senior: UserType | null; relation
 
   return (
     <div className="space-y-6">
+      <NpsPrompt />
       {senior && (
         <Card data-testid="card-linked-senior">
           <CardContent className="pt-6">
@@ -112,17 +118,25 @@ function DashboardTab({ senior, relations }: { senior: UserType | null; relation
                 <p className="text-sm text-muted-foreground">{senior.city || ""}</p>
               </div>
               {creditData && (
-                <div className="text-right">
+                <button
+                  type="button"
+                  onClick={() => setLocation("/mes-ateliers")}
+                  className="text-right hover:opacity-80"
+                  data-testid="button-open-ateliers"
+                >
                   <p className="text-2xl font-bold text-[#dc4256]" data-testid="text-credit-balance">
-                    {creditData.balance}
+                    {Math.max(creditData.available, 0)}
                   </p>
-                  <p className="text-xs text-muted-foreground">crédit{creditData.balance > 1 ? "s" : ""}</p>
-                </div>
+                  <p className="text-xs text-muted-foreground">
+                    atelier{creditData.available > 1 ? "s" : ""} disponible{creditData.available > 1 ? "s" : ""}
+                  </p>
+                  <p className="text-xs text-[#dc4256] underline">Voir le détail</p>
+                </button>
               )}
             </div>
-            {creditData && creditData.balance <= 0 && (
+            {creditData && creditData.available <= 0 && (
               <p className="text-sm text-amber-700 bg-amber-50 rounded-lg px-3 py-2 mt-4">
-                Le solde de crédits est épuisé. Achetez un nouveau pack ci-dessous.
+                Plus d'atelier disponible pour une nouvelle réservation. Achetez un pack ci-dessous.
               </p>
             )}
           </CardContent>
@@ -304,10 +318,8 @@ function PrestationTab({ relations }: { relations: RelationWithUsers[] }) {
       setSelectedTasks([]);
       toast({ title: "Prestation demandée", description: "La demande a été transmise au jeune." });
     },
-    onError: async (err: any) => {
-      let msg = "Erreur lors de la demande";
-      try { const j = await err.response?.json?.(); msg = j?.message || msg; } catch {}
-      toast({ title: "Erreur", description: msg, variant: "destructive" });
+    onError: (err) => {
+      toast({ title: "Erreur", description: apiErrorMessage(err, "Erreur lors de la demande"), variant: "destructive" });
     },
   });
 

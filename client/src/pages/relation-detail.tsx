@@ -1,6 +1,6 @@
 import { useAuth } from "@/hooks/use-auth";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { apiRequest, apiErrorCode, apiErrorMessage, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useLocation, useParams, Link } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -468,10 +468,10 @@ function NewInterventionDialog({
       setTasks([]);
       onClose();
     },
-    onError: (err: any) =>
+    onError: (err) =>
       toast({
-        title: "Proposition refusée",
-        description: err?.message || "Ce créneau n'est pas disponible.",
+        title: apiErrorCode(err) === "INSUFFICIENT_CREDITS" ? "Plus de crédit disponible" : "Proposition refusée",
+        description: apiErrorMessage(err, "Ce créneau n'est pas disponible."),
         variant: "destructive",
       }),
   });

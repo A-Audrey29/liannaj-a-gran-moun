@@ -43,6 +43,25 @@ un fetch direct, un référent a pu être lié à un sénior `PENDING_VALIDATION
 Risque : faible (nécessite un accès admin + appel API direct).
 Fix : ajouter la vérif `status === "ACTIVE"` dans le handler, en profondeur.
 
+## 4. Interventions passées restent CONFIRMED/PROPOSED sans transition automatique
+
+**Résolu le 2026-10-12** : les admins sont relancés 24h après la fin d'une
+rencontre non clôturée (pas de transition automatique, voulu). Voir
+`docs/decisions.md` et `docs/PROCESSUS-RENCONTRES.md`.
+
+Trouvé lors de la session QA du 2026-09-17 (exhaustive, 5 rôles).
+
+Rien ne fait transitionner une intervention `CONFIRMED` ou `PROPOSED` dont
+`scheduledDate` est déjà passée. Sur les données de seed, 2 cas observés
+(16 sept CONFIRMED, 14 sept PROPOSED, testé le 17 sept). Corrigé en surface
+par [ISSUE-001](../../.gstack/qa-reports/qa-report-lyannaj-2026-09-17.md)
+(le dashboard ne les affiche plus comme "prochaine rencontre"), mais le
+fond du problème reste : pas de job/check qui les fait avancer vers
+`COMPLETED_PENDING_FEEDBACK` ou un état "à clôturer".
+
+À trancher : est-ce voulu (transition seulement sur action manuelle
+junior/senior) ou faut-il un mécanisme de relance/clôture automatique ?
+
 ## Zones jamais testées (ni QA manuelle ni agent)
 
 - Flow de déclenchement d'un signalement (senior/junior qui signale un

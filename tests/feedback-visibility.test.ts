@@ -175,3 +175,78 @@ describe("GET /api/meetings/history — masquage dans l'historique", () => {
     expect(corps).not.toContain("AUTRE_FEEDBACK_JEUNE");
   });
 });
+
+describe("GET /api/referent/relations — espace referent", () => {
+  it("le referent recoit le feedback du senior, jamais celui du jeune", async () => {
+    const { senior } = await contexteAvecFeedbacks();
+    const referent = await createUser("REFERENT_SENIOR", { linkedSeniorId: senior.id });
+    const agent = await loginAs(referent);
+
+    const res = await agent.get("/api/referent/relations");
+    expect(res.status).toBe(200);
+
+    const [intervention] = interventionsDe(res.body);
+    expect(intervention.seniorComment).toBe(COMMENTAIRE_SENIOR);
+    expect(intervention.juniorRating).toBeNull();
+    expect(corpsBrut(res.body)).not.toContain(COMMENTAIRE_JEUNE);
+  });
+});
+
+describe("GET /api/interventions/pending-feedback — avant d'avoir note", () => {
+  it("le senior qui n'a pas encore note ne recoit pas la note du jeune", async () => {
+    const senior = await createUser("SENIOR");
+    const junior = await createUser("JUNIOR");
+    const relation = await createRelation(senior.id, junior.id);
+    await createInterventionWithFeedback(relation.id, {
+      status: "COMPLETED_PENDING_FEEDBACK",
+      seniorRating: null,
+      seniorComment: null,
+    });
+
+    const res = await (await loginAs(senior)).get("/api/interventions/pending-feedback");
+
+    expect(res.status).toBe(200);
+    expect(res.body).toHaveLength(1);
+    expect(res.body[0].juniorRating).toBeNull();
+    expect(corpsBrut(res.body)).not.toContain(COMMENTAIRE_JEUNE);
+  });
+});
+
+describe("POST /api/interventions/:id/feedback — reponse", () => {
+  it("la reponse au jeune ne contient pas le feedback deja donne par le senior", async () => {
+    const senior = await createUser("SENIOR");
+    const junior = await createUser("JUNIOR");
+    const relation = await createRelation(senior.id, junior.id);
+    const intervention = await createInterventionWithFeedback(relation.id, {
+      status: "COMPLETED_PENDING_FEEDBACK",
+      juniorRating: null,
+      juniorComment: null,
+    });
+
+    const res = await (await loginAs(junior))
+      .post(`/api/interventions/${intervention.id}/feedback`)
+      .send({ rating: 4, comment: "Merci" });
+
+    expect(res.status).toBe(200);
+    expect(res.body.juniorRating).toBe(4);
+    expect(res.body.seniorRating).toBeNull();
+    expect(corpsBrut(res.body)).not.toContain(COMMENTAIRE_SENIOR);
+  });
+});
+
+describe("GET /api/meetings/history — filtres de dates en heure de Guadeloupe", () => {
+  it("une rencontre du 10 a 21h (GP) appartient au 10, pas au 11", async () => {
+    const { junior, relation } = await contexteAvecFeedbacks();
+    await prisma.intervention.deleteMany();
+    // 10 octobre 21:00 en Guadeloupe (UTC-4) = 11 octobre 01:00 UTC.
+    await createInterventionWithFeedback(relation.id, { scheduledDate: new Date("2026-10-11T01:00:00Z") });
+    const agent = await loginAs(junior);
+
+    const le10 = await agent.get("/api/meetings/history?from=2026-10-10&to=2026-10-10");
+    const le11 = await agent.get("/api/meetings/history?from=2026-10-11&to=2026-10-11");
+
+    expect(le10.status).toBe(200);
+    expect(le10.body.entries).toHaveLength(1);
+    expect(le11.body.entries).toHaveLength(0);
+  });
+});

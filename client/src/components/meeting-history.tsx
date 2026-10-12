@@ -2,12 +2,14 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Calendar, Clock, MapPin, Download, Loader2, ChevronRight, Users } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import StatusBadge from "@/components/status-badge";
 import StarRating from "@/components/star-rating";
 import { buildCsv, downloadCsv } from "@/lib/csv";
 import { fmtTime, gpParts } from "@/lib/availability-format";
 import { MOIS_LONGS } from "@shared/dates";
+import { isMeetingOverdue } from "@shared/meeting-check";
 import type { MeetingHistoryEntry, MeetingHistoryResponse, Role } from "@shared/schema";
 
 /**
@@ -39,6 +41,9 @@ const STATUS_FILTERS = [
   { id: "COMPLETED", label: "Terminées" },
   { id: "CANCELLED", label: "Annulées" },
 ];
+
+/** Terminée depuis plus de 24h et jamais clôturée : à traiter par un admin. */
+const isOverdue = (entry: MeetingHistoryEntry) => isMeetingOverdue(entry, new Date());
 
 /** 135 → "2h15", 120 → "2h", 45 → "45 min". */
 export function fmtDuration(minutes: number): string {
@@ -90,7 +95,16 @@ export default function MeetingHistory({
 
   const entries = data?.entries ?? [];
   const summary = data?.summary;
-  const filtered = filter === "all" ? entries : entries.filter((e) => e.status === filter);
+  const overdueCount = entries.filter(isOverdue).length;
+  // The "À traiter" chip disappears once nothing is overdue: fall back to all
+  // instead of leaving an empty list with no highlighted chip.
+  const activeFilter = filter === "OVERDUE" && overdueCount === 0 ? "all" : filter;
+  const filtered =
+    activeFilter === "all"
+      ? entries
+      : activeFilter === "OVERDUE"
+        ? entries.filter(isOverdue)
+        : entries.filter((e) => e.status === activeFilter);
 
   function exportCSV() {
     const header = [
@@ -176,7 +190,7 @@ export default function MeetingHistory({
               key={f.id}
               onClick={() => setFilter(f.id)}
               className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
-                filter === f.id
+                activeFilter === f.id
                   ? "bg-[#dc4256] text-white"
                   : "bg-white text-muted-foreground hover:bg-muted border"
               }`}
@@ -185,6 +199,19 @@ export default function MeetingHistory({
               {f.label}
             </button>
           ))}
+          {viewerRole === "ADMIN" && overdueCount > 0 && (
+            <button
+              onClick={() => setFilter("OVERDUE")}
+              className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
+                activeFilter === "OVERDUE"
+                  ? "bg-red-600 text-white"
+                  : "bg-red-50 text-red-700 hover:bg-red-100 border border-red-200"
+              }`}
+              data-testid="filter-history-OVERDUE"
+            >
+              À traiter ({overdueCount})
+            </button>
+          )}
         </div>
         {showExport && (
           <Button
@@ -279,6 +306,16 @@ function MeetingRow({
               )}
             </div>
             <div className="flex items-center gap-2 shrink-0">
+              {/* Admin-only: participants cannot close a meeting themselves. */}
+              {viewerRole === "ADMIN" && isOverdue(entry) && (
+                <Badge
+                  variant="outline"
+                  className="text-xs font-medium bg-red-100 text-red-800 border-red-200"
+                  data-testid={`badge-overdue-${entry.id}`}
+                >
+                  En retard
+                </Badge>
+              )}
               <StatusBadge status={entry.status} />
               <ChevronRight
                 className={`w-4 h-4 text-muted-foreground transition-transform ${isExpanded ? "rotate-90" : ""}`}

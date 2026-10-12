@@ -39,6 +39,7 @@ import {
 } from "lucide-react";
 import type { User as UserType } from "@shared/schema";
 import { fmtTime, fmtDayLongMonthYear } from "@/lib/availability-format";
+import { isUpcomingOrOngoing } from "@shared/meeting-check";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -385,7 +386,7 @@ function RelationsSection({ data }: { data: StudentDetail }) {
           (i) => i.status === "COMPLETED" || i.status === "DONE"
         ).length;
         const nextMeeting = relInterventions
-          .filter((i) => i.status === "CONFIRMED" || i.status === "PROPOSED")
+          .filter((i) => isUpcomingOrOngoing(i, new Date()))
           .sort(
             (a, b) =>
               new Date(a.scheduledDate).getTime() - new Date(b.scheduledDate).getTime()

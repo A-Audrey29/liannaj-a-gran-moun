@@ -3,6 +3,146 @@
 Journal des choix d'architecture et de leurs raisons. Une entrée par décision,
 la plus récente en haut.
 
+## 2026-10-12 — Relance des rencontres non clôturées : aux admins, une seule fois
+
+**Contexte.** Les rencontres `PROPOSED`/`CONFIRMED` dont la date est passée
+restaient bloquées (blocker #4). La première version de la relance écrivait
+au sénior et au jeune « confirmez ou annulez », mais **seul un admin peut
+marquer une rencontre réalisée** (`PATCH /api/interventions/:id/done` est
+`requireAdmin`, et c'est elle qui débite le crédit) : les participants
+recevaient une demande sans pouvoir y répondre.
+
+**Décision — on relance les admins.** Pas de nouveau droit pour les
+participants : laisser un sénior déclencher lui-même le débit de son crédit
+est une décision métier sensible, non retenue. Une passe (toutes les 6h)
+envoie à chaque admin actif **une** notification et **un** e-mail
+récapitulatif (date, sénior, jeune), lien `/admin?tab=rencontres`.
+
+**Décision — quand.** « En retard » = toujours `PROPOSED`/`CONFIRMED` **24h
+après la fin** (début + durée), règle unique `shared/meeting-check.ts`
+(`isMeetingOverdue`) utilisée par le job, le badge et le filtre « À traiter ».
+Les boutons admin, eux, apparaissent dès la fin (`isMeetingEnded`) : le délai
+de 24h ne concerne que la relance. Badge réservé aux admins.
+
+**Décision — e-mails en une seule tentative.** Relance des rencontres : la
+notification dans l'appli est la garantie (créée avec le marquage, dans une
+transaction), l'e-mail est best effort. Rappel de feedback (e-mail seul) :
+la rencontre est marquée dès qu'un destinataire a été servi ; si **tous**
+les envois échouent (panne Brevo), personne n'a rien reçu et on retente à la
+passe suivante, jusqu'à 7 jours après la rencontre (au-delà, abandon
+journalisé : sinon une adresse définitivement invalide serait retentée sans
+fin). Avant, un échec empêchait le marquage et le destinataire
+servi recevait le même e-mail toutes les 6h, sans fin si l'autre adresse
+était invalide.
+
+**Processus côté équipe** : `docs/PROCESSUS-RENCONTRES.md`, à transmettre aux
+administrateurs FEVES.
+
+## 2026-10-12 — Crédits : réservation à la réservation, une seule rencontre gratuite
+
+**Contexte.** Review avant mise en prod. Le contrôle à la création ne
+vérifiait que `solde > 0` : avec 1 crédit, un senior pouvait prévoir 5
+ateliers et finir à -4. La « première rencontre gratuite » était décidée par
+le seul statut de la relation : deux rencontres courtes créées avant la
+première validation passaient toutes deux sans contrôle. Enfin, deux
+validations simultanées d'une même rencontre (double clic, deux admins)
+débitaient deux crédits.
+
+**Décision — les ateliers prévus réservent un crédit.** Crédits disponibles =
+solde du `CreditLedger` − ateliers payants `PROPOSED`/`CONFIRMED`. Une
+création exige au moins 1 crédit disponible. Le **débit reste à la
+complétion** (règle du 2026-09-07 inchangée) ; annuler un atelier libère sa
+réservation. Pas de nouvelle table : la réservation se déduit des rencontres
+prévues, comme le solde se déduit du ledger. Le contrôle tourne dans la
+transaction de création, sous un verrou advisory par senior
+(`credits:<seniorId>`) : sans lui, des réservations simultanées sur des
+jeunes différents consommaient le même dernier crédit (reproduit en test).
+
+**Décision — une seule rencontre gratuite par relation, décidée à la
+création et mémorisée.** Gratuite si la relation attend sa première
+rencontre, si elle dure 30 min ou moins **et** s'il n'existe encore aucune
+rencontre non annulée sur la relation (`isFreeMeeting`, `server/storage.ts`).
+Le résultat est stocké dans `Intervention.isFree` (migration
+`20261012120000_add_intervention_is_free`) : la réservation compte les
+rencontres prévues non gratuites, le débit à la complétion lit le drapeau.
+Recalculer à la complétion dépendait de l'ordre de clôture (une payante
+clôturée avant la gratuite faisait passer la relation ACTIVE, et la gratuite
+était débitée à son tour). Si la rencontre gratuite est annulée, le
+drapeau passe à la plus ancienne rencontre courte encore prévue sur la
+relation (`cancelIntervention`, même transaction), qui libère ainsi son
+crédit réservé.
+
+**Décision — clôture idempotente.** `completeIntervention` ne passe à
+`COMPLETED_PENDING_FEEDBACK` que si la rencontre est encore `CONFIRMED`, et
+`cancelIntervention` ne passe à `CANCELLED` que si elle est encore
+`PROPOSED`/`CONFIRMED`, et `confirmIntervention` ne confirme qu'une rencontre
+encore `PROPOSED` (mises à jour conditionnelles) ; sinon 409. Une rencontre
+ne peut donc être ni débitée deux fois, ni annulée après débit, ni
+reconfirmée après annulation.
+
+**Conséquence.** Le solde négatif ne peut plus venir que d'un ajustement
+admin après réservation ; l'alerte « Solde de crédits négatif » est conservée
+pour ce cas.
+
+## 2026-10-08 — NPS (recommandation du service) pour le financeur
+
+**Contexte.** Le dossier SORTIR + (annexe 1) impose de systématiser le Net
+Promoter Score : question « Recommanderiez-vous Lyannaj à votre entourage ? »
+(0 à 10) + question qualitative « pourquoi cette note ? », puis lecture en
+promoteurs / passifs / détracteurs. Rien n'existait : seule la note 1-5 étoiles
+par rencontre (`Intervention.seniorRating`).
+
+**Décision — table séparée `NpsResponse`, jamais de colonne sur
+`Intervention`.** Le NPS mesure le service, pas une rencontre. Surtout : toute
+colonne ajoutée à `Intervention` est sérialisée par les 3 routes à masquage de
+feedback (`/api/meetings/history`, `/api/relations`, `/api/relations/:id`) et
+fuirait vers le jeune si on oubliait de la masquer. Une table à part n'est lue
+que par les routes NPS.
+
+**Décision — qui répond, quand.** Seniors **et** référents (le référent paie
+souvent pour le senior), jamais les jeunes (le NPS jeune mesure une autre
+chose : la satisfaction du prestataire). Au plus une réponse par personne tous
+les 90 jours (`NPS_COOLDOWN_DAYS`, évite la fatigue d'enquête), et seulement
+après au moins une rencontre tenue (`COMPLETED` / `COMPLETED_PENDING_FEEDBACK`)
+pour le senior concerné. Éligibilité décidée **côté serveur uniquement**
+(`findNpsIneligibility`, `server/storage.ts`) ; le client ne fait que
+masquer la carte. Création sous verrou advisory par utilisateur
+(`pg_advisory_xact_lock`) : deux envois simultanés ne produisent qu'une ligne.
+
+**Décision — seule la note brute est stockée.** Catégorie (0-6 détracteur,
+7-8 passif, 9-10 promoteur) et score (`% promoteurs − % détracteurs`) sont
+calculés par `shared/nps.ts`. Segments senior / référent affichés séparément :
+deux populations différentes. Contraintes `CHECK` en base (note 0-10, rôle
+senior/référent) car Prisma ne sait pas les exprimer et le chiffre part chez le
+financeur.
+
+**Décision — restitution : onglet admin + CSV pseudonymisé.** L'onglet
+« Satisfaction » affiche le score avec **n** et un avertissement sous 30
+réponses (un seul détracteur sur 10 réponses fait −10 points). Les noms y sont
+visibles pour que l'équipe puisse rappeler un détracteur ; l'export CSV
+(`;` + BOM pour Excel FR) n'en contient aucun — le financeur n'a pas à
+identifier les personnes. Pas de rôle « financeur » (enum + gardes + tests de
+permissions : trop pour un MVP).
+
+**Compromis assumés.**
+- Suppression d'un compte (décision du 2026-10-12) : la **note est conservée,
+  anonyme** (`userId` passe à `NULL`, `onDelete: SetNull`) et le **motif libre
+  est effacé** (`storage.deleteUser`, même transaction), car il peut identifier
+  la personne. Ainsi un bilan déjà transmis au financeur reste reproductible.
+  Une note seule, sans lien vers la personne ni texte, n'est plus une donnée
+  personnelle. L'onglet admin affiche « Compte supprimé ».
+- `GET /api/admin/nps` renvoie toutes les réponses de la période, sans
+  pagination. Suffisant à l'échelle actuelle ; à revoir (GROUP BY + page) si
+  les volumes grossissent.
+- « Plus tard » est mémorisé en `localStorage` (par appareil, 14 jours) pour
+  éviter une colonne `User` dans un MVP.
+- Pas de rappel e-mail en V1 (déclencheur = carte sur le tableau de bord). À
+  ajouter sur le modèle de `meeting-check-reminder.ts` si le taux de réponse
+  est faible.
+- Le texte du dossier collé s'arrêtait avant le détail des catégories de
+  clients : les seuils sont ceux du NPS standard. À confirmer avec le texte
+  complet du financeur.
+
 ## 2026-09-14 — Paiement en ligne des crédits via Stripe Checkout
 
 **Contexte.** La décision du 2026-09-07 excluait Stripe du MVP (achat 100%

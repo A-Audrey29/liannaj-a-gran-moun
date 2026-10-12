@@ -32,6 +32,7 @@ const PolitiqueConfidentialite = lazy(() => import("@/pages/politique-confidenti
 const CGU = lazy(() => import("@/pages/cgu"));
 const CreditsSuccess = lazy(() => import("@/pages/credits-success"));
 const CreditsCancel = lazy(() => import("@/pages/credits-cancel"));
+const MesAteliers = lazy(() => import("@/pages/mes-ateliers"));
 
 function AdminGuard({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
@@ -84,6 +85,9 @@ function Router() {
         </Route>
         <Route path="/credits/cancel">
           <AuthGuard><CreditsCancel /></AuthGuard>
+        </Route>
+        <Route path="/mes-ateliers">
+          <AuthGuard><MesAteliers /></AuthGuard>
         </Route>
         {/* Accessibles sans authentification : un visiteur doit pouvoir les
             lire avant de créer un compte. */}

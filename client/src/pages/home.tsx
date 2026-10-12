@@ -18,7 +18,7 @@ import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Checkbox } from "@/components/ui/checkbox";
 import StatusBadge from "@/components/status-badge";
-import { Calendar, MessageCircle, Mail, User, LayoutGrid, ChevronRight, ChevronLeft, Plus, Check, X, Pencil, Heart, Camera, Trash2, AlertTriangle, Star, Users, ClipboardCheck, List, GalleryHorizontalEnd, MapPin, Lock, HelpCircle, Loader2, CalendarClock } from "lucide-react";
+import { Calendar, MessageCircle, Mail, User, LayoutGrid, ChevronRight, ChevronLeft, Plus, Check, X, Pencil, Heart, Camera, Trash2, AlertTriangle, Users, ClipboardCheck, List, GalleryHorizontalEnd, MapPin, Lock, HelpCircle, Loader2, CalendarClock, BookOpen } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 import { updateProfileSchema, type UpdateProfileInput, changePasswordSchema, type ChangePasswordInput } from "@shared/schema";
 import type { Relation, User as UserType, Intervention, Category } from "@shared/schema";
@@ -31,6 +31,9 @@ import { useUnreadMessageCount } from "@/hooks/use-unread-count";
 import { usePushNotifications } from "@/hooks/use-push";
 import { fmtTime, gpParts, MOIS_LONGS } from "@/lib/availability-format";
 import { CreditOffersCard } from "@/components/credit-offers-card";
+import { NpsPrompt } from "@/components/nps-prompt";
+import type { CreditBalanceResponse } from "@shared/credits";
+import { isUpcomingOrOngoing } from "@shared/meeting-check";
 
 type RelationWithUsers = Relation & { senior: UserType; junior: UserType; interventions?: Intervention[] };
 type MatchSuggestion = { user: UserType; commonCategories: string[]; isRecommended: boolean; isFavorite: boolean };
@@ -65,12 +68,14 @@ function useDashboardCounts(relations?: RelationWithUsers[], pendingFB?: Interve
     }));
   });
 
+  const now = new Date();
   const allUpcoming = activeRelations.flatMap((r) => {
     const partner = r.seniorId === user?.id ? r.junior : r.senior;
-    return (r.interventions || []).filter((i) => i.status === "CONFIRMED" || i.status === "PROPOSED").map((i) => ({
+    return (r.interventions || []).filter((i) => isUpcomingOrOngoing(i, now)).map((i) => ({
       ...i, partnerName: `${partner.firstName} ${partner.lastName}`, relationId: r.id,
     }));
-  }).sort((a, b) => new Date(a.scheduledDate).getTime() - new Date(b.scheduledDate).getTime());
+  })
+    .sort((a, b) => new Date(a.scheduledDate).getTime() - new Date(b.scheduledDate).getTime());
 
   const nextIntervention = allUpcoming[0] || null;
 
@@ -122,7 +127,7 @@ export default function Home() {
 
   const { data: relations, isLoading: relLoading } = useQuery<RelationWithUsers[]>({ queryKey: ["/api/relations"] });
   const { data: pendingFB } = useQuery<Intervention[]>({ queryKey: ["/api/interventions/pending-feedback"] });
-  const { data: creditData } = useQuery<{ balance: number }>({
+  const { data: creditData } = useQuery<CreditBalanceResponse>({
     queryKey: ["/api/credits/balance"],
     enabled: user?.role === "SENIOR",
   });
@@ -171,7 +176,7 @@ export default function Home() {
               className="px-3 py-1 rounded-full text-sm font-medium bg-[#dc4256]/10 text-[#dc4256]"
               data-testid="badge-credit-balance"
             >
-              {creditData.balance} crédit{creditData.balance > 1 ? "s" : ""}
+              {creditData.balance} atelier{creditData.balance > 1 ? "s" : ""}
             </span>
           )}
         </div>
@@ -242,7 +247,7 @@ export default function Home() {
         })}
       </div>
 
-      {activeTab === "dashboard" && <DashboardTab counts={counts} isLoading={relLoading} user={user} onSwitchTab={setActiveTab} />}
+      {activeTab === "dashboard" && <DashboardTab counts={counts} isLoading={relLoading} user={user} onSwitchTab={setActiveTab} creditAvailable={creditData?.available} onOpenAteliers={() => setLocation("/mes-ateliers")} />}
       {activeTab === "rencontres" && <RencontresTab relations={relations} isLoading={relLoading} user={user} onOpenMessage={(relationId) => { setOpenRelationId(relationId); setActiveTab("messages"); }} />}
       {activeTab === "disponibilites" && user?.role === "JUNIOR" && <DisponibilitesTab />}
       {activeTab === "messages" && <MessagesTab user={user} openRelationId={openRelationId} />}
@@ -276,7 +281,7 @@ function DashboardCard({ icon: Icon, count, label, detail, onClick, highlight, t
   );
 }
 
-function DashboardTab({ counts, isLoading, user, onSwitchTab }: { counts: DashboardCounts; isLoading: boolean; user: AuthUser | null; onSwitchTab: (tab: string) => void }) {
+function DashboardTab({ counts, isLoading, user, onSwitchTab, creditAvailable, onOpenAteliers }: { counts: DashboardCounts; isLoading: boolean; user: AuthUser | null; onSwitchTab: (tab: string) => void; creditAvailable?: number; onOpenAteliers: () => void }) {
   const isJunior = user?.role === "JUNIOR";
 
   if (isLoading) {
@@ -296,13 +301,14 @@ function DashboardTab({ counts, isLoading, user, onSwitchTab }: { counts: Dashbo
     ? `${nextDate}${nextPartner ? `\navec ${nextPartner}` : ""}${nextLocation ? ` · ${nextLocation}` : ""}`
     : "Aucune prévue";
 
-  const pendingPartners = counts.pendingDemandes.slice(0, 2).map((r) => {
-    const partner = r.seniorId === user?.id ? r.junior : r.senior;
-    return partner.firstName;
-  });
-  const pendingDetail = pendingPartners.length > 0
-    ? pendingPartners.join(", ") + (counts.pendingDemandes.length > 2 ? "…" : "")
-    : "Aucune";
+  // For a senior, pending requests are ones they SENT: they wait on the junior,
+  // so they are shown for information but are not an action to take.
+  const sentRequests = counts.pendingDemandes.length;
+  const actionsCount = counts.feedbackCount;
+  const actionsDetail = [
+    actionsCount > 0 ? `${actionsCount} feedback${actionsCount > 1 ? "s" : ""} à donner` : "Rien à faire",
+    sentRequests > 0 ? `${sentRequests} demande${sentRequests > 1 ? "s" : ""} en attente` : null,
+  ].filter(Boolean).join(" · ");
 
   const proposedDetail = counts.proposedInterventions.length > 0
     ? counts.proposedInterventions.length === 1
@@ -330,6 +336,7 @@ function DashboardTab({ counts, isLoading, user, onSwitchTab }: { counts: Dashbo
 
   return (
     <div>
+      {user?.role === "SENIOR" && <NpsPrompt className="mb-6" />}
       <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-4" data-testid="text-resume">Résumé</h3>
       <div className="grid grid-cols-2 gap-3">
         {isJunior ? (
@@ -352,17 +359,26 @@ function DashboardTab({ counts, isLoading, user, onSwitchTab }: { counts: Dashbo
               highlight="purple"
               testId="card-relations-actives"
             />
+            <DashboardCard
+              icon={AlertTriangle}
+              count={counts.feedbackCount}
+              label="Feedback à donner"
+              detail={counts.feedbackCount > 0 ? "Donnez votre avis sur vos rencontres" : "Rien à faire"}
+              onClick={() => onSwitchTab("rencontres")}
+              highlight={counts.feedbackCount > 0 ? "orange" : undefined}
+              testId="card-feedback-junior"
+            />
           </>
         ) : (
           <>
             <DashboardCard
-              icon={MessageCircle}
-              count={counts.pendingDemandes.length}
-              label="Demandes envoyées"
-              detail={pendingDetail}
-              onClick={() => onSwitchTab("demandes")}
-              highlight={counts.pendingDemandes.length > 0 ? "purple" : undefined}
-              testId="card-demandes"
+              icon={AlertTriangle}
+              count={actionsCount}
+              label="Actions à faire"
+              detail={actionsDetail}
+              onClick={() => onSwitchTab(actionsCount === 0 && sentRequests > 0 ? "demandes" : "rencontres")}
+              highlight={actionsCount > 0 ? "orange" : undefined}
+              testId="card-actions"
             />
             <DashboardCard
               icon={Users}
@@ -384,15 +400,24 @@ function DashboardTab({ counts, isLoading, user, onSwitchTab }: { counts: Dashbo
           highlight="purple"
           testId="card-prochaine-rencontre"
         />
-        <DashboardCard
-          icon={Star}
-          count={counts.feedbackCount}
-          label="Feedback à donner"
-          detail={counts.feedbackCount > 0 ? "Urgent" : "À jour"}
-          onClick={() => onSwitchTab("rencontres")}
-          highlight={counts.feedbackCount > 0 ? "orange" : undefined}
-          testId="card-feedback"
-        />
+        {user?.role === "SENIOR" && (
+          <DashboardCard
+            icon={BookOpen}
+            // Available = balance minus meetings already booked; never shown below 0.
+            count={creditAvailable !== undefined ? Math.max(creditAvailable, 0) : "--"}
+            label="Ateliers restants"
+            detail={
+              creditAvailable === undefined
+                ? "Voir le détail"
+                : creditAvailable <= 0
+                  ? "Achetez des ateliers pour réserver"
+                  : `atelier${creditAvailable > 1 ? "s" : ""} disponible${creditAvailable > 1 ? "s" : ""}`
+            }
+            onClick={onOpenAteliers}
+            highlight="purple"
+            testId="card-ateliers"
+          />
+        )}
       </div>
     </div>
   );

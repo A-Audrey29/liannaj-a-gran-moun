@@ -16,11 +16,29 @@ export function csvEscape(value: string): string {
   return value;
 }
 
+/**
+ * Neutralises spreadsheet formulas. A cell starting with = + - @ (or tab / CR),
+ * possibly after leading whitespace or a line break that some tools trim on
+ * import, is executed when the file is opened in Excel: a free-text comment
+ * such as `=HYPERLINK(...)` would run on whoever receives the export. A
+ * leading apostrophe makes it inert.
+ *
+ * buildCsv applies it to every string cell; numbers are left alone, so a
+ * numeric -1 stays a number.
+ */
+export function csvSafeText(value: string): string {
+  return /^\s*[=+\-@]|^[\t\r]/.test(value) ? `'${value}` : value;
+}
+
 export function buildCsv(header: string[], rows: (string | number | null | undefined)[][]): string {
   const bom = "﻿";
   const lines = [
     header.map((h) => csvEscape(h)).join(";"),
-    ...rows.map((row) => row.map((cell) => csvEscape(cell == null ? "" : String(cell))).join(";")),
+    ...rows.map((row) =>
+      row
+        .map((cell) => csvEscape(cell == null ? "" : typeof cell === "string" ? csvSafeText(cell) : String(cell)))
+        .join(";")
+    ),
   ];
   return bom + lines.join("\n");
 }

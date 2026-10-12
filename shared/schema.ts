@@ -1,10 +1,11 @@
 import { z } from "zod";
+import { NPS_MIN_SCORE, NPS_MAX_SCORE } from "./nps";
 
 export type Role = "ADMIN" | "SENIOR" | "JUNIOR" | "REFERENT_SENIOR" | "TEACHER";
 export type UserStatus = "PENDING_VALIDATION" | "ACTIVE" | "SUSPENDED" | "BANNED";
 export type RelationStatus = "PENDING" | "PENDING_FIRST_MEETING" | "ACTIVE" | "PAUSED" | "CLOSED";
 export type InterventionStatus = "PROPOSED" | "CONFIRMED" | "CANCELLED" | "DONE" | "COMPLETED_PENDING_FEEDBACK" | "COMPLETED";
-export type NotificationType = "RELATION_REQUEST" | "INTERVENTION_PROPOSED" | "INTERVENTION_CONFIRMED" | "FEEDBACK_REMINDER" | "NEW_MESSAGE" | "SYSTEM";
+export type NotificationType = "RELATION_REQUEST" | "INTERVENTION_PROPOSED" | "INTERVENTION_CONFIRMED" | "FEEDBACK_REMINDER" | "MEETING_CHECK" | "NEW_MESSAGE" | "SYSTEM";
 export type AvailabilityKind = "AVAILABLE" | "UNAVAILABLE";
 
 export interface User {
@@ -72,6 +73,8 @@ export interface Intervention {
   juniorRating: number | null;
   juniorComment: string | null;
   feedbackReminderSentAt: Date | null;
+  /** Free first meeting of the relation: no credit reserved nor debited. */
+  isFree: boolean;
   createdAt: Date;
 }
 
@@ -236,6 +239,16 @@ export const feedbackSchema = z.object({
   comment: z.string().max(1000).optional(),
 });
 
+// Not feedbackSchema: its min(1) would reject a score of 0, which is valid for NPS.
+export const npsSchema = z.object({
+  score: z
+    .number({ invalid_type_error: "La note doit être un nombre" })
+    .int("La note doit être un entier")
+    .min(NPS_MIN_SCORE, `La note minimale est ${NPS_MIN_SCORE}`)
+    .max(NPS_MAX_SCORE, `La note maximale est ${NPS_MAX_SCORE}`),
+  reason: z.string().trim().max(1000).nullish(),
+});
+
 export const createAvailabilitySchema = z
   .object({
     startAt: z.string().min(1),
@@ -260,13 +273,23 @@ export const createDateExceptionSchema = z
   .refine(
     (data) => (data.startTime === undefined) === (data.endTime === undefined),
     { message: "startTime et endTime doivent être fournis ensemble ou omis tous les deux", path: ["endTime"] }
-  );
+  )
+  .refine((data) => !data.startTime || !data.endTime || data.endTime > data.startTime, {
+    message: "L'heure de fin doit être après l'heure de début",
+    path: ["endTime"],
+  });
 
-export const recurringSlotSchema = z.object({
-  dayOfWeek: z.number().min(0).max(6),
-  startTime: timeHHMM,
-  endTime: timeHHMM,
-});
+// HH:MM strings compare correctly as text.
+export const recurringSlotSchema = z
+  .object({
+    dayOfWeek: z.number().int().min(0).max(6),
+    startTime: timeHHMM,
+    endTime: timeHHMM,
+  })
+  .refine((slot) => slot.endTime > slot.startTime, {
+    message: "L'heure de fin doit être après l'heure de début",
+    path: ["endTime"],
+  });
 
 const MAX_RECURRING_RANGE_DAYS = 90;
 
@@ -293,7 +316,7 @@ export const createRelationSchema = z.object({
 });
 
 export const updateUserCategoriesSchema = z.object({
-  categoryIds: z.array(z.string()),
+  categoryIds: z.array(z.string().min(1)).max(100),
 });
 
 export type UpdateUserCategoriesInput = z.infer<typeof updateUserCategoriesSchema>;
@@ -324,6 +347,15 @@ export interface PaymentRecord {
   amount: number;
   label: string;
   date: Date;
+  createdAt: Date;
+}
+
+export interface CreditLedgerEntry {
+  id: string;
+  seniorId: string;
+  type: "PURCHASE" | "CONSUMPTION" | "ADJUSTMENT";
+  amount: number;
+  reason: string;
   createdAt: Date;
 }
 
@@ -448,6 +480,28 @@ export const meetingHistoryQuerySchema = z.object({
 
 export type MeetingHistoryQuery = z.infer<typeof meetingHistoryQuerySchema>;
 
+/** Admins pass ?seniorId= to read a given senior's credits; others ignore it. */
+export const creditsQuerySchema = z.object({
+  seniorId: z.string().min(1).max(64).optional(),
+});
+
+/** Stripe Checkout session id, appended by Stripe to the success URL. */
+export const checkoutStatusQuerySchema = z.object({
+  sessionId: z.string().regex(/^cs_[A-Za-z0-9_]+$/, "Identifiant de session invalide").max(255),
+});
+
+export const npsQuerySchema = z
+  .object({
+    from: isoDate.optional(),
+    to: isoDate.optional(),
+  })
+  // ISO dates compare correctly as strings. Without this, an inverted range
+  // returns an empty report that reads as "no data".
+  .refine((q) => !q.from || !q.to || q.from <= q.to, {
+    message: "La date de début doit précéder la date de fin",
+    path: ["to"],
+  });
+
 export type ReportReason = "PERSON" | "QUESTION" | "OTHER";
 export type ReportStatus = "OPEN" | "HANDLED";
 
@@ -474,6 +528,7 @@ export type LoginInput = z.infer<typeof loginSchema>;
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type InsertIntervention = z.infer<typeof insertInterventionSchema>;
 export type FeedbackInput = z.infer<typeof feedbackSchema>;
+export type NpsInput = z.infer<typeof npsSchema>;
 export type CreateAvailabilityInput = z.infer<typeof createAvailabilitySchema>;
 export type CreateDateExceptionInput = z.infer<typeof createDateExceptionSchema>;
 export type CreateRecurringAvailabilitiesInput = z.infer<typeof createRecurringAvailabilitiesSchema>;
