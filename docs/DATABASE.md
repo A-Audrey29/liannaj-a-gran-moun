@@ -20,11 +20,15 @@ Toute évolution de schéma passe donc par une migration versionnée :
 ```bash
 # 1. Modifier prisma/schema.prisma
 
-# 2. Générer ET appliquer la migration (dev)
-npx prisma migrate dev --name description_du_changement
+# 2. Écrire le SQL À LA MAIN dans prisma/migrations/<timestamp>_<nom>/migration.sql
+#    (ou le générer avec `prisma migrate diff ... --script`).
+#    NE PAS lancer `migrate dev` (même avec --create-only) tant que .env pointe
+#    sur Neon : il applique d'abord les migrations en attente sur la vraie base
+#    (voir .agents/memory/incidents.md, 2026-10-07).
 
-# 3. Relire le SQL généré dans prisma/migrations/<timestamp>_<nom>/migration.sql
-#    et y ajouter le SQL de rollback en commentaire
+# 3. Y ajouter le SQL de rollback en commentaire de fin, puis tester sur une
+#    base LOCALE : `npm test` applique les migrations sur lyannaj_test
+#    (`prisma migrate deploy`) et valide qu'elles reconstruisent une base complète.
 
 # 4. Committer le dossier de migration avec le changement de schéma
 ```
@@ -54,8 +58,10 @@ qu'un rollback reste possible sans perte :
 # Générer le client Prisma après modification du schéma
 npx prisma generate
 
-# Créer et appliquer une migration (dev)
-npx prisma migrate dev --name mon_changement
+# Créer une migration : base LOCALE uniquement, DATABASE_URL forcée à la main.
+# Jamais tant que .env pointe sur Neon (voir .agents/memory/incidents.md).
+DATABASE_URL="postgresql://$USER@localhost:5432/ma_base_locale" \
+  npx prisma migrate dev --name mon_changement
 
 # Appliquer les migrations en attente (prod, CI)
 npx prisma migrate deploy
@@ -85,6 +91,7 @@ npx tsx prisma/seed.ts
 | `20260824000100_add_reminder_and_email_tracking` | `Intervention.reminderSentAt` (idempotence du rappel J-1), `Notification.emailSentAt` / `emailError` (traçabilité des envois Brevo). |
 | `20260827000000_profile_photo_in_db` | Table `ProfilePhoto` (photos stockées en base, disque Render éphémère). |
 | `20260907000000_add_credit_ledger` | Table `CreditLedger` et enum `CreditMovementType` (système de crédits prépayés pour les ateliers). Migration additive, sans impact sur les tables existantes. |
+| `20261007111325_add_meeting_check_reminder` | Valeur `MEETING_CHECK` sur l'enum `NotificationType`, colonne `Intervention.meetingCheckReminderSentAt` (idempotence de la relance « la rencontre a-t-elle eu lieu ? »). Additive. Appliquée sur Neon avant d'avoir son rollback : celui-ci est dans `down.sql` (le `migration.sql` n'est plus modifiable, son empreinte est vérifiée par Prisma). Postgres ne sachant pas retirer une valeur d'enum, le rollback recrée le type. |
 
 > **Note sur la table `session`** : elle est créée par `connect-pg-simple` et
 > n'existe pas dans `schema.prisma` (aucun accès via le client Prisma). Une

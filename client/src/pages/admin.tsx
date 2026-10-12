@@ -74,6 +74,7 @@ import {
 import { useAuth } from "@/hooks/use-auth";
 import type { User, Relation, Intervention, PaymentRecord, Notification } from "@shared/schema";
 import { ATELIERS } from "@shared/ateliers";
+import { isMeetingOverdue } from "@shared/meeting-check";
 import { CREDIT_OFFERS } from "@shared/credit-offers";
 import MessagerieAdminTab from "@/components/admin-messages-tab";
 import { fmtTime, fmtDayLongMonthYear, gpParts } from "@/lib/availability-format";
@@ -1096,8 +1097,31 @@ function TeacherPanel({ teacher }: { teacher: SafeUser }) {
 
 function RencontresTab() {
   const [searchUserId, setSearchUserId] = useState<string | null>(null);
+  const { toast } = useToast();
 
   const { data: allUsers = [] } = useQuery<SafeUser[]>({ queryKey: ["/api/admin/users"] });
+
+  const markDoneMutation = useMutation({
+    mutationFn: async (interventionId: string) => {
+      await apiRequest("PATCH", `/api/interventions/${interventionId}/done`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/meetings/history"] });
+      toast({ title: "Rencontre marquée comme réalisée" });
+    },
+    onError: () => toast({ title: "Erreur", variant: "destructive" }),
+  });
+
+  const cancelMutation = useMutation({
+    mutationFn: async (interventionId: string) => {
+      await apiRequest("PATCH", `/api/interventions/${interventionId}/cancel`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/meetings/history"] });
+      toast({ title: "Rencontre annulée" });
+    },
+    onError: () => toast({ title: "Erreur", variant: "destructive" }),
+  });
 
   return (
     <div>
@@ -1116,6 +1140,31 @@ function RencontresTab() {
         scope={searchUserId ? { kind: "user", userId: searchUserId } : { kind: "me" }}
         viewerRole="ADMIN"
         emptyLabel="Aucune rencontre trouvée"
+        renderActions={(entry) => {
+          if (!isMeetingOverdue(entry)) return null;
+          return (
+            <div className="flex gap-2">
+              <Button
+                size="sm"
+                onClick={() => markDoneMutation.mutate(entry.id)}
+                disabled={markDoneMutation.isPending || entry.status !== "CONFIRMED"}
+                data-testid={`button-admin-done-${entry.id}`}
+                title={entry.status !== "CONFIRMED" ? "Doit d'abord être confirmée par le jeune" : undefined}
+              >
+                A-t-elle eu lieu ? Marquer réalisée
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => cancelMutation.mutate(entry.id)}
+                disabled={cancelMutation.isPending}
+                data-testid={`button-admin-cancel-${entry.id}`}
+              >
+                Annuler
+              </Button>
+            </div>
+          );
+        }}
       />
     </div>
   );
@@ -1128,6 +1177,7 @@ const NOTIF_TYPE_COLORS: Record<string, string> = {
   INTERVENTION_PROPOSED: "bg-blue-100 text-blue-800",
   INTERVENTION_CONFIRMED: "bg-indigo-100 text-indigo-800",
   FEEDBACK_REMINDER: "bg-amber-100 text-amber-800",
+  MEETING_CHECK: "bg-red-100 text-red-800",
   SYSTEM: "bg-gray-100 text-gray-700",
 };
 
@@ -1136,6 +1186,7 @@ const NOTIF_TYPE_LABELS: Record<string, string> = {
   INTERVENTION_PROPOSED: "Intervention proposée",
   INTERVENTION_CONFIRMED: "Intervention confirmée",
   FEEDBACK_REMINDER: "Rappel feedback",
+  MEETING_CHECK: "Rencontre a-t-elle eu lieu ?",
   SYSTEM: "Système",
 };
 

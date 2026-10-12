@@ -44,6 +44,7 @@ enum NotificationType {
   INTERVENTION_PROPOSED
   INTERVENTION_CONFIRMED
   FEEDBACK_REMINDER
+  MEETING_CHECK
   NEW_MESSAGE
   SYSTEM
 }
@@ -218,6 +219,11 @@ model Intervention {
   // Rappel J-1 : garantit l'idempotence du cron, qui repasse toutes les 6h sur
   // la meme fenetre de 24h. Sans cette colonne, 4 rappels par rencontre.
   reminderSentAt  DateTime?
+  // "La rencontre a-t-elle eu lieu ?" envoye 24h apres la fin de la rencontre
+  // si le statut n'a pas avance (toujours PROPOSED/CONFIRMED), regle dans
+  // shared/meeting-check.ts — meme logique d'idempotence que
+  // feedbackReminderSentAt.
+  meetingCheckReminderSentAt DateTime?
 
   createdAt       DateTime           @default(now())
 

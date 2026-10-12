@@ -6,8 +6,10 @@ import { createServer } from "http";
 import { createApp, log } from "./app";
 import { serveStatic } from "./static";
 import { checkAndSendFeedbackReminders } from "./lib/feedback-reminder";
+import { checkAndSendMeetingCheckReminders } from "./lib/meeting-check-reminder";
 
 const RAPPEL_FEEDBACK_INTERVALLE_MS = 6 * 60 * 60 * 1000;
+const RAPPEL_MEETING_CHECK_INTERVALLE_MS = 6 * 60 * 60 * 1000;
 
 (async () => {
   // Le serveur HTTP est cree avant l'app car registerRoutes en a besoin pour
@@ -32,6 +34,8 @@ const RAPPEL_FEEDBACK_INTERVALLE_MS = 6 * 60 * 60 * 1000;
       log(`serving on port ${env.PORT}`);
       setInterval(checkAndSendFeedbackReminders, RAPPEL_FEEDBACK_INTERVALLE_MS);
       checkAndSendFeedbackReminders();
+      setInterval(checkAndSendMeetingCheckReminders, RAPPEL_MEETING_CHECK_INTERVALLE_MS);
+      checkAndSendMeetingCheckReminders();
     },
   );
 })();
