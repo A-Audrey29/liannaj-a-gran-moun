@@ -1690,10 +1690,12 @@ export async function registerRoutes(
         scope = { kind: "user", userId: user.id };
       }
 
+      // Day boundaries are Guadeloupe days (server runs in UTC), end inclusive:
+      // a meeting on the 10th at 21:00 GP is stored as the 11th at 01:00 UTC.
       const interventions = await storage.getMeetingHistory(scope, {
         status,
-        from: from ? new Date(`${from}T00:00:00.000Z`) : undefined,
-        to: to ? new Date(`${to}T23:59:59.999Z`) : undefined,
+        from: from ? gpDateTimeToUtc(from, 0, 0) : undefined,
+        to: to ? new Date(gpDateTimeToUtc(addDaysISO(to, 1), 0, 0).getTime() - 1) : undefined,
       });
 
       const entries = interventions

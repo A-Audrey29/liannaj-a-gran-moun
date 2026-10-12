@@ -233,3 +233,20 @@ describe("POST /api/interventions/:id/feedback — reponse", () => {
     expect(corpsBrut(res.body)).not.toContain(COMMENTAIRE_SENIOR);
   });
 });
+
+describe("GET /api/meetings/history — filtres de dates en heure de Guadeloupe", () => {
+  it("une rencontre du 10 a 21h (GP) appartient au 10, pas au 11", async () => {
+    const { junior, relation } = await contexteAvecFeedbacks();
+    await prisma.intervention.deleteMany();
+    // 10 octobre 21:00 en Guadeloupe (UTC-4) = 11 octobre 01:00 UTC.
+    await createInterventionWithFeedback(relation.id, { scheduledDate: new Date("2026-10-11T01:00:00Z") });
+    const agent = await loginAs(junior);
+
+    const le10 = await agent.get("/api/meetings/history?from=2026-10-10&to=2026-10-10");
+    const le11 = await agent.get("/api/meetings/history?from=2026-10-11&to=2026-10-11");
+
+    expect(le10.status).toBe(200);
+    expect(le10.body.entries).toHaveLength(1);
+    expect(le11.body.entries).toHaveLength(0);
+  });
+});
