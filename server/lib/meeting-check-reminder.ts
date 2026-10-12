@@ -14,9 +14,10 @@ import { getBaseUrl } from "../env";
 const MEETING_CHECK_LOCK_ID = 4_812_358;
 
 /**
- * Relance "la rencontre a-t-elle eu lieu ?" pour les interventions dont la
- * date est passée sans que le statut ait avancé (toujours PROPOSED ou
- * CONFIRMED) — ni confirmée réalisée, ni annulée par personne.
+ * Relance "la rencontre a-t-elle eu lieu ?" pour les interventions terminées
+ * depuis plus de 24h sans que le statut ait avancé (toujours PROPOSED ou
+ * CONFIRMED) — ni confirmée réalisée, ni annulée par personne. Règle exacte :
+ * isMeetingOverdue (shared/meeting-check.ts).
  *
  * Volontairement pas de changement de statut automatique ici : seule une
  * action humaine (junior/senior via /confirm /cancel, ou admin via /done

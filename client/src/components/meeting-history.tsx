@@ -9,6 +9,7 @@ import StarRating from "@/components/star-rating";
 import { buildCsv, downloadCsv } from "@/lib/csv";
 import { fmtTime, gpParts } from "@/lib/availability-format";
 import { MOIS_LONGS } from "@shared/dates";
+import { isMeetingOverdue } from "@shared/meeting-check";
 import type { MeetingHistoryEntry, MeetingHistoryResponse, Role } from "@shared/schema";
 
 /**
@@ -41,13 +42,8 @@ const STATUS_FILTERS = [
   { id: "CANCELLED", label: "Annulées" },
 ];
 
-/** Passée et jamais clôturée par les participants : à traiter par un admin. */
-function isOverdue(entry: MeetingHistoryEntry): boolean {
-  return (
-    (entry.status === "PROPOSED" || entry.status === "CONFIRMED") &&
-    new Date(entry.scheduledDate).getTime() < Date.now()
-  );
-}
+/** Terminée depuis plus de 24h et jamais clôturée : à traiter par un admin. */
+const isOverdue = (entry: MeetingHistoryEntry) => isMeetingOverdue(entry);
 
 /** 135 → "2h15", 120 → "2h", 45 → "45 min". */
 export function fmtDuration(minutes: number): string {

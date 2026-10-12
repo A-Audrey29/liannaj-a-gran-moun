@@ -1,4 +1,5 @@
 import { prisma } from "./prisma";
+import { OVERDUE_STATUSES, isMeetingOverdue, overdueStartBefore } from "../shared/meeting-check";
 import type { User, Category, UserCategory, Relation, Intervention, AdminRecommendation, Notification, PaymentRecord, Favorite, Conversation, Message, PushSubscription, Report, TeacherStudent, TeacherComment, Availability, CreditLedger, Prisma } from "../generated/prisma/client.ts";
 
 /**
@@ -59,7 +60,7 @@ export interface IStorage {
   getPendingFeedbackInterventions(userId: string): Promise<(Intervention & { relation: Relation })[]>;
   getPendingFeedbackForReminder(): Promise<(Intervention & { relation: Relation & { senior: User; junior: User } })[]>;
   updateInterventionFeedbackReminderSent(id: string): Promise<Intervention>;
-  getOverdueInterventionsForReminder(): Promise<(Intervention & { relation: Relation & { senior: User; junior: User } })[]>;
+  getOverdueInterventionsForReminder(now?: Date): Promise<(Intervention & { relation: Relation & { senior: User; junior: User } })[]>;
   updateInterventionMeetingCheckReminderSent(id: string): Promise<Intervention>;
   /**
    * Historique des rencontres, périmètre décidé par l'appelant (jamais par un
@@ -363,15 +364,18 @@ class DatabaseStorage implements IStorage {
     });
   }
 
-  async getOverdueInterventionsForReminder(): Promise<(Intervention & { relation: Relation & { senior: User; junior: User } })[]> {
-    return prisma.intervention.findMany({
+  async getOverdueInterventionsForReminder(now: Date = new Date()): Promise<(Intervention & { relation: Relation & { senior: User; junior: User } })[]> {
+    // Prisma cannot filter on scheduledDate + durationMinutes: the SQL bound
+    // narrows the set, isMeetingOverdue applies the exact rule.
+    const candidates = await prisma.intervention.findMany({
       where: {
-        status: { in: ["PROPOSED", "CONFIRMED"] },
+        status: { in: [...OVERDUE_STATUSES] },
         meetingCheckReminderSentAt: null,
-        scheduledDate: { lte: new Date() },
+        scheduledDate: { lte: overdueStartBefore(now) },
       },
       include: { relation: { include: { senior: true, junior: true } } },
     });
+    return candidates.filter((intervention) => isMeetingOverdue(intervention, now));
   }
 
   async updateInterventionMeetingCheckReminderSent(id: string): Promise<Intervention> {

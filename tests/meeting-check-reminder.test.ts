@@ -17,12 +17,15 @@ import { prisma } from "../server/prisma";
 import { pool } from "../server/db";
 import { sendEmail } from "../server/lib/email";
 import { checkAndSendMeetingCheckReminders } from "../server/lib/meeting-check-reminder";
+import { isMeetingOverdue } from "../shared/meeting-check";
 
 /** Doit rester egal a MEETING_CHECK_LOCK_ID dans meeting-check-reminder.ts. */
 const MEETING_CHECK_LOCK_ID = 4_812_358;
 
-const HIER = () => new Date(Date.now() - 24 * 60 * 60 * 1000);
-const DEMAIN = () => new Date(Date.now() + 24 * 60 * 60 * 1000);
+const HEURE = 60 * 60 * 1000;
+/** Bien au-dela du delai de 24h apres la fin (duree par defaut : 2h). */
+const HIER = () => new Date(Date.now() - 3 * 24 * HEURE);
+const DEMAIN = () => new Date(Date.now() + 24 * HEURE);
 
 async function contexte() {
   const senior = await createUser("SENIOR");
@@ -35,10 +38,11 @@ async function creerRencontre(
   relationId: string,
   status: "PROPOSED" | "CONFIRMED" | "CANCELLED" | "COMPLETED_PENDING_FEEDBACK" | "COMPLETED",
   scheduledDate: Date,
-  meetingCheckReminderSentAt: Date | null = null
+  meetingCheckReminderSentAt: Date | null = null,
+  durationMinutes = 120
 ) {
   return prisma.intervention.create({
-    data: { relationId, status, scheduledDate, meetingCheckReminderSentAt },
+    data: { relationId, status, scheduledDate, meetingCheckReminderSentAt, durationMinutes },
   });
 }
 
@@ -106,6 +110,72 @@ describe("selection des rencontres a relancer", () => {
     const apres = await prisma.intervention.findUniqueOrThrow({ where: { id: rencontre.id } });
     expect(apres.status).toBe("CONFIRMED");
   });
+});
+
+describe("delai de 24h apres la fin de la rencontre", () => {
+  /** Rencontre de 2h dont la fin remonte a `heures` heures. */
+  const finIlYA = (heures: number) => new Date(Date.now() - (heures + 2) * HEURE);
+
+  it("ne relance pas une rencontre en cours", async () => {
+    const { relation } = await contexte();
+    await creerRencontre(relation.id, "CONFIRMED", new Date(Date.now() - HEURE));
+
+    await checkAndSendMeetingCheckReminders();
+
+    expect(await notificationsMeetingCheck()).toHaveLength(0);
+  });
+
+  it("ne relance pas une rencontre terminee depuis moins de 24h", async () => {
+    const { relation } = await contexte();
+    await creerRencontre(relation.id, "CONFIRMED", finIlYA(23));
+
+    await checkAndSendMeetingCheckReminders();
+
+    expect(await notificationsMeetingCheck()).toHaveLength(0);
+  });
+
+  it("relance une rencontre terminee depuis plus de 24h", async () => {
+    const { relation } = await contexte();
+    await creerRencontre(relation.id, "CONFIRMED", finIlYA(25));
+
+    await checkAndSendMeetingCheckReminders();
+
+    expect(await notificationsMeetingCheck()).toHaveLength(2);
+  });
+
+  it("tient compte de la duree : une rencontre longue commencee il y a 25h n'est pas encore en retard", async () => {
+    const { relation } = await contexte();
+    // 8h de rencontre : fin il y a 17h seulement.
+    await creerRencontre(relation.id, "CONFIRMED", new Date(Date.now() - 25 * HEURE), null, 480);
+
+    await checkAndSendMeetingCheckReminders();
+
+    expect(await notificationsMeetingCheck()).toHaveLength(0);
+  });
+});
+
+describe("isMeetingOverdue (regle partagee avec l'admin)", () => {
+  const maintenant = new Date("2026-10-12T12:00:00Z");
+  const debut = new Date("2026-10-11T10:00:00Z"); // fin 12:00 la veille avec 2h
+
+  it("bascule exactement 24h apres la fin", () => {
+    const juste = new Date(maintenant.getTime() - 1);
+    expect(isMeetingOverdue({ status: "CONFIRMED", scheduledDate: debut, durationMinutes: 120 }, maintenant)).toBe(true);
+    expect(isMeetingOverdue({ status: "CONFIRMED", scheduledDate: debut, durationMinutes: 120 }, juste)).toBe(false);
+  });
+
+  it("accepte une date ISO (format des entrees d'historique cote client)", () => {
+    expect(
+      isMeetingOverdue({ status: "PROPOSED", scheduledDate: debut.toISOString(), durationMinutes: 120 }, maintenant)
+    ).toBe(true);
+  });
+
+  it.each(["CANCELLED", "DONE", "COMPLETED_PENDING_FEEDBACK", "COMPLETED"])(
+    "n'est jamais vrai pour le statut %s",
+    (status) => {
+      expect(isMeetingOverdue({ status, scheduledDate: debut, durationMinutes: 120 }, maintenant)).toBe(false);
+    }
+  );
 });
 
 describe("destinataires", () => {

@@ -74,6 +74,7 @@ import {
 import { useAuth } from "@/hooks/use-auth";
 import type { User, Relation, Intervention, PaymentRecord, Notification } from "@shared/schema";
 import { ATELIERS } from "@shared/ateliers";
+import { isMeetingOverdue } from "@shared/meeting-check";
 import { CREDIT_OFFERS } from "@shared/credit-offers";
 import MessagerieAdminTab from "@/components/admin-messages-tab";
 import { fmtTime, fmtDayLongMonthYear, gpParts } from "@/lib/availability-format";
@@ -1140,10 +1141,7 @@ function RencontresTab() {
         viewerRole="ADMIN"
         emptyLabel="Aucune rencontre trouvée"
         renderActions={(entry) => {
-          const isOverdue =
-            (entry.status === "PROPOSED" || entry.status === "CONFIRMED") &&
-            new Date(entry.scheduledDate).getTime() < Date.now();
-          if (!isOverdue) return null;
+          if (!isMeetingOverdue(entry)) return null;
           return (
             <div className="flex gap-2">
               <Button
