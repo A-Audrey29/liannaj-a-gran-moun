@@ -3,6 +3,41 @@
 Journal des choix d'architecture et de leurs raisons. Une entrée par décision,
 la plus récente en haut.
 
+## 2026-10-12 — Crédits : réservation à la réservation, une seule rencontre gratuite
+
+**Contexte.** Review avant mise en prod. Le contrôle à la création ne
+vérifiait que `solde > 0` : avec 1 crédit, un senior pouvait prévoir 5
+ateliers et finir à -4. La « première rencontre gratuite » était décidée par
+le seul statut de la relation : deux rencontres courtes créées avant la
+première validation passaient toutes deux sans contrôle. Enfin, deux
+validations simultanées d'une même rencontre (double clic, deux admins)
+débitaient deux crédits.
+
+**Décision — les ateliers prévus réservent un crédit.** Crédits disponibles =
+solde du `CreditLedger` − ateliers payants `PROPOSED`/`CONFIRMED`. Une
+création exige au moins 1 crédit disponible. Le **débit reste à la
+complétion** (règle du 2026-09-07 inchangée) ; annuler un atelier libère sa
+réservation. Pas de nouvelle table : la réservation se déduit des rencontres
+prévues, comme le solde se déduit du ledger. Le contrôle tourne dans la
+transaction de création, sous un verrou advisory par senior
+(`credits:<seniorId>`) : sans lui, des réservations simultanées sur des
+jeunes différents consommaient le même dernier crédit (reproduit en test).
+
+**Décision — une seule rencontre gratuite par relation.** Gratuite si la
+relation attend sa première rencontre, si elle dure 30 min ou moins **et**
+s'il n'existe aucune rencontre antérieure non annulée sur la relation
+(`isFreeMeeting`, `server/storage.ts`). Même règle à la création et à la
+complétion. Si la rencontre gratuite est annulée, la suivante redevient
+gratuite.
+
+**Décision — validation idempotente.** `completeIntervention` ne passe à
+`COMPLETED_PENDING_FEEDBACK` que si la rencontre est encore `CONFIRMED`
+(mise à jour conditionnelle dans la transaction) ; sinon 409 et aucun débit.
+
+**Conséquence.** Le solde négatif ne peut plus venir que d'un ajustement
+admin après réservation ; l'alerte « Solde de crédits négatif » est conservée
+pour ce cas.
+
 ## 2026-10-08 — NPS (recommandation du service) pour le financeur
 
 **Contexte.** Le dossier SORTIR + (annexe 1) impose de systématiser le Net

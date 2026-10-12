@@ -195,32 +195,23 @@ describe("Decompte a la completion", () => {
     const juniorAgent = await loginAs(junior);
     const adminAgent = await loginAs(admin);
 
-    // Deux interventions creees sur le meme solde de 1 (le check a la
-    // creation ne redecremente pas immediatement) puis confirmees toutes
-    // les deux : la seconde completion fera passer le solde a -1.
-    const premiere = await seniorAgent.post(`/api/relations/${relation.id}/interventions`).send({
+    const rencontre = await seniorAgent.post(`/api/relations/${relation.id}/interventions`).send({
       scheduledDate: "2026-06-15T14:00:00Z",
       durationMinutes: 90,
       location: "Chez le senior",
       tasks: ["Jardinage"],
     });
-    expect(premiere.status).toBe(201);
-    await juniorAgent.patch(`/api/interventions/${premiere.body.id}/confirm`);
+    expect(rencontre.status).toBe(201);
+    await juniorAgent.patch(`/api/interventions/${rencontre.body.id}/confirm`);
 
-    const seconde = await seniorAgent.post(`/api/relations/${relation.id}/interventions`).send({
-      scheduledDate: "2026-06-15T16:00:00Z",
-      durationMinutes: 90,
-      location: "Chez le senior",
-      tasks: ["Jardinage"],
+    // Seul chemin restant vers un solde negatif depuis la reservation des
+    // credits : un ajustement admin apres la reservation.
+    await prisma.creditLedger.create({
+      data: { seniorId: senior.id, type: "ADJUSTMENT", amount: -1, reason: "Correction", triggeredById: admin.id },
     });
-    expect(seconde.status).toBe(201);
-    await juniorAgent.patch(`/api/interventions/${seconde.body.id}/confirm`);
 
-    const premierDone = await adminAgent.patch(`/api/interventions/${premiere.body.id}/done`);
-    expect(premierDone.status).toBe(200);
-
-    const secondDone = await adminAgent.patch(`/api/interventions/${seconde.body.id}/done`);
-    expect(secondDone.status).toBe(200);
+    const done = await adminAgent.patch(`/api/interventions/${rencontre.body.id}/done`);
+    expect(done.status).toBe(200);
 
     const balance = await prisma.creditLedger.aggregate({
       where: { seniorId: senior.id },

@@ -339,43 +339,28 @@ async function validateSlot(
 
 const SLOT_CONFLICT_MESSAGE = "Une autre rencontre est déjà prévue sur ce créneau.";
 const LOCK_CONTENTION_MESSAGE = "Une autre action est en cours sur ce créneau, veuillez réessayer dans un instant.";
-const NO_CREDITS_MESSAGE = "Le solde de crédits du senior est épuisé. Veuillez acheter un nouveau pack pour continuer.";
-const FREE_FIRST_MEETING_MAX_MINUTES = 30;
-
-/**
- * La toute première rencontre d'une relation est gratuite tant qu'elle ne
- * dépasse pas 30 minutes prévues — au-delà, elle consomme un crédit comme
- * n'importe quelle rencontre suivante. Seule la durée prévue à la création
- * compte, pas une durée réelle mesurée après coup.
- */
-function isFreeFirstMeeting(relationStatus: string, durationMinutes: number): boolean {
-  return relationStatus === "PENDING_FIRST_MEETING" && durationMinutes <= FREE_FIRST_MEETING_MAX_MINUTES;
-}
-
+const NO_CREDITS_MESSAGE = "Plus de crédit disponible pour un nouvel atelier : les crédits restants sont déjà réservés pour les ateliers prévus. Achetez un pack pour continuer.";
 /**
  * Crée la rencontre via createInterventionSafe (verrou + re-check du conflit
  * dans la transaction), pour fermer la fenêtre de course entre validateSlot()
  * et l'insertion : deux requêtes concurrentes sur le même jeune ne peuvent
  * plus toutes les deux passer la vérification.
  *
- * Vérifie aussi le solde de crédits du Senior avant création, sauf pour la
- * première rencontre gratuite (cf isFreeFirstMeeting) — un seul point d'entrée
- * pour ce contrôle, partagé par les trois chemins de création.
+ * Vérifie aussi, dans la même transaction et sous verrou par senior, qu'il
+ * reste un crédit disponible (solde moins ateliers payants déjà prévus), sauf
+ * pour la rencontre gratuite (cf isFreeMeeting dans storage.ts). Seul point de
+ * création d'une rencontre.
  */
 async function createInterventionOrConflict(
   juniorId: string,
   seniorId: string,
-  relationStatus: string,
   data: { relationId: string; scheduledDate: Date; durationMinutes: number; location?: string; tasks?: string[] }
 ) {
-  if (!isFreeFirstMeeting(relationStatus, data.durationMinutes)) {
-    const balance = await storage.getCreditBalance(seniorId);
-    if (balance <= 0) {
-      return { noCredits: true as const };
-    }
-  }
-  return storage.createInterventionSafe(juniorId, data, (tx) =>
-    hasInterventionConflict(juniorId, data.scheduledDate, data.durationMinutes, tx)
+  return storage.createInterventionSafe(
+    juniorId,
+    data,
+    (tx) => hasInterventionConflict(juniorId, data.scheduledDate, data.durationMinutes, tx),
+    seniorId
   );
 }
 
@@ -1132,7 +1117,7 @@ export async function registerRoutes(
         return res.status(400).json({ message: slotError });
       }
 
-      const result = await createInterventionOrConflict(relation.juniorId, relation.seniorId, relation.status, {
+      const result = await createInterventionOrConflict(relation.juniorId, relation.seniorId, {
         relationId: parsed.data.relationId,
         scheduledDate,
         durationMinutes: parsed.data.durationMinutes,
@@ -1228,12 +1213,15 @@ export async function registerRoutes(
         return res.status(400).json({ message: "L'intervention doit être confirmée avant d'être marquée comme réalisée" });
       }
 
-      const updated = await storage.completeIntervention(
+      const completion = await storage.completeIntervention(
         intervention.id,
         intervention.relation.seniorId,
-        req.user!.id,
-        isFreeFirstMeeting(intervention.relation.status, intervention.durationMinutes),
+        req.user!.id
       );
+      if (!completion) {
+        return res.status(409).json({ message: "Cette rencontre a déjà été traitée" });
+      }
+      const updated = completion.intervention;
 
       if (intervention.relation.status === "PENDING_FIRST_MEETING") {
         await storage.updateRelationStatus(intervention.relationId, "ACTIVE");
@@ -2657,7 +2645,7 @@ export async function registerRoutes(
         return res.status(400).json({ message: slotError });
       }
 
-      const result = await createInterventionOrConflict(relation.juniorId, relation.seniorId, relation.status, {
+      const result = await createInterventionOrConflict(relation.juniorId, relation.seniorId, {
         relationId: parsed.data.relationId,
         scheduledDate,
         durationMinutes: parsed.data.durationMinutes,
