@@ -2789,9 +2789,11 @@ export async function registerRoutes(
       return res.status(400).send("Webhook invalide");
     }
 
-    // Événement valide à partir d'ici : toujours 200, même en cas d'erreur
-    // métier, pour éviter que le prestataire ne réessaie indéfiniment un
-    // événement qu'on ne pourra jamais traiter différemment.
+    // Événement valide à partir d'ici. 200 pour ce qui est déjà traité ou ne le
+    // sera jamais (doublon, offre inconnue, compte supprimé) ; 500 pour une
+    // erreur passagère (base injoignable, timeout) afin que Stripe réessaie —
+    // sinon le client est débité sans recevoir ses crédits. Rejouer est sans
+    // risque : stripeSessionId est unique.
     try {
       const existing = await storage.getPaymentByStripeSessionId(event.externalSessionId);
       if (existing) {
@@ -2806,15 +2808,30 @@ export async function registerRoutes(
 
       const { seniorId, purchasedByUserId } = event.metadata;
 
-      await storage.createPayment({
-        userId: purchasedByUserId,
-        amount: event.amountPaidEuros,
-        label: `Achat en ligne — ${offer.label}`,
-        credits: offer.credits,
-        creditSeniorId: seniorId,
-        triggeredById: purchasedByUserId,
-        stripeSessionId: event.externalSessionId,
-      });
+      try {
+        await storage.createPayment({
+          userId: purchasedByUserId,
+          amount: event.amountPaidEuros,
+          label: `Achat en ligne — ${offer.label}`,
+          credits: offer.credits,
+          creditSeniorId: seniorId,
+          triggeredById: purchasedByUserId,
+          stripeSessionId: event.externalSessionId,
+        });
+      } catch (err: any) {
+        // Livraison concurrente du même événement : l'autre l'a enregistré.
+        if (err?.code === "P2002") return res.status(200).send();
+        // Payeur ou senior supprimé entre le paiement et le webhook : rejouer
+        // n'y changera rien, un admin doit rembourser à la main.
+        if (err?.code === "P2003" || err?.code === "P2025") {
+          console.error(
+            `[PAYMENT_WEBHOOK] Paiement ${event.externalSessionId} non crédité : compte introuvable ` +
+              `(senior ${seniorId}, payeur ${purchasedByUserId}). Remboursement manuel nécessaire.`
+          );
+          return res.status(200).send();
+        }
+        throw err;
+      }
 
       try {
         const senior = await storage.getUser(seniorId);
@@ -2842,8 +2859,8 @@ export async function registerRoutes(
 
       res.status(200).send();
     } catch (err) {
-      console.error("[PAYMENT_WEBHOOK] Erreur de traitement:", err);
-      res.status(200).send();
+      console.error("[PAYMENT_WEBHOOK] Erreur passagère, Stripe va réessayer:", err);
+      res.status(500).send();
     }
   });
 

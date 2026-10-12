@@ -11,6 +11,7 @@ import { describe, it, expect, beforeEach, afterAll, vi } from "vitest";
 import Stripe from "stripe";
 import { resetDatabase, createUser, loginAs, getApp } from "./helpers";
 import { prisma } from "../server/prisma";
+import { storage } from "../server/storage";
 import request from "supertest";
 
 beforeEach(async () => {
@@ -183,5 +184,62 @@ describe("POST /api/webhooks/payment", () => {
 
     const mouvements = await prisma.creditLedger.count({ where: { seniorId: senior.id, type: "PURCHASE" } });
     expect(mouvements).toBe(1);
+  });
+  function sessionPayloadPour(sessionId: string, seniorId: string, payeurId = seniorId) {
+    return {
+      type: "checkout.session.completed",
+      data: {
+        object: {
+          id: sessionId,
+          amount_total: 1500,
+          metadata: { seniorId, offerId: "pack-1", purchasedByUserId: payeurId },
+        },
+      },
+    };
+  }
+
+  async function envoyer(payload: object) {
+    const { payloadString, header } = buildSignedRequest(payload);
+    return request(await getApp())
+      .post("/api/webhooks/payment")
+      .set("stripe-signature", header)
+      .set("Content-Type", "application/json")
+      .send(payloadString);
+  }
+
+  it("repond 500 sur une erreur passagere pour que Stripe reessaie, puis credite une seule fois au rejeu", async () => {
+    const senior = await createUser("SENIOR");
+    const payload = sessionPayloadPour("cs_test_panne", senior.id);
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const panne = vi
+      .spyOn(storage, "createPayment")
+      .mockRejectedValueOnce(new Error("Connection terminated unexpectedly"));
+
+    const premier = await envoyer(payload);
+    expect(premier.status).toBe(500);
+    expect(await prisma.creditLedger.count({ where: { seniorId: senior.id } })).toBe(0);
+
+    // Rejeu par Stripe : la base repond de nouveau.
+    const rejeu = await envoyer(payload);
+    expect(rejeu.status).toBe(200);
+    expect(await prisma.creditLedger.count({ where: { seniorId: senior.id, type: "PURCHASE" } })).toBe(1);
+
+    panne.mockRestore();
+    errorSpy.mockRestore();
+  });
+
+  it("repond 200 sans crediter si le senior a ete supprime (rejouer n'y changerait rien)", async () => {
+    const senior = await createUser("SENIOR");
+    const payeur = await createUser("REFERENT_SENIOR");
+    const payload = sessionPayloadPour("cs_test_senior_supprime", senior.id, payeur.id);
+    await prisma.user.delete({ where: { id: senior.id } });
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const res = await envoyer(payload);
+
+    expect(res.status).toBe(200);
+    expect(await prisma.paymentRecord.count({ where: { stripeSessionId: "cs_test_senior_supprime" } })).toBe(0);
+    expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining("Remboursement manuel"));
+    errorSpy.mockRestore();
   });
 });
