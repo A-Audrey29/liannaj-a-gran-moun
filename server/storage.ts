@@ -202,7 +202,7 @@ export interface IStorage {
     user: NpsRespondent,
     data: { score: number; reason?: string | null }
   ): Promise<{ response: NpsResponse } | { ineligible: NpsIneligibleReason }>;
-  getNpsResponses(filters?: { from?: Date; to?: Date }): Promise<(NpsResponse & { user: Pick<User, "firstName" | "lastName"> })[]>;
+  getNpsResponses(filters?: { from?: Date; to?: Date }): Promise<(NpsResponse & { user: Pick<User, "firstName" | "lastName"> | null })[]>;
 
   getAdmins(): Promise<User[]>;
   getRelationsBySeniorId(seniorId: string): Promise<(Relation & { senior: User; junior: User; interventions: Intervention[] })[]>;
@@ -648,7 +648,12 @@ class DatabaseStorage implements IStorage {
   }
 
   async deleteUser(id: string): Promise<void> {
-    await prisma.user.delete({ where: { id } });
+    await prisma.$transaction([
+      // NPS answers survive as anonymous scores (FK is SET NULL). The free-text
+      // reason may identify the person, so it goes with the account.
+      prisma.npsResponse.updateMany({ where: { userId: id }, data: { reason: null } }),
+      prisma.user.delete({ where: { id } }),
+    ]);
   }
 
   async getAllRelations(): Promise<(Relation & { senior: User; junior: User })[]> {
@@ -1093,7 +1098,7 @@ class DatabaseStorage implements IStorage {
     });
   }
 
-  async getNpsResponses(filters: { from?: Date; to?: Date } = {}): Promise<(NpsResponse & { user: Pick<User, "firstName" | "lastName"> })[]> {
+  async getNpsResponses(filters: { from?: Date; to?: Date } = {}): Promise<(NpsResponse & { user: Pick<User, "firstName" | "lastName"> | null })[]> {
     return prisma.npsResponse.findMany({
       where: {
         createdAt: {

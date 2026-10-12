@@ -294,6 +294,39 @@ describe("GET /api/admin/nps", () => {
   });
 });
 
+describe("account deletion", () => {
+  it("keeps the score anonymously and drops the name and free-text reason", async () => {
+    const { senior } = await seniorWithMeeting();
+    const admin = await createUser("ADMIN");
+    await answerAt(senior.id, "SENIOR", 3, new Date(), "Mon voisin Jean ne vient jamais");
+
+    const agent = await loginAs(admin);
+    expect((await agent.delete(`/api/admin/users/${senior.id}`)).status).toBe(200);
+
+    const rows = await prisma.npsResponse.findMany();
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ userId: null, reason: null, score: 3, role: "SENIOR" });
+
+    // The funder's figures are unchanged: the detractor still counts.
+    const report = (await agent.get("/api/admin/nps")).body;
+    expect(report.summary).toMatchObject({ total: 1, detractors: 1 });
+    expect(report.responses[0]).toMatchObject({ firstName: null, lastName: null, reason: null });
+  });
+
+  it("leaves other people's answers untouched", async () => {
+    const a = await seniorWithMeeting();
+    const b = await seniorWithMeeting();
+    const admin = await createUser("ADMIN");
+    await answerAt(a.senior.id, "SENIOR", 9, new Date(), "Super");
+    await answerAt(b.senior.id, "SENIOR", 10, new Date(), "Parfait");
+
+    await (await loginAs(admin)).delete(`/api/admin/users/${a.senior.id}`);
+
+    const kept = await prisma.npsResponse.findFirstOrThrow({ where: { userId: b.senior.id } });
+    expect(kept.reason).toBe("Parfait");
+  });
+});
+
 describe("NpsResponse table guards", () => {
   it.each([-1, 11])("rejects score %s at database level", async (score) => {
     const senior = await createUser("SENIOR");

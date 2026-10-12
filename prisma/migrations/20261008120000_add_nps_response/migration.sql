@@ -1,7 +1,9 @@
 -- CreateTable
 CREATE TABLE "NpsResponse" (
     "id" TEXT NOT NULL,
-    "userId" TEXT NOT NULL,
+    -- Nullable: deleting an account keeps the anonymous score (the funder's
+    -- figures stay reproducible) and detaches it from the person.
+    "userId" TEXT,
     "role" "Role" NOT NULL,
     "score" SMALLINT NOT NULL,
     "reason" TEXT,
@@ -21,11 +23,6 @@ CREATE INDEX "NpsResponse_userId_createdAt_idx" ON "NpsResponse"("userId", "crea
 CREATE INDEX "NpsResponse_createdAt_idx" ON "NpsResponse"("createdAt");
 
 -- AddForeignKey
-ALTER TABLE "NpsResponse" ADD CONSTRAINT "NpsResponse_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "NpsResponse" ADD CONSTRAINT "NpsResponse_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
--- Rollback (a executer manuellement si besoin) :
---   DROP TABLE "NpsResponse";
---
--- Migration purement additive : aucune table existante n'est modifiee. Le
--- rollback supprime uniquement les reponses NPS (aucune autre table n'en
--- depend). A exporter avant si le financeur a deja recu un bilan.
+-- Rollback : voir down.sql dans ce dossier.

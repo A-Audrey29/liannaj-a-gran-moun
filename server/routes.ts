@@ -1621,8 +1621,8 @@ export async function registerRoutes(
         score: row.score,
         category: npsCategory(row.score),
         reason: row.reason,
-        firstName: row.user.firstName,
-        lastName: row.user.lastName,
+        firstName: row.user?.firstName ?? null,
+        lastName: row.user?.lastName ?? null,
       }));
 
       const report: NpsReport = buildNpsReport(entries);

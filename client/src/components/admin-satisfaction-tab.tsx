@@ -214,7 +214,11 @@ export default function SatisfactionTab() {
                     <Badge className={`${CATEGORY_COLORS[r.category]} shrink-0 text-base px-2.5`}>{r.score}</Badge>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium">
-                        {r.firstName} {r.lastName}
+                        {r.firstName === null ? (
+                          <span className="italic text-muted-foreground">Compte supprimé</span>
+                        ) : (
+                          `${r.firstName} ${r.lastName}`
+                        )}
                         <span className="text-muted-foreground font-normal">
                           {" "}· {SEGMENT_LABELS[r.segment]} · {fmtDayNumeric(new Date(r.createdAt))}
                         </span>

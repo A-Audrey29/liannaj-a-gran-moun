@@ -357,8 +357,10 @@ model Notification {
 // (shared/nps.ts).
 model NpsResponse {
   id        String   @id @default(cuid())
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  // Null once the account is deleted: the score stays (funder figures remain
+  // reproducible), the person and their free-text reason do not.
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
   // Role au moment de la reponse (SENIOR ou REFERENT_SENIOR) : sert a
   // segmenter les resultats sans dependre d'un changement de role ulterieur.
   role      Role

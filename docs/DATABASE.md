@@ -300,7 +300,7 @@ feedback. Seule la note brute est stockée ; catégorie et score se calculent
 
 | Champ | Type | Description |
 |---|---|---|
-| `userId` | String | Répondant (`onDelete: Cascade` : supprimer le compte supprime ses réponses) |
+| `userId` | String? | Répondant. `NULL` une fois le compte supprimé (`onDelete: SetNull`) : la note reste, anonyme, et le motif est effacé par `storage.deleteUser` |
 | `role` | Role | Rôle au moment de la réponse : `SENIOR` ou `REFERENT_SENIOR` (garanti par un `CHECK`) |
 | `score` | SmallInt | 0 à 10 (garanti par un `CHECK`) |
 | `reason` | String? | Réponse libre à « pourquoi cette note ? » (max 1000 côté Zod) |

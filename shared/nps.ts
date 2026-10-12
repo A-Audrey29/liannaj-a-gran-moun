@@ -44,8 +44,9 @@ export interface NpsResponseEntry {
   score: number;
   category: NpsCategory;
   reason: string | null;
-  firstName: string;
-  lastName: string;
+  /** Null when the account was deleted: the score is kept, anonymously. */
+  firstName: string | null;
+  lastName: string | null;
 }
 
 export interface NpsReport {

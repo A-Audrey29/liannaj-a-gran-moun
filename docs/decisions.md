@@ -44,11 +44,12 @@ identifier les personnes. Pas de rôle « financeur » (enum + gardes + tests de
 permissions : trop pour un MVP).
 
 **Compromis assumés.**
-- `onDelete: Cascade` sur `userId` : supprimer un compte supprime ses réponses
-  NPS (cohérent avec le reste : feedbacks, notifications…, droit à
-  l'effacement). Conséquence : un bilan déjà envoyé au financeur n'est plus
-  reproductible à l'identique après suppression d'un compte → **exporter le CSV
-  avant de supprimer des comptes** si un bilan vient d'être transmis.
+- Suppression d'un compte (décision du 2026-10-12) : la **note est conservée,
+  anonyme** (`userId` passe à `NULL`, `onDelete: SetNull`) et le **motif libre
+  est effacé** (`storage.deleteUser`, même transaction), car il peut identifier
+  la personne. Ainsi un bilan déjà transmis au financeur reste reproductible.
+  Une note seule, sans lien vers la personne ni texte, n'est plus une donnée
+  personnelle. L'onglet admin affiche « Compte supprimé ».
 - `GET /api/admin/nps` renvoie toutes les réponses de la période, sans
   pagination. Suffisant à l'échelle actuelle ; à revoir (GROUP BY + page) si
   les volumes grossissent.
