@@ -175,3 +175,61 @@ describe("GET /api/meetings/history — masquage dans l'historique", () => {
     expect(corps).not.toContain("AUTRE_FEEDBACK_JEUNE");
   });
 });
+
+describe("GET /api/referent/relations — espace referent", () => {
+  it("le referent recoit le feedback du senior, jamais celui du jeune", async () => {
+    const { senior } = await contexteAvecFeedbacks();
+    const referent = await createUser("REFERENT_SENIOR", { linkedSeniorId: senior.id });
+    const agent = await loginAs(referent);
+
+    const res = await agent.get("/api/referent/relations");
+    expect(res.status).toBe(200);
+
+    const [intervention] = interventionsDe(res.body);
+    expect(intervention.seniorComment).toBe(COMMENTAIRE_SENIOR);
+    expect(intervention.juniorRating).toBeNull();
+    expect(corpsBrut(res.body)).not.toContain(COMMENTAIRE_JEUNE);
+  });
+});
+
+describe("GET /api/interventions/pending-feedback — avant d'avoir note", () => {
+  it("le senior qui n'a pas encore note ne recoit pas la note du jeune", async () => {
+    const senior = await createUser("SENIOR");
+    const junior = await createUser("JUNIOR");
+    const relation = await createRelation(senior.id, junior.id);
+    await createInterventionWithFeedback(relation.id, {
+      status: "COMPLETED_PENDING_FEEDBACK",
+      seniorRating: null,
+      seniorComment: null,
+    });
+
+    const res = await (await loginAs(senior)).get("/api/interventions/pending-feedback");
+
+    expect(res.status).toBe(200);
+    expect(res.body).toHaveLength(1);
+    expect(res.body[0].juniorRating).toBeNull();
+    expect(corpsBrut(res.body)).not.toContain(COMMENTAIRE_JEUNE);
+  });
+});
+
+describe("POST /api/interventions/:id/feedback — reponse", () => {
+  it("la reponse au jeune ne contient pas le feedback deja donne par le senior", async () => {
+    const senior = await createUser("SENIOR");
+    const junior = await createUser("JUNIOR");
+    const relation = await createRelation(senior.id, junior.id);
+    const intervention = await createInterventionWithFeedback(relation.id, {
+      status: "COMPLETED_PENDING_FEEDBACK",
+      juniorRating: null,
+      juniorComment: null,
+    });
+
+    const res = await (await loginAs(junior))
+      .post(`/api/interventions/${intervention.id}/feedback`)
+      .send({ rating: 4, comment: "Merci" });
+
+    expect(res.status).toBe(200);
+    expect(res.body.juniorRating).toBe(4);
+    expect(res.body.seniorRating).toBeNull();
+    expect(corpsBrut(res.body)).not.toContain(COMMENTAIRE_SENIOR);
+  });
+});

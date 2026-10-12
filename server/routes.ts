@@ -1466,7 +1466,11 @@ export async function registerRoutes(
         if (!isSenior && intervention.juniorRating !== null) return false;
         return true;
       });
-      res.json(needsFeedback);
+      // The other party's feedback must not reach the caller before (or after)
+      // they give their own.
+      res.json(
+        needsFeedback.map((i) => scopeInterventionFeedback(i, req.user!.role as Role, req.user!.id, i.relation.seniorId))
+      );
     } catch (err) {
       console.error("[PENDING_FEEDBACK] Error:", err);
       res.status(500).json({ message: "Erreur" });
@@ -1534,7 +1538,8 @@ export async function registerRoutes(
         link: `/relations/${intervention.relationId}`,
       });
 
-      res.json(updated);
+      // The other party may already have rated: never echo it back.
+      res.json(scopeInterventionFeedback(updated, req.user!.role as Role, req.user!.id, intervention.relation.seniorId));
     } catch (err) {
       console.error("[FEEDBACK] Error:", err);
       res.status(500).json({ message: "Erreur lors de l'enregistrement du feedback" });
@@ -2612,6 +2617,10 @@ export async function registerRoutes(
         ...r,
         senior: sanitizeUserPublic(r.senior),
         junior: sanitizeUserPublic(r.junior),
+        // A referent sees the senior's feedback, never the junior's.
+        interventions: r.interventions.map((i) =>
+          scopeInterventionFeedback(i, "REFERENT_SENIOR", req.user!.id, r.seniorId)
+        ),
       })));
     } catch (err) {
       console.error("[REFERENT_RELATIONS] Error:", err);
