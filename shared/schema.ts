@@ -478,6 +478,16 @@ export const meetingHistoryQuerySchema = z.object({
 
 export type MeetingHistoryQuery = z.infer<typeof meetingHistoryQuerySchema>;
 
+/** Admins pass ?seniorId= to read a given senior's credits; others ignore it. */
+export const creditsQuerySchema = z.object({
+  seniorId: z.string().min(1).max(64).optional(),
+});
+
+/** Stripe Checkout session id, appended by Stripe to the success URL. */
+export const checkoutStatusQuerySchema = z.object({
+  sessionId: z.string().regex(/^cs_[A-Za-z0-9_]+$/, "Identifiant de session invalide").max(255),
+});
+
 export const npsQuerySchema = z
   .object({
     from: isoDate.optional(),

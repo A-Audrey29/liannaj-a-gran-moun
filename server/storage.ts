@@ -767,8 +767,10 @@ class DatabaseStorage implements IStorage {
           stripeSessionId: data.stripeSessionId ?? null,
         },
       });
+      // The senior who receives the credits is the one with an active
+      // subscription, not the referent who paid for them.
       await tx.user.update({
-        where: { id: data.userId },
+        where: { id: data.creditSeniorId ?? data.userId },
         data: { subscriptionActive: true },
       });
       if (data.credits && data.creditSeniorId) {
@@ -777,7 +779,7 @@ class DatabaseStorage implements IStorage {
             seniorId: data.creditSeniorId,
             type: "PURCHASE",
             amount: data.credits,
-            reason: `Achat pack ${data.credits} crédit(s) (${data.label})`,
+            reason: `Achat de ${data.credits} atelier${data.credits > 1 ? "s" : ""} (${data.label})`,
             triggeredById: data.triggeredById,
             paymentRecordId: payment.id,
           },
@@ -829,7 +831,7 @@ class DatabaseStorage implements IStorage {
             seniorId,
             type: "CONSUMPTION",
             amount: -1,
-            reason: "Consommation d'un crédit — intervention réalisée",
+            reason: "Atelier réalisé",
             triggeredById,
             interventionId,
           },

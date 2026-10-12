@@ -24,7 +24,9 @@ import {
   getNegativeCreditBalanceEmailHtml,
   escapeHtml,
 } from "./lib/email-templates";
-import { insertUserSchema, createRelationSchema, insertInterventionSchema, feedbackSchema, createPaymentSchema, checkoutSchema, changePasswordSchema, createAdminSchema, insertReportSchema, createAvailabilitySchema, createRecurringAvailabilitiesSchema, createDateExceptionSchema, updateUserCategoriesSchema, meetingHistoryQuerySchema, npsSchema, npsQuerySchema, COMPLETED_STATUSES } from "../shared/schema";
+import { insertUserSchema, createRelationSchema, insertInterventionSchema, feedbackSchema, createPaymentSchema, checkoutSchema, changePasswordSchema, createAdminSchema, insertReportSchema, createAvailabilitySchema, createRecurringAvailabilitiesSchema, createDateExceptionSchema, updateUserCategoriesSchema, meetingHistoryQuerySchema, npsSchema, npsQuerySchema, creditsQuerySchema, checkoutStatusQuerySchema, COMPLETED_STATUSES } from "../shared/schema";
+import { creditOwnerId } from "../shared/credits";
+import type { CreditBalanceResponse, CreditHistoryEntry, CheckoutStatusResponse } from "../shared/credits";
 import type { MeetingHistoryEntry, MeetingHistoryResponse, MeetingHistorySummary, Role } from "../shared/schema";
 import { buildNpsReport, npsCategory } from "../shared/nps";
 import type { NpsEligibilityResponse, NpsReport, NpsResponseEntry, NpsSegment } from "../shared/nps";
@@ -1944,11 +1946,8 @@ export async function registerRoutes(
 
       let creditSeniorId: string | null = null;
       if (parsed.data.credits) {
-        if (user.role === "SENIOR") {
-          creditSeniorId = user.id;
-        } else if (user.role === "REFERENT_SENIOR" && user.linkedSeniorId) {
-          creditSeniorId = user.linkedSeniorId;
-        } else {
+        creditSeniorId = creditOwnerId(user);
+        if (!creditSeniorId) {
           return res.status(400).json({
             message: "Impossible d'attribuer des crédits : cet utilisateur n'est ni un senior, ni un référent lié à un senior",
           });
@@ -2699,21 +2698,44 @@ export async function registerRoutes(
     }
   });
 
+  /**
+   * Senior whose credits the caller may read: their own (senior), their linked
+   * senior (referent), or ?seniorId= for an admin (404 if not a senior).
+   * Sends the error response itself and returns null when it cannot resolve.
+   */
+  async function resolveCreditSenior(req: Request, res: Response): Promise<string | null> {
+    const parsed = creditsQuerySchema.safeParse(req.query);
+    if (!parsed.success) {
+      res.status(400).json({ message: "Paramètres invalides", errors: parsed.error.flatten().fieldErrors });
+      return null;
+    }
+    const user = req.user!;
+    if (user.role === "ADMIN") {
+      const senior = parsed.data.seniorId ? await storage.getUser(parsed.data.seniorId) : null;
+      if (!senior || senior.role !== "SENIOR") {
+        res.status(404).json({ message: "Sénior introuvable" });
+        return null;
+      }
+      return senior.id;
+    }
+    const ownerId = creditOwnerId(user);
+    if (!ownerId) {
+      res.status(403).json({ message: "Ce profil n'a pas de solde de crédits" });
+      return null;
+    }
+    return ownerId;
+  }
+
   app.get("/api/credits/balance", requireAuth, async (req, res) => {
     try {
-      const user = req.user as any;
-      let seniorId: string;
-      if (user.role === "SENIOR") {
-        seniorId = user.id;
-      } else if (user.role === "REFERENT_SENIOR" && user.linkedSeniorId) {
-        seniorId = user.linkedSeniorId;
-      } else if (user.role === "ADMIN" && typeof req.query.seniorId === "string") {
-        seniorId = req.query.seniorId;
-      } else {
-        return res.status(400).json({ message: "Impossible de déterminer le solde de crédits pour cet utilisateur" });
-      }
-      const balance = await storage.getCreditBalance(seniorId);
-      res.json({ balance });
+      const seniorId = await resolveCreditSenior(req, res);
+      if (!seniorId) return;
+      const [balance, available] = await Promise.all([
+        storage.getCreditBalance(seniorId),
+        storage.getAvailableCredits(seniorId),
+      ]);
+      const response: CreditBalanceResponse = { balance, available };
+      res.json(response);
     } catch (err) {
       console.error("[CREDITS_BALANCE] Error:", err);
       res.status(500).json({ message: "Erreur" });
@@ -2722,21 +2744,40 @@ export async function registerRoutes(
 
   app.get("/api/credits/history", requireAuth, async (req, res) => {
     try {
-      const user = req.user as any;
-      let seniorId: string;
-      if (user.role === "SENIOR") {
-        seniorId = user.id;
-      } else if (user.role === "REFERENT_SENIOR" && user.linkedSeniorId) {
-        seniorId = user.linkedSeniorId;
-      } else if (user.role === "ADMIN" && typeof req.query.seniorId === "string") {
-        seniorId = req.query.seniorId;
-      } else {
-        return res.status(400).json({ message: "Impossible de déterminer l'historique de crédits pour cet utilisateur" });
-      }
-      const history = await storage.getCreditLedger(seniorId);
+      const seniorId = await resolveCreditSenior(req, res);
+      if (!seniorId) return;
+      const ledger = await storage.getCreditLedger(seniorId);
+      // Internal ids (admin who triggered it, payment, intervention) stay server-side.
+      const history: CreditHistoryEntry[] = ledger.map((entry) => ({
+        id: entry.id,
+        type: entry.type,
+        amount: entry.amount,
+        reason: entry.reason,
+        createdAt: entry.createdAt.toISOString(),
+      }));
       res.json(history);
     } catch (err) {
       console.error("[CREDITS_HISTORY] Error:", err);
+      res.status(500).json({ message: "Erreur" });
+    }
+  });
+
+  /**
+   * Has the Stripe webhook credited this checkout yet? Polled by the success
+   * page: Stripe redirects the browser before (or while) the webhook runs.
+   * Only the purchaser can see their own session.
+   */
+  app.get("/api/credits/checkout-status", requireAuth, async (req, res) => {
+    try {
+      const parsed = checkoutStatusQuerySchema.safeParse(req.query);
+      if (!parsed.success) {
+        return res.status(400).json({ message: "Paramètres invalides", errors: parsed.error.flatten().fieldErrors });
+      }
+      const payment = await storage.getPaymentByStripeSessionId(parsed.data.sessionId);
+      const response: CheckoutStatusResponse = { credited: !!payment && payment.userId === req.user!.id };
+      res.json(response);
+    } catch (err) {
+      console.error("[CREDITS_CHECKOUT_STATUS] Error:", err);
       res.status(500).json({ message: "Erreur" });
     }
   });
@@ -2756,13 +2797,9 @@ export async function registerRoutes(
         return res.status(400).json({ message: "Offre invalide" });
       }
 
-      const user = req.user as any;
-      let seniorId: string;
-      if (user.role === "SENIOR") {
-        seniorId = user.id;
-      } else if (user.role === "REFERENT_SENIOR" && user.linkedSeniorId) {
-        seniorId = user.linkedSeniorId;
-      } else {
+      const user = req.user!;
+      const seniorId = creditOwnerId(user);
+      if (!seniorId) {
         return res.status(400).json({ message: "Seul un sénior ou un référent lié à un sénior peut acheter des crédits" });
       }
 
