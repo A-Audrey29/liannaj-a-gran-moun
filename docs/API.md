@@ -219,6 +219,44 @@ Soumet le feedback d'une intervention (note 1-5 + commentaire optionnel).
 
 ---
 
+## NPS (recommandation du service)
+
+Voir `docs/decisions.md` (2026-10-08). Réservé aux rôles `SENIOR` et
+`REFERENT_SENIOR`, après au moins une rencontre tenue, une réponse max. tous les
+90 jours.
+
+### `GET /api/nps/eligibility`
+Dit si l'utilisateur connecté peut répondre maintenant (le client n'affiche la
+carte « Donner mon avis » que si c'est `true`).
+- **Auth** : Oui
+- **Réponse 200** : `{ eligible: boolean }`
+
+### `POST /api/nps`
+Enregistre une réponse NPS.
+- **Auth** : Oui
+- **Body** : `{ score: number (entier 0-10), reason?: string | null (max 1000) }` — `0` est une note valide.
+- **Réponse 201** : `{ id: string }`
+- **Réponse 400** : `{ message: "Données invalides", errors: { score?: string[], reason?: string[] } }`
+- **Réponse 403** : rôle non concerné, ou aucune rencontre tenue.
+- **Réponse 409** : déjà répondu depuis moins de 90 jours (y compris deux envois simultanés).
+
+### `GET /api/admin/nps`
+Résultats pour l'onglet admin « Satisfaction ».
+- **Auth** : Admin
+- **Query** : `from`, `to` (optionnels, `YYYY-MM-DD`, jours en heure de Guadeloupe, `to` inclus, `from ≤ to`)
+- **Réponse 200** : `NpsReport` (`shared/nps.ts`)
+  ```json
+  {
+    "summary": { "total": 3, "promoters": 1, "passives": 1, "detractors": 1, "nps": 0 },
+    "bySegment": { "SENIOR": { "...": "NpsSummary" }, "REFERENT_SENIOR": { "...": "NpsSummary" } },
+    "responses": [{ "id": "", "createdAt": "ISO", "segment": "SENIOR", "score": 9,
+                    "category": "PROMOTER", "reason": null, "firstName": "", "lastName": "" }]
+  }
+  ```
+- **Notes** : `nps` vaut `null` s'il n'y a aucune réponse. Les noms sont destinés au suivi interne ; l'export CSV côté client ne les inclut pas.
+
+---
+
 ## Messagerie
 
 ### `GET /api/messages/stream`

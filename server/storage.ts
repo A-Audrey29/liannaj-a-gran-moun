@@ -1,6 +1,8 @@
 import { prisma } from "./prisma";
 import { OVERDUE_STATUSES, isMeetingOverdue, overdueStartBefore } from "../shared/meeting-check";
-import type { User, Category, UserCategory, Relation, Intervention, AdminRecommendation, Notification, PaymentRecord, Favorite, Conversation, Message, PushSubscription, Report, TeacherStudent, TeacherComment, Availability, CreditLedger, Prisma } from "../generated/prisma/client.ts";
+import type { User, Category, UserCategory, Relation, Intervention, AdminRecommendation, Notification, PaymentRecord, Favorite, Conversation, Message, PushSubscription, Report, TeacherStudent, TeacherComment, Availability, CreditLedger, NpsResponse, Prisma } from "../generated/prisma/client.ts";
+import { COMPLETED_STATUSES } from "../shared/schema";
+import { NPS_COOLDOWN_DAYS, NPS_SEGMENTS, type NpsSegment } from "../shared/nps";
 
 /**
  * Périmètre d'un historique de rencontres. Construit serveur à partir du rôle
@@ -17,6 +19,46 @@ export interface MeetingHistoryFilters {
   status?: Intervention["status"][];
   from?: Date;
   to?: Date;
+}
+
+/** The slice of the session user needed to decide NPS eligibility. */
+export interface NpsRespondent {
+  id: string;
+  role: string;
+  linkedSeniorId: string | null;
+}
+
+/**
+ * Why someone cannot answer the NPS now. The route maps ROLE and NO_MEETING to
+ * 403 and COOLDOWN to 409.
+ */
+export type NpsIneligibleReason = "ROLE" | "NO_MEETING" | "COOLDOWN";
+
+type NpsDb = Prisma.TransactionClient | typeof prisma;
+
+/**
+ * Eligibility, decided server-side only: right role, at least one meeting
+ * actually held for the senior (the referent's senior when a referent), and no
+ * answer in the last NPS_COOLDOWN_DAYS days.
+ */
+async function findNpsIneligibility(db: NpsDb, user: NpsRespondent): Promise<NpsIneligibleReason | null> {
+  if (!NPS_SEGMENTS.includes(user.role as NpsSegment)) return "ROLE";
+
+  const seniorId = user.role === "SENIOR" ? user.id : user.linkedSeniorId;
+  if (!seniorId) return "NO_MEETING";
+
+  const heldMeeting = await db.intervention.findFirst({
+    where: { status: { in: COMPLETED_STATUSES }, relation: { seniorId } },
+    select: { id: true },
+  });
+  if (!heldMeeting) return "NO_MEETING";
+
+  const cutoff = new Date(Date.now() - NPS_COOLDOWN_DAYS * 24 * 60 * 60 * 1000);
+  const recentAnswer = await db.npsResponse.findFirst({
+    where: { userId: user.id, createdAt: { gt: cutoff } },
+    select: { id: true },
+  });
+  return recentAnswer ? "COOLDOWN" : null;
 }
 
 export interface IStorage {
@@ -150,6 +192,17 @@ export interface IStorage {
   getReports(): Promise<(Report & { reporter: User; target: User | null })[]>;
   getOpenReportCount(): Promise<number>;
   updateReportStatus(id: string, status: string, handledNote: string): Promise<Report>;
+
+  getNpsIneligibility(user: NpsRespondent): Promise<NpsIneligibleReason | null>;
+  /**
+   * Re-checks eligibility inside the transaction, under a per-user advisory
+   * lock: two concurrent submits cannot both pass the cooldown check.
+   */
+  createNpsResponse(
+    user: NpsRespondent,
+    data: { score: number; reason?: string | null }
+  ): Promise<{ response: NpsResponse } | { ineligible: NpsIneligibleReason }>;
+  getNpsResponses(filters?: { from?: Date; to?: Date }): Promise<(NpsResponse & { user: Pick<User, "firstName" | "lastName"> | null })[]>;
 
   getAdmins(): Promise<User[]>;
   getRelationsBySeniorId(seniorId: string): Promise<(Relation & { senior: User; junior: User; interventions: Intervention[] })[]>;
@@ -595,7 +648,12 @@ class DatabaseStorage implements IStorage {
   }
 
   async deleteUser(id: string): Promise<void> {
-    await prisma.user.delete({ where: { id } });
+    await prisma.$transaction([
+      // NPS answers survive as anonymous scores (FK is SET NULL). The free-text
+      // reason may identify the person, so it goes with the account.
+      prisma.npsResponse.updateMany({ where: { userId: id }, data: { reason: null } }),
+      prisma.user.delete({ where: { id } }),
+    ]);
   }
 
   async getAllRelations(): Promise<(Relation & { senior: User; junior: User })[]> {
@@ -1009,6 +1067,47 @@ class DatabaseStorage implements IStorage {
     return prisma.report.update({
       where: { id },
       data: { status, handledNote, handledAt: new Date() },
+    });
+  }
+
+  async getNpsIneligibility(user: NpsRespondent): Promise<NpsIneligibleReason | null> {
+    return findNpsIneligibility(prisma, user);
+  }
+
+  async createNpsResponse(
+    user: NpsRespondent,
+    data: { score: number; reason?: string | null }
+  ): Promise<{ response: NpsResponse } | { ineligible: NpsIneligibleReason }> {
+    return prisma.$transaction(async (tx) => {
+      // Blocking lock (not "try"): the second request waits for the first to
+      // commit, then sees the cooldown and gets a clean 409 instead of an error.
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`nps:${user.id}`}))`;
+
+      const ineligible = await findNpsIneligibility(tx, user);
+      if (ineligible) return { ineligible };
+
+      const response = await tx.npsResponse.create({
+        data: {
+          userId: user.id,
+          role: user.role as NpsSegment,
+          score: data.score,
+          reason: data.reason || null,
+        },
+      });
+      return { response };
+    });
+  }
+
+  async getNpsResponses(filters: { from?: Date; to?: Date } = {}): Promise<(NpsResponse & { user: Pick<User, "firstName" | "lastName"> | null })[]> {
+    return prisma.npsResponse.findMany({
+      where: {
+        createdAt: {
+          ...(filters.from && { gte: filters.from }),
+          ...(filters.to && { lte: filters.to }),
+        },
+      },
+      include: { user: { select: { firstName: true, lastName: true } } },
+      orderBy: { createdAt: "desc" },
     });
   }
 

@@ -31,6 +31,7 @@ import { useUnreadMessageCount } from "@/hooks/use-unread-count";
 import { usePushNotifications } from "@/hooks/use-push";
 import { fmtTime, gpParts, MOIS_LONGS } from "@/lib/availability-format";
 import { CreditOffersCard } from "@/components/credit-offers-card";
+import { NpsPrompt } from "@/components/nps-prompt";
 
 type RelationWithUsers = Relation & { senior: UserType; junior: UserType; interventions?: Intervention[] };
 type MatchSuggestion = { user: UserType; commonCategories: string[]; isRecommended: boolean; isFavorite: boolean };
@@ -332,6 +333,7 @@ function DashboardTab({ counts, isLoading, user, onSwitchTab, creditBalance, onO
 
   return (
     <div>
+      {user?.role === "SENIOR" && <NpsPrompt className="mb-6" />}
       <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-4" data-testid="text-resume">Résumé</h3>
       <div className="grid grid-cols-2 gap-3">
         {isJunior ? (

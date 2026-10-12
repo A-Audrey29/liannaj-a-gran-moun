@@ -41,6 +41,7 @@ const ROUTES_ADMIN: RouteProtegee[] = [
   { methode: "get", chemin: "/api/admin/reports", roleAutorise: "ADMIN" },
   { methode: "get", chemin: "/api/admin/relations/pending-meeting", roleAutorise: "ADMIN" },
   { methode: "get", chemin: "/api/admin/messages/conversations", roleAutorise: "ADMIN" },
+  { methode: "get", chemin: "/api/admin/nps", roleAutorise: "ADMIN" },
   {
     methode: "post",
     chemin: "/api/admin/recommendations",

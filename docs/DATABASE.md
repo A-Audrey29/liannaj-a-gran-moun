@@ -92,6 +92,7 @@ npx tsx prisma/seed.ts
 | `20260827000000_profile_photo_in_db` | Table `ProfilePhoto` (photos stockées en base, disque Render éphémère). |
 | `20260907000000_add_credit_ledger` | Table `CreditLedger` et enum `CreditMovementType` (système de crédits prépayés pour les ateliers). Migration additive, sans impact sur les tables existantes. |
 | `20261007111325_add_meeting_check_reminder` | Valeur `MEETING_CHECK` sur l'enum `NotificationType`, colonne `Intervention.meetingCheckReminderSentAt` (idempotence de la relance « la rencontre a-t-elle eu lieu ? »). Additive. Appliquée sur Neon avant d'avoir son rollback : celui-ci est dans `down.sql` (le `migration.sql` n'est plus modifiable, son empreinte est vérifiée par Prisma). Postgres ne sachant pas retirer une valeur d'enum, le rollback recrée le type. |
+| `20261008120000_add_nps_response` | Table `NpsResponse` (NPS 0-10 + motif) avec deux `CHECK` (note 0-10, rôle SENIOR/REFERENT_SENIOR) que Prisma ne sait pas exprimer. Additive. Rollback : `DROP TABLE "NpsResponse"` (en commentaire de fin). |
 
 > **Note sur la table `session`** : elle est créée par `connect-pg-simple` et
 > n'existe pas dans `schema.prisma` (aucun accès via le client Prisma). Une
@@ -289,6 +290,21 @@ ajustements). Le solde d'un Senior est toujours dérivé de la somme des
 > La première rencontre d'une relation (`PENDING_FIRST_MEETING`) est gratuite
 > par défaut et ne génère pas de CONSUMPTION, sauf si sa durée prévue dépasse
 > 30 minutes.
+
+### `NpsResponse`
+Réponse au Net Promoter Score (« Recommanderiez-vous Lyannaj à votre entourage ? »).
+Table séparée d'`Intervention` à dessein : le NPS mesure le service, et une
+colonne sur `Intervention` serait sérialisée par les routes à masquage de
+feedback. Seule la note brute est stockée ; catégorie et score se calculent
+(`shared/nps.ts`).
+
+| Champ | Type | Description |
+|---|---|---|
+| `userId` | String? | Répondant. `NULL` une fois le compte supprimé (`onDelete: SetNull`) : la note reste, anonyme, et le motif est effacé par `storage.deleteUser` |
+| `role` | Role | Rôle au moment de la réponse : `SENIOR` ou `REFERENT_SENIOR` (garanti par un `CHECK`) |
+| `score` | SmallInt | 0 à 10 (garanti par un `CHECK`) |
+| `reason` | String? | Réponse libre à « pourquoi cette note ? » (max 1000 côté Zod) |
+| `createdAt` | DateTime | Sert au délai de 90 jours entre deux réponses d'une même personne |
 
 ### `Report`
 Signalement d'un utilisateur par un autre.

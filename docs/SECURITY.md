@@ -145,6 +145,8 @@ Aucun `express.static("uploads")` dans le code. Route `GET /api/photos/:filename
 | `createRelationSchema` | `POST /api/relations` | `juniorId` requis, non vide | `schema.ts:172-174` | `routes.ts:575` |
 | `insertInterventionSchema` | `POST /api/relations/:id/interventions` | Date requise, durée 30-480 min, tasks array | `schema.ts:159-165` | `routes.ts:737` |
 | `feedbackSchema` | `POST /api/interventions/:id/feedback` | Note 1-5, commentaire max 1000 chars | `schema.ts:167-170` | `routes.ts:964` |
+| `npsSchema` | `POST /api/nps` | Note entière 0-10 (0 valide), motif max 1000 chars, nullable | `shared/schema.ts` | `routes.ts` (bloc NPS) |
+| `npsQuerySchema` | `GET /api/admin/nps` | `from`/`to` au format `YYYY-MM-DD`, `from ≤ to` | `shared/schema.ts` | `routes.ts` (bloc NPS) |
 | `createPaymentSchema` | `POST /api/admin/payments` | Montant positif, libellé requis | `schema.ts:205-210` | `routes.ts:1195` |
 | `createAdminSchema` | `POST /api/admin/create-admin` | Email valide, password min 6 chars | `schema.ts:217-222` | `routes.ts:1166` |
 
@@ -235,6 +237,20 @@ Aucun `express.static("uploads")` dans le code. Route `GET /api/photos/:filename
 | `PATCH /api/interventions/:id/cancel` | ○ | ◐ | ○ | ● | Senior ou Admin (`routes.ts:893`) | `routes.ts:885` |
 | `GET /api/interventions/pending-feedback` | ○ | ● | ● | ● | Filtre propres interventions (`routes.ts:925-931`) | `routes.ts:923` |
 | `POST /api/interventions/:id/feedback` | ○ | ◐ | ◐ | ○ | Participant (`routes.ts:953`), pas déjà noté (`routes.ts:957-961`) | `routes.ts:939` |
+
+#### NPS (recommandation du service)
+
+L'éligibilité (rôle `SENIOR` ou `REFERENT_SENIOR`, rencontre tenue, 90 jours
+depuis la dernière réponse) est décidée côté serveur dans
+`findNpsIneligibility` (`server/storage.ts`) ; le client ne fait que masquer la
+carte. Les réponses vivent dans `NpsResponse`, jamais dans `Intervention`, donc
+elles ne passent par aucune route à masquage de feedback.
+
+| Route | Anonyme | Senior / Référent | Junior | Admin | Condition |
+|---|---|---|---|---|---|
+| `GET /api/nps/eligibility` | ○ | ● | ● (toujours `false`) | ● (toujours `false`) | `requireAuth` |
+| `POST /api/nps` | ○ | ◐ | ○ | ○ | Rôle concerné + rencontre tenue (403), délai 90 jours (409), verrou advisory par utilisateur |
+| `GET /api/admin/nps` | ○ | ○ | ○ | ● | `requireAdmin`. Renvoie noms et motifs : l'export CSV client les retire |
 
 #### Messagerie
 

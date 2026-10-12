@@ -16,6 +16,17 @@ export function csvEscape(value: string): string {
   return value;
 }
 
+/**
+ * Neutralises spreadsheet formulas in user-typed text. A cell starting with
+ * = + - @ (or tab / CR) is executed when the file is opened in Excel, so a
+ * free-text answer such as `=HYPERLINK(...)` would run on whoever receives the
+ * export. A leading apostrophe makes it inert. Use on text people typed, not on
+ * numbers.
+ */
+export function csvSafeText(value: string): string {
+  return /^[=+\-@\t\r]/.test(value) ? `'${value}` : value;
+}
+
 export function buildCsv(header: string[], rows: (string | number | null | undefined)[][]): string {
   const bom = "﻿";
   const lines = [

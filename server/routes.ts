@@ -23,12 +23,14 @@ import {
   getCreditPurchaseConfirmedEmailHtml,
   getNegativeCreditBalanceEmailHtml,
 } from "./lib/email-templates";
-import { insertUserSchema, createRelationSchema, insertInterventionSchema, feedbackSchema, createPaymentSchema, checkoutSchema, changePasswordSchema, createAdminSchema, insertReportSchema, createAvailabilitySchema, createRecurringAvailabilitiesSchema, createDateExceptionSchema, updateUserCategoriesSchema, meetingHistoryQuerySchema, COMPLETED_STATUSES } from "../shared/schema";
+import { insertUserSchema, createRelationSchema, insertInterventionSchema, feedbackSchema, createPaymentSchema, checkoutSchema, changePasswordSchema, createAdminSchema, insertReportSchema, createAvailabilitySchema, createRecurringAvailabilitiesSchema, createDateExceptionSchema, updateUserCategoriesSchema, meetingHistoryQuerySchema, npsSchema, npsQuerySchema, COMPLETED_STATUSES } from "../shared/schema";
 import type { MeetingHistoryEntry, MeetingHistoryResponse, MeetingHistorySummary, Role } from "../shared/schema";
-import type { MeetingHistoryScope } from "./storage";
+import { buildNpsReport, npsCategory } from "../shared/nps";
+import type { NpsEligibilityResponse, NpsReport, NpsResponseEntry, NpsSegment } from "../shared/nps";
+import type { MeetingHistoryScope, NpsIneligibleReason } from "./storage";
 import { createRecurringAvailabilities, createDateException, deleteAvailability, isWithinAvailability, hasInterventionConflict } from "./lib/availability";
 import { addSSEClient, sendSSEEvent, isUserConnected } from "./lib/sse";
-import { fmtDayNumeric, fmtTime } from "../shared/dates";
+import { fmtDayNumeric, fmtTime, gpDateTimeToUtc, addDaysISO } from "../shared/dates";
 import { PLATFORM_NAME } from "../shared/branding";
 import { sendPushNotification, getVapidPublicKey } from "./lib/push";
 import { paymentProvider } from "./lib/payment-provider";
@@ -1548,6 +1550,86 @@ export async function registerRoutes(
     } catch (err) {
       console.error("[FEEDBACK] Error:", err);
       res.status(500).json({ message: "Erreur lors de l'enregistrement du feedback" });
+    }
+  });
+
+  // ==================== NPS (RECOMMANDATION DU SERVICE) ====================
+
+  const NPS_INELIGIBLE_MESSAGES: Record<NpsIneligibleReason, string> = {
+    ROLE: "Cette enquête ne concerne pas votre profil",
+    NO_MEETING: "Vous pourrez donner votre avis après votre premier atelier",
+    COOLDOWN: "Vous avez déjà donné votre avis récemment",
+  };
+
+  app.get("/api/nps/eligibility", requireAuth, async (req, res) => {
+    try {
+      const ineligible = await storage.getNpsIneligibility(req.user!);
+      const response: NpsEligibilityResponse = { eligible: ineligible === null };
+      res.json(response);
+    } catch (err) {
+      console.error("[NPS] Eligibility error:", err);
+      res.status(500).json({ message: "Erreur" });
+    }
+  });
+
+  app.post("/api/nps", requireAuth, async (req, res) => {
+    try {
+      const parsed = npsSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({
+          message: "Données invalides",
+          errors: parsed.error.flatten().fieldErrors,
+        });
+      }
+
+      const result = await storage.createNpsResponse(req.user!, parsed.data);
+      if ("ineligible" in result) {
+        const status = result.ineligible === "COOLDOWN" ? 409 : 403;
+        return res.status(status).json({ message: NPS_INELIGIBLE_MESSAGES[result.ineligible] });
+      }
+
+      res.status(201).json({ id: result.response.id });
+    } catch (err) {
+      console.error("[NPS] Error:", err);
+      res.status(500).json({ message: "Erreur lors de l'enregistrement de votre avis" });
+    }
+  });
+
+  // Names are returned for admin follow-up (calling back a detractor). The CSV
+  // export built from this list drops them: the funder gets no identity.
+  app.get("/api/admin/nps", requireAdmin, async (req, res) => {
+    try {
+      const parsed = npsQuerySchema.safeParse(req.query);
+      if (!parsed.success) {
+        return res.status(400).json({
+          message: "Paramètres invalides",
+          errors: parsed.error.flatten().fieldErrors,
+        });
+      }
+
+      // Day boundaries are Guadeloupe days (server runs in UTC), end inclusive.
+      const { from, to } = parsed.data;
+      const rows = await storage.getNpsResponses({
+        from: from ? gpDateTimeToUtc(from, 0, 0) : undefined,
+        to: to ? new Date(gpDateTimeToUtc(addDaysISO(to, 1), 0, 0).getTime() - 1) : undefined,
+      });
+
+      const entries: NpsResponseEntry[] = rows.map((row) => ({
+        id: row.id,
+        createdAt: row.createdAt.toISOString(),
+        segment: row.role as NpsSegment,
+        score: row.score,
+        category: npsCategory(row.score),
+        reason: row.reason,
+        firstName: row.user?.firstName ?? null,
+        lastName: row.user?.lastName ?? null,
+      }));
+
+      const report: NpsReport = buildNpsReport(entries);
+      res.json(report);
+    } catch (err) {
+      console.error("[NPS] Admin report error:", err);
+      res.status(500).json({ message: "Erreur lors du chargement des résultats" });
     }
   });
 
