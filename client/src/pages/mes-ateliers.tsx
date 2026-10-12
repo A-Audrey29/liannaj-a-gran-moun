@@ -3,18 +3,16 @@ import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ArrowLeft, BookOpen, ShoppingCart, Tag } from "lucide-react";
-import { useState } from "react";
+import { AlertTriangle, ArrowLeft, BookOpen, ShoppingCart } from "lucide-react";
 import { OffersGrid } from "@/components/credit-offers-card";
-import type { CreditLedgerEntry } from "@shared/schema";
+import type { CreditBalanceResponse, CreditHistoryEntry } from "@shared/credits";
 
 function formatDate(d: string | Date) {
   return new Date(d).toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric" });
 }
 
-const MOVEMENT_LABEL: Record<CreditLedgerEntry["type"], string> = {
+const MOVEMENT_LABEL: Record<CreditHistoryEntry["type"], string> = {
   PURCHASE: "Achat",
   CONSUMPTION: "Atelier utilisé",
   ADJUSTMENT: "Ajustement",
@@ -23,22 +21,27 @@ const MOVEMENT_LABEL: Record<CreditLedgerEntry["type"], string> = {
 export default function MesAteliers() {
   const { user } = useAuth();
   const [, setLocation] = useLocation();
-  const [tarifsOpen, setTarifsOpen] = useState(false);
-
-  const { data: balanceData, isLoading: balanceLoading } = useQuery<{ balance: number }>({
-    queryKey: ["/api/credits/balance"],
-  });
-  const { data: history, isLoading: historyLoading } = useQuery<CreditLedgerEntry[]>({
-    queryKey: ["/api/credits/history"],
-  });
-
   const isAllowed = user?.role === "SENIOR" || user?.role === "REFERENT_SENIOR";
+  const homePath = user?.role === "REFERENT_SENIOR" ? "/espace-referent" : "/mon-espace";
+
+  // Errors are shown as errors: a failed request must never read as "0
+  // atelier" or "no movement", which is wrong financial information.
+  const {
+    data: balanceData,
+    isLoading: balanceLoading,
+    isError: balanceError,
+  } = useQuery<CreditBalanceResponse>({ queryKey: ["/api/credits/balance"], enabled: isAllowed, staleTime: 0 });
+  const {
+    data: history,
+    isLoading: historyLoading,
+    isError: historyError,
+  } = useQuery<CreditHistoryEntry[]>({ queryKey: ["/api/credits/history"], enabled: isAllowed, staleTime: 0 });
 
   if (!isAllowed) {
     return (
       <div className="max-w-4xl mx-auto px-4 py-8 text-center">
         <p className="text-muted-foreground">Page non disponible pour ce compte.</p>
-        <Button variant="outline" className="mt-4" onClick={() => setLocation("/mon-espace")}>Retour</Button>
+        <Button variant="outline" className="mt-4" onClick={() => setLocation(homePath)}>Retour</Button>
       </div>
     );
   }
@@ -46,7 +49,7 @@ export default function MesAteliers() {
   return (
     <div className="max-w-4xl mx-auto px-4 py-8">
       <button
-        onClick={() => setLocation("/mon-espace")}
+        onClick={() => setLocation(homePath)}
         className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground mb-6 transition-colors"
         data-testid="button-back"
       >
@@ -56,29 +59,42 @@ export default function MesAteliers() {
       <h1 className="text-2xl font-bold mb-6" data-testid="text-mes-ateliers-title">Mes ateliers</h1>
 
       <Card className="rounded-2xl border-0 shadow-sm mb-6">
-        <CardContent className="py-6 flex items-center justify-between flex-wrap gap-4">
+        <CardContent className="py-6">
           <div className="flex items-center gap-3">
             <BookOpen className="w-8 h-8 text-[#dc4256]" />
             <div>
-              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Solde disponible</p>
+              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Ateliers disponibles</p>
               {balanceLoading ? (
                 <Skeleton className="h-8 w-24 mt-1" />
-              ) : (
-                <p className="text-2xl font-bold" data-testid="text-balance">
-                  {balanceData?.balance ?? 0} atelier{(balanceData?.balance ?? 0) > 1 ? "s" : ""}
+              ) : balanceError || !balanceData ? (
+                <p className="text-sm text-[#dc4256] mt-1" data-testid="text-balance-error">
+                  Impossible de charger votre solde. Réessayez dans un instant.
                 </p>
+              ) : (
+                <>
+                  <p className="text-2xl font-bold" data-testid="text-balance">
+                    {Math.max(balanceData.available, 0)} atelier{balanceData.available > 1 ? "s" : ""}
+                  </p>
+                  {balanceData.balance > balanceData.available && balanceData.available >= 0 && (
+                    <p className="text-xs text-muted-foreground" data-testid="text-reserved">
+                      + {balanceData.balance - balanceData.available} réservé
+                      {balanceData.balance - balanceData.available > 1 ? "s" : ""} pour des ateliers déjà prévus
+                    </p>
+                  )}
+                </>
               )}
             </div>
           </div>
-          <div className="flex gap-2">
-            <Button
-              variant="outline"
-              onClick={() => setTarifsOpen(true)}
-              data-testid="button-tarifs"
+          {balanceData && balanceData.balance < 0 && (
+            <p
+              className="text-sm text-amber-700 bg-amber-50 rounded-lg px-3 py-2 mt-4 flex items-center gap-2"
+              data-testid="text-negative-balance"
             >
-              <Tag className="w-4 h-4 mr-2" /> Tarifs
-            </Button>
-          </div>
+              <AlertTriangle className="w-4 h-4 shrink-0" />
+              Solde à régulariser : {balanceData.balance} atelier{balanceData.balance < -1 ? "s" : ""}. Achetez un pack pour
+              réserver de nouveaux ateliers.
+            </p>
+          )}
         </CardContent>
       </Card>
 
@@ -92,7 +108,11 @@ export default function MesAteliers() {
       </Card>
 
       <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">Historique</h2>
-      {historyLoading ? (
+      {historyError ? (
+        <p className="text-center py-12 text-[#dc4256]" data-testid="text-history-error">
+          Impossible de charger l'historique. Réessayez dans un instant.
+        </p>
+      ) : historyLoading ? (
         <div className="space-y-2">
           <Skeleton className="h-14 rounded-xl" />
           <Skeleton className="h-14 rounded-xl" />
@@ -124,14 +144,6 @@ export default function MesAteliers() {
         </div>
       )}
 
-      <Dialog open={tarifsOpen} onOpenChange={setTarifsOpen}>
-        <DialogContent data-testid="dialog-tarifs">
-          <DialogHeader>
-            <DialogTitle>Tarifs des ateliers</DialogTitle>
-          </DialogHeader>
-          <OffersGrid />
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

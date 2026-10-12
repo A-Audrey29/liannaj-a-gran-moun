@@ -78,8 +78,9 @@ export default function SatisfactionTab() {
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const [category, setCategory] = useState<NpsCategory | "all">("all");
+  const rangeValid = !from || !to || from <= to;
 
-  const { data, isLoading, isError } = useQuery<NpsReport>({
+  const { data: queried, isLoading, isError, isPlaceholderData } = useQuery<NpsReport>({
     queryKey: ["/api/admin/nps", { from, to }],
     queryFn: async () => {
       const params = new URLSearchParams();
@@ -90,10 +91,14 @@ export default function SatisfactionTab() {
       return res.json();
     },
     // An inverted range is refused by the server; wait for a valid one.
-    enabled: !from || !to || from <= to,
+    enabled: rangeValid,
     // Keep the report on screen while a new period loads (no spinner flash).
     placeholderData: keepPreviousData,
   });
+  // Never show (or export) another period's figures: hidden while the range is
+  // invalid, and export disabled while the previous period is still displayed.
+  const data = rangeValid ? queried : undefined;
+  const canExport = !!data && !isPlaceholderData && data.responses.length > 0;
 
   // The funder gets scores and reasons, never names or emails.
   function exportCSV() {
@@ -106,8 +111,9 @@ export default function SatisfactionTab() {
       CATEGORY_LABELS[r.category],
       r.reason ?? "",
     ]);
-    // Guadeloupe day, like every date inside the file (not the UTC date).
-    downloadCsv(`nps_${todayISO()}.csv`, buildCsv(header, rows));
+    // Period in the file name (Guadeloupe days, like the dates inside), so a
+    // file sent to the funder says which period it covers.
+    downloadCsv(`nps_${from || "debut"}_au_${to || todayISO()}.csv`, buildCsv(header, rows));
   }
 
   const summary = data?.summary;
@@ -132,7 +138,7 @@ export default function SatisfactionTab() {
         <Button
           variant="outline"
           onClick={exportCSV}
-          disabled={!data || data.responses.length === 0}
+          disabled={!canExport}
           className="ml-auto"
           data-testid="button-nps-export"
         >
@@ -141,7 +147,7 @@ export default function SatisfactionTab() {
         </Button>
       </div>
 
-      {from && to && from > to && (
+      {!rangeValid && (
         <p className="text-sm text-[#dc4256]">La date de début doit précéder la date de fin.</p>
       )}
       {isError && <p className="text-sm text-[#dc4256]">Impossible de charger les résultats.</p>}
