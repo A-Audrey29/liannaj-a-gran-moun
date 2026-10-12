@@ -1,5 +1,5 @@
 import { prisma } from "./prisma";
-import type { User, Category, UserCategory, Relation, Intervention, AdminRecommendation, Notification, PaymentRecord, Favorite, Conversation, Message, PushSubscription, Report, TeacherStudent, TeacherComment, Internship, Availability, CreditLedger, Prisma } from "../generated/prisma/client.ts";
+import type { User, Category, UserCategory, Relation, Intervention, AdminRecommendation, Notification, PaymentRecord, Favorite, Conversation, Message, PushSubscription, Report, TeacherStudent, TeacherComment, Availability, CreditLedger, Prisma } from "../generated/prisma/client.ts";
 
 /**
  * Périmètre d'un historique de rencontres. Construit serveur à partir du rôle
@@ -163,12 +163,6 @@ export interface IStorage {
   updateTeacherComment(id: string, teacherId: string, content: string): Promise<TeacherComment>;
   deleteTeacherComment(id: string, teacherId: string): Promise<void>;
   getAllTeacherComments(): Promise<(TeacherComment & { teacher: User; student: User })[]>;
-
-  getStudentInternships(studentId: string): Promise<Internship[]>;
-  createInternship(data: { studentId: string; companyName: string; companyAddress?: string; supervisorName?: string; supervisorEmail?: string; startDate: Date; endDate?: Date; description?: string; status?: string; teacherNotes?: string }): Promise<Internship>;
-  updateInternship(id: string, data: Prisma.InternshipUpdateInput): Promise<Internship>;
-  deleteInternship(id: string): Promise<void>;
-  getAllInternships(): Promise<(Internship & { student: User })[]>;
 
   getAllTeachers(): Promise<User[]>;
 }
@@ -1062,45 +1056,6 @@ class DatabaseStorage implements IStorage {
     return prisma.teacherComment.findMany({
       include: { teacher: true, student: true },
       orderBy: { createdAt: "desc" },
-    });
-  }
-
-  async getStudentInternships(studentId: string): Promise<Internship[]> {
-    return prisma.internship.findMany({
-      where: { studentId },
-      orderBy: { startDate: "desc" },
-    });
-  }
-
-  async createInternship(data: { studentId: string; companyName: string; companyAddress?: string; supervisorName?: string; supervisorEmail?: string; startDate: Date; endDate?: Date; description?: string; status?: string; teacherNotes?: string }): Promise<Internship> {
-    return prisma.internship.create({
-      data: {
-        studentId: data.studentId,
-        companyName: data.companyName,
-        companyAddress: data.companyAddress || null,
-        supervisorName: data.supervisorName || null,
-        supervisorEmail: data.supervisorEmail || null,
-        startDate: data.startDate,
-        endDate: data.endDate || null,
-        description: data.description || null,
-        status: (data.status as any) || "UPCOMING",
-        teacherNotes: data.teacherNotes || null,
-      },
-    });
-  }
-
-  async updateInternship(id: string, data: Prisma.InternshipUpdateInput): Promise<Internship> {
-    return prisma.internship.update({ where: { id }, data });
-  }
-
-  async deleteInternship(id: string): Promise<void> {
-    await prisma.internship.delete({ where: { id } });
-  }
-
-  async getAllInternships(): Promise<(Internship & { student: User })[]> {
-    return prisma.internship.findMany({
-      include: { student: true },
-      orderBy: { startDate: "desc" },
     });
   }
 

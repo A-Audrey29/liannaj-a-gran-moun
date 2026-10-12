@@ -45,12 +45,12 @@ docs/              # ARCHITECTURE, API, DATABASE, DEPLOYMENT, SECURITY, decision
 
 Alias TS : `@/*` → `client/src/*`, `@shared/*` → `shared/*`.
 
-## Modèle de données (Prisma — 18 modèles)
+## Modèle de données (Prisma — 17 modèles)
 
 User, ProfilePhoto, Category, UserCategory, Relation, Intervention,
 Availability, AdminRecommendation, PaymentRecord, CreditLedger, Report,
 Notification, Favorite, Conversation, Message, PushSubscription,
-TeacherStudent, TeacherComment, Internship.
+TeacherStudent, TeacherComment.
 
 Le fichier `replit.md` à la racine décrit une version antérieure (Sprint 9,
 avant Stripe/crédits) — ne pas s'y fier pour l'état actuel, il documente

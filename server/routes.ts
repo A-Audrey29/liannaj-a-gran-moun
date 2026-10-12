@@ -2425,87 +2425,6 @@ export async function registerRoutes(
     }
   });
 
-  // GET /api/teacher/students/:id/internships
-  app.get("/api/teacher/students/:id/internships", requireTeacher, async (req, res) => {
-    try {
-      const teacherId = (req.user as any).id;
-      const isLinked = await storage.isTeacherOfStudent(teacherId, getParam(req, "id"));
-      if (!isLinked) return res.status(403).json({ message: "Cet élève ne vous est pas affilié" });
-
-      const internships = await storage.getStudentInternships(getParam(req, "id"));
-      res.json(internships);
-    } catch (err) {
-      res.status(500).json({ message: "Erreur" });
-    }
-  });
-
-  // POST /api/teacher/students/:id/internships
-  app.post("/api/teacher/students/:id/internships", requireTeacher, async (req, res) => {
-    try {
-      const teacherId = (req.user as any).id;
-      const isLinked = await storage.isTeacherOfStudent(teacherId, getParam(req, "id"));
-      if (!isLinked) return res.status(403).json({ message: "Cet élève ne vous est pas affilié" });
-
-      const { createInternshipSchema } = await import("../shared/schema");
-      const parsed = createInternshipSchema.safeParse(req.body);
-      if (!parsed.success) return res.status(400).json({ message: "Données invalides", errors: parsed.error.flatten().fieldErrors });
-
-      const internship = await storage.createInternship({
-        studentId: getParam(req, "id"),
-        companyName: parsed.data.companyName,
-        companyAddress: parsed.data.companyAddress,
-        supervisorName: parsed.data.supervisorName,
-        supervisorEmail: parsed.data.supervisorEmail,
-        startDate: new Date(parsed.data.startDate),
-        endDate: parsed.data.endDate ? new Date(parsed.data.endDate) : undefined,
-        description: parsed.data.description,
-        status: parsed.data.status,
-        teacherNotes: parsed.data.teacherNotes,
-      });
-      res.status(201).json(internship);
-    } catch (err) {
-      console.error("[TEACHER_CREATE_INTERNSHIP] Error:", err);
-      res.status(500).json({ message: "Erreur" });
-    }
-  });
-
-  // PATCH /api/teacher/students/:studentId/internships/:internshipId
-  app.patch("/api/teacher/students/:studentId/internships/:internshipId", requireTeacher, async (req, res) => {
-    try {
-      const teacherId = (req.user as any).id;
-      const isLinked = await storage.isTeacherOfStudent(teacherId, getParam(req, "studentId"));
-      if (!isLinked) return res.status(403).json({ message: "Cet élève ne vous est pas affilié" });
-
-      const { updateInternshipSchema } = await import("../shared/schema");
-      const parsed = updateInternshipSchema.safeParse(req.body);
-      if (!parsed.success) return res.status(400).json({ message: "Données invalides", errors: parsed.error.flatten().fieldErrors });
-
-      const data: any = { ...parsed.data };
-      if (data.startDate) data.startDate = new Date(data.startDate);
-      if (data.endDate) data.endDate = new Date(data.endDate);
-
-      const internship = await storage.updateInternship(getParam(req, "internshipId"), data);
-      res.json(internship);
-    } catch (err) {
-      console.error("[TEACHER_UPDATE_INTERNSHIP] Error:", err);
-      res.status(500).json({ message: "Erreur" });
-    }
-  });
-
-  // DELETE /api/teacher/students/:studentId/internships/:internshipId
-  app.delete("/api/teacher/students/:studentId/internships/:internshipId", requireTeacher, async (req, res) => {
-    try {
-      const teacherId = (req.user as any).id;
-      const isLinked = await storage.isTeacherOfStudent(teacherId, getParam(req, "studentId"));
-      if (!isLinked) return res.status(403).json({ message: "Cet élève ne vous est pas affilié" });
-
-      await storage.deleteInternship(getParam(req, "internshipId"));
-      res.json({ message: "Stage supprimé" });
-    } catch (err) {
-      res.status(500).json({ message: "Erreur" });
-    }
-  });
-
   // ==================== ADMIN — TEACHERS ====================
 
   app.get("/api/admin/teachers", requireAdmin, async (_req, res) => {
@@ -2588,18 +2507,6 @@ export async function registerRoutes(
         updatedAt: c.updatedAt,
         teacher: sanitizeUserPublic(c.teacher),
         student: sanitizeUserPublic(c.student),
-      })));
-    } catch (err) {
-      res.status(500).json({ message: "Erreur" });
-    }
-  });
-
-  app.get("/api/admin/internships", requireAdmin, async (_req, res) => {
-    try {
-      const internships = await storage.getAllInternships();
-      res.json(internships.map((i) => ({
-        ...i,
-        student: sanitizeUserPublic(i.student),
       })));
     } catch (err) {
       res.status(500).json({ message: "Erreur" });
