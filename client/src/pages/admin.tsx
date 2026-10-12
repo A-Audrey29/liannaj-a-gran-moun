@@ -12,6 +12,8 @@ import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import StarRating from "@/components/star-rating";
+import { MobileTabsMenu } from "@/components/mobile-tabs-menu";
+import MeetingHistory from "@/components/meeting-history";
 import { Command, CommandInput, CommandList, CommandEmpty, CommandGroup, CommandItem } from "@/components/ui/command";
 import {
   Dialog,
@@ -73,7 +75,9 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import type { User, Relation, Intervention, PaymentRecord, Notification } from "@shared/schema";
+import { ATELIERS } from "@shared/ateliers";
 import MessagerieAdminTab from "@/components/admin-messages-tab";
+import { fmtTime, fmtDayLongMonthYear, gpParts } from "@/lib/availability-format";
 
 type SafeUser = Omit<User, "password" | "validationToken" | "validationExpiry">;
 type RelationWithUsers = Relation & { senior: SafeUser; junior: SafeUser };
@@ -704,8 +708,15 @@ function CadrageTab() {
     scheduledDate: "",
     durationMinutes: 120,
     location: "",
-    tasks: "",
+    tasks: [] as string[],
   });
+
+  function toggleTask(task: string) {
+    setFormData((prev) => ({
+      ...prev,
+      tasks: prev.tasks.includes(task) ? prev.tasks.filter((t) => t !== task) : [...prev.tasks, task],
+    }));
+  }
 
   const { data: relations = [], isLoading } = useQuery<RelationWithUsers[]>({
     queryKey: ["/api/admin/relations/pending-meeting"],
@@ -721,7 +732,7 @@ function CadrageTab() {
       queryClient.invalidateQueries({ queryKey: ["/api/relations"] });
       setDialogOpen(false);
       setSelectedRelation(null);
-      setFormData({ scheduledDate: "", durationMinutes: 120, location: "", tasks: "" });
+      setFormData({ scheduledDate: "", durationMinutes: 120, location: "", tasks: [] });
       toast({ title: "1ère rencontre organisée" });
     },
     onError: () => {
@@ -737,7 +748,7 @@ function CadrageTab() {
       scheduledDate: formData.scheduledDate,
       durationMinutes: formData.durationMinutes,
       location: formData.location || undefined,
-      tasks: formData.tasks ? formData.tasks.split(",").map((t) => t.trim()).filter(Boolean) : [],
+      tasks: formData.tasks,
     });
   }
 
@@ -841,14 +852,27 @@ function CadrageTab() {
               />
             </div>
             <div>
-              <Label htmlFor="cadrage-tasks">Activités (séparées par des virgules)</Label>
-              <Input
-                id="cadrage-tasks"
-                value={formData.tasks}
-                onChange={(e) => setFormData({ ...formData, tasks: e.target.value })}
-                placeholder="Ex: Présentation, Tour du quartier"
-                data-testid="input-cadrage-tasks"
-              />
+              <Label>Prestation</Label>
+              <div className="flex flex-wrap gap-2 mt-2">
+                {ATELIERS.map((task) => {
+                  const selected = formData.tasks.includes(task);
+                  return (
+                    <button
+                      key={task}
+                      type="button"
+                      onClick={() => toggleTask(task)}
+                      className={`px-3 py-1.5 rounded-full text-sm border transition-colors ${
+                        selected
+                          ? "bg-primary text-primary-foreground border-primary"
+                          : "bg-white text-muted-foreground border-border hover:bg-muted"
+                      }`}
+                      data-testid={`task-${task}`}
+                    >
+                      {task}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
             <DialogFooter>
               <Button type="submit" className="bg-[#dc4256] hover:bg-[#c53a4d]" disabled={createMut.isPending} data-testid="btn-submit-cadrage">
@@ -878,7 +902,6 @@ function ProfileDialog({ user, open, onOpenChange }: { user: SafeUser | null; op
     { label: "Code postal", value: user.postalCode },
     { label: "Date de naissance", value: user.birthDate ? formatDate(user.birthDate) : null },
     { label: "Bio", value: user.bio },
-    { label: "Activité souhaitée", value: user.desiredActivity },
     { label: "École", value: user.schoolName, show: user.role === "JUNIOR" },
     { label: "Référent", value: user.referentTitle && user.referentFirstName && user.referentLastName ? `${user.referentTitle} ${user.referentFirstName} ${user.referentLastName}` : null, show: user.role === "JUNIOR" },
     { label: "Email référent", value: user.referentEmail, show: user.role === "JUNIOR" },
@@ -923,203 +946,28 @@ function ProfileDialog({ user, open, onOpenChange }: { user: SafeUser | null; op
 // ==================== RENCONTRES ====================
 
 function RencontresTab() {
-  const [filter, setFilter] = useState("all");
   const [searchUserId, setSearchUserId] = useState<string | null>(null);
-  const [selectedUser, setSelectedUser] = useState<SafeUser | null>(null);
-  const [profileOpen, setProfileOpen] = useState(false);
 
-  const { data: interventions = [], isLoading } = useQuery<InterventionWithRelation[]>({
-    queryKey: ["/api/admin/interventions"],
-  });
   const { data: allUsers = [] } = useQuery<SafeUser[]>({ queryKey: ["/api/admin/users"] });
-
-  const filtered = interventions.filter((i) => {
-    if (filter !== "all" && i.status !== filter) return false;
-    if (searchUserId && i.relation.seniorId !== searchUserId && i.relation.juniorId !== searchUserId) return false;
-    return true;
-  });
-
-  const filters = [
-    { id: "all", label: "Toutes" },
-    { id: "PROPOSED", label: "Proposées" },
-    { id: "CONFIRMED", label: "Confirmées" },
-    { id: "COMPLETED_PENDING_FEEDBACK", label: "Feedback attendu" },
-    { id: "COMPLETED", label: "Terminées" },
-    { id: "CANCELLED", label: "Annulées" },
-  ];
-
-  function openProfile(user: SafeUser) {
-    setSelectedUser(user);
-    setProfileOpen(true);
-  }
-
-  function exportCSV() {
-    const csvEscape = (val: string) => {
-      if (val.includes(",") || val.includes('"') || val.includes("\n")) {
-        return `"${val.replace(/"/g, '""')}"`;
-      }
-      return val;
-    };
-    const header = ["Senior", "Jeune", "Date", "Heure", "Durée (min)", "Lieu", "Activités", "Statut", "Note Senior", "Commentaire Senior", "Note Jeune", "Commentaire Jeune"];
-    const rows = filtered.map((i) => [
-      csvEscape(`${i.relation.senior.firstName} ${i.relation.senior.lastName}`),
-      csvEscape(`${i.relation.junior.firstName} ${i.relation.junior.lastName}`),
-      new Date(i.scheduledDate).toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric" }),
-      new Date(i.scheduledDate).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }),
-      String(i.durationMinutes),
-      csvEscape(i.location || ""),
-      csvEscape((i.tasks || []).join(", ")),
-      csvEscape(STATUS_LABELS[i.status] || i.status),
-      i.seniorRating !== null ? String(i.seniorRating) : "",
-      csvEscape(i.seniorComment || ""),
-      i.juniorRating !== null ? String(i.juniorRating) : "",
-      csvEscape(i.juniorComment || ""),
-    ]);
-    const bom = "\uFEFF";
-    const csv = bom + [header.join(";"), ...rows.map((r) => r.join(";"))].join("\n");
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `rencontres_${new Date().toISOString().split("T")[0]}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
-  }
-
-  if (isLoading) {
-    return <div className="flex justify-center py-12"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>;
-  }
 
   return (
     <div>
-      <div className="flex gap-2 mb-4 items-start">
-        <div className="flex-1">
-          <UserCombobox
-            users={allUsers}
-            selectedUserId={searchUserId}
-            onSelect={setSearchUserId}
-            placeholder="Filtrer par utilisateur..."
-            testId="combobox-rencontres"
-          />
-        </div>
-        <Button
-          variant="outline"
-          onClick={exportCSV}
-          disabled={filtered.length === 0}
-          className="shrink-0"
-          data-testid="btn-export-csv"
-        >
-          <Download className="w-4 h-4 mr-1" />
-          Exporter CSV
-        </Button>
+      <div className="mb-4">
+        <UserCombobox
+          users={allUsers}
+          selectedUserId={searchUserId}
+          onSelect={setSearchUserId}
+          placeholder="Filtrer par utilisateur..."
+          testId="combobox-rencontres"
+        />
       </div>
 
-      <div className="flex gap-2 mb-4 flex-wrap">
-        {filters.map((f) => (
-          <button
-            key={f.id}
-            onClick={() => setFilter(f.id)}
-            className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
-              filter === f.id ? "bg-[#dc4256] text-white" : "bg-white text-muted-foreground hover:bg-muted border"
-            }`}
-            data-testid={`filter-rencontres-${f.id}`}
-          >
-            {f.label}
-          </button>
-        ))}
-      </div>
-
-      {filtered.length === 0 ? (
-        <div className="text-center py-12 text-muted-foreground">
-          <Calendar className="w-10 h-10 mx-auto mb-3 opacity-40" />
-          Aucune rencontre trouvée
-        </div>
-      ) : (
-        <div className="space-y-2">
-          {filtered.map((i) => (
-            <div key={i.id} className="bg-white rounded-lg border p-4" data-testid={`card-intervention-${i.id}`}>
-              <div className="flex flex-col sm:flex-row sm:items-start gap-3">
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-1 flex-wrap mb-2">
-                    <button
-                      onClick={() => openProfile(i.relation.senior)}
-                      className="font-medium text-[#dc4256] hover:underline cursor-pointer"
-                      data-testid={`link-senior-${i.id}`}
-                    >
-                      {i.relation.senior.firstName} {i.relation.senior.lastName}
-                    </button>
-                    <span className="text-muted-foreground">↔</span>
-                    <button
-                      onClick={() => openProfile(i.relation.junior)}
-                      className="font-medium text-[#dc4256] hover:underline cursor-pointer"
-                      data-testid={`link-junior-${i.id}`}
-                    >
-                      {i.relation.junior.firstName} {i.relation.junior.lastName}
-                    </button>
-                  </div>
-                  <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
-                    <span className="flex items-center gap-1">
-                      <Calendar className="w-3.5 h-3.5" />
-                      {new Date(i.scheduledDate).toLocaleDateString("fr-FR", { weekday: "short", day: "2-digit", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" })}
-                    </span>
-                    <span className="flex items-center gap-1">
-                      <Clock className="w-3.5 h-3.5" />
-                      {i.durationMinutes} min
-                    </span>
-                    {i.location && (
-                      <span className="flex items-center gap-1">
-                        <MapPin className="w-3.5 h-3.5" />
-                        {i.location}
-                      </span>
-                    )}
-                  </div>
-                  {i.tasks && i.tasks.length > 0 && (
-                    <div className="mt-2 flex flex-wrap gap-1">
-                      {i.tasks.map((t, idx) => (
-                        <span key={idx} className="bg-[#f3eaff] text-[#7c3aed] text-xs px-2 py-0.5 rounded-full">{t}</span>
-                      ))}
-                    </div>
-                  )}
-                </div>
-                <Badge className={`flex-shrink-0 ${STATUS_COLORS[i.status] || ""}`}>
-                  {STATUS_LABELS[i.status] || i.status}
-                </Badge>
-              </div>
-              {(i.seniorRating !== null || i.juniorRating !== null || i.status === "COMPLETED_PENDING_FEEDBACK") && (
-                <div className="mt-3 pt-3 border-t space-y-2" data-testid={`feedback-section-${i.id}`}>
-                  <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Feedbacks</div>
-                  {i.seniorRating !== null ? (
-                    <div className="flex items-center gap-2 flex-wrap" data-testid={`feedback-senior-${i.id}`}>
-                      <span className="text-xs font-medium w-12">Senior</span>
-                      <StarRating value={i.seniorRating} readonly size={16} />
-                      {i.seniorComment && <span className="text-xs text-muted-foreground italic">"{i.seniorComment}"</span>}
-                    </div>
-                  ) : (
-                    <div className="flex items-center gap-2 text-xs text-amber-600" data-testid={`feedback-senior-pending-${i.id}`}>
-                      <span className="font-medium w-12">Senior</span>
-                      <span>En attente</span>
-                    </div>
-                  )}
-                  {i.juniorRating !== null ? (
-                    <div className="flex items-center gap-2 flex-wrap" data-testid={`feedback-junior-${i.id}`}>
-                      <span className="text-xs font-medium w-12">Jeune</span>
-                      <StarRating value={i.juniorRating} readonly size={16} />
-                      {i.juniorComment && <span className="text-xs text-muted-foreground italic">"{i.juniorComment}"</span>}
-                    </div>
-                  ) : (
-                    <div className="flex items-center gap-2 text-xs text-amber-600" data-testid={`feedback-junior-pending-${i.id}`}>
-                      <span className="font-medium w-12">Jeune</span>
-                      <span>En attente</span>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
-      )}
-
-      <ProfileDialog user={selectedUser} open={profileOpen} onOpenChange={setProfileOpen} />
+      <MeetingHistory
+        key={searchUserId ?? "all"}
+        scope={searchUserId ? { kind: "user", userId: searchUserId } : { kind: "me" }}
+        viewerRole="ADMIN"
+        emptyLabel="Aucune rencontre trouvée"
+      />
     </div>
   );
 }
@@ -2440,7 +2288,9 @@ export default function Admin() {
     <div className="max-w-5xl mx-auto px-4 py-8">
       <h1 className="text-2xl md:text-3xl font-bold mb-6" data-testid="text-admin-title">Administration</h1>
 
-      <div className="flex gap-1 mb-8 overflow-x-auto pb-2">
+      <MobileTabsMenu tabs={ADMIN_TABS} activeTab={activeTab} onSelect={setActiveTab} getBadgeCount={getTabCount} />
+
+      <div className="hidden md:flex gap-1 mb-8 overflow-x-auto pb-2">
         {ADMIN_TABS.map((tab) => {
           const isActive = activeTab === tab.id;
           const Icon = tab.icon;

@@ -1,5 +1,22 @@
 import { prisma } from "./prisma";
-import type { User, Category, UserCategory, Relation, Intervention, AdminRecommendation, Notification, PaymentRecord, Favorite, Conversation, Message, PushSubscription, Report, TeacherStudent, TeacherComment, Internship, Prisma } from "../generated/prisma/client.ts";
+import type { User, Category, UserCategory, Relation, Intervention, AdminRecommendation, Notification, PaymentRecord, Favorite, Conversation, Message, PushSubscription, Report, TeacherStudent, TeacherComment, Internship, Availability, Prisma } from "../generated/prisma/client.ts";
+
+/**
+ * Périmètre d'un historique de rencontres. Construit serveur à partir du rôle
+ * de l'appelant — un identifiant venu de la query ne devient un scope qu'après
+ * contrôle d'habilitation dans la route.
+ */
+export type MeetingHistoryScope =
+  | { kind: "all" }
+  | { kind: "user"; userId: string }
+  | { kind: "senior"; seniorId: string }
+  | { kind: "students"; studentIds: string[] };
+
+export interface MeetingHistoryFilters {
+  status?: Intervention["status"][];
+  from?: Date;
+  to?: Date;
+}
 
 export interface IStorage {
   getUser(id: string): Promise<User | null>;
@@ -25,11 +42,48 @@ export interface IStorage {
   getIntervention(id: string): Promise<Intervention | null>;
   getInterventionsByRelation(relationId: string): Promise<Intervention[]>;
   getInterventionWithRelation(id: string): Promise<(Intervention & { relation: Relation }) | null>;
-  createIntervention(data: { relationId: string; scheduledDate: Date; durationMinutes: number; location?: string; tasks?: string[] }): Promise<Intervention>;
+  /**
+   * Crée l'intervention en verrouillant le jeune (pg_advisory_xact_lock) et en
+   * refaisant vérifier le conflit dans la même transaction juste avant
+   * l'insert, pour empêcher deux requêtes concurrentes de réserver le même
+   * créneau.
+   */
+  createInterventionSafe(
+    juniorId: string,
+    data: { relationId: string; scheduledDate: Date; durationMinutes: number; location?: string; tasks?: string[] },
+    checkConflict: (tx: Prisma.TransactionClient) => Promise<boolean>
+  ): Promise<{ intervention: Intervention } | { conflict: true } | { locked: true }>;
   updateIntervention(id: string, data: Prisma.InterventionUpdateInput): Promise<Intervention>;
   getPendingFeedbackInterventions(userId: string): Promise<(Intervention & { relation: Relation })[]>;
   getPendingFeedbackForReminder(): Promise<(Intervention & { relation: Relation & { senior: User; junior: User } })[]>;
   updateInterventionFeedbackReminderSent(id: string): Promise<Intervention>;
+  /**
+   * Historique des rencontres, périmètre décidé par l'appelant (jamais par un
+   * paramètre client). Alimente /api/meetings/history pour tous les rôles.
+   */
+  getMeetingHistory(
+    scope: MeetingHistoryScope,
+    filters?: MeetingHistoryFilters
+  ): Promise<(Intervention & { relation: Relation & { senior: User; junior: User } })[]>;
+
+  getAvailabilitiesByUser(userId: string): Promise<Availability[]>;
+  getAvailabilitiesInRange(userId: string, from: Date, to: Date): Promise<Availability[]>;
+  createAvailability(data: { userId: string; startAt: Date; endAt: Date; kind: "AVAILABLE" | "UNAVAILABLE" }): Promise<Availability>;
+  createManyAvailabilities(data: { userId: string; startAt: Date; endAt: Date; kind: "AVAILABLE" | "UNAVAILABLE" }[]): Promise<number>;
+  softDeleteAvailabilities(ids: string[]): Promise<number>;
+  getAvailability(id: string): Promise<Availability | null>;
+  getConfirmedInterventionsForUser(userId: string, from?: Date, to?: Date): Promise<Intervention[]>;
+  /** PROPOSED + CONFIRMED — pour détecter les conflits de créneau. */
+  getActiveInterventionsForUser(
+    userId: string,
+    from?: Date,
+    to?: Date,
+    client?: Prisma.TransactionClient
+  ): Promise<Intervention[]>;
+  deleteAndCreateAvailabilities(
+    deleteIds: string[],
+    createData: { userId: string; startAt: Date; endAt: Date; kind: "AVAILABLE" | "UNAVAILABLE" }[]
+  ): Promise<{ deleted: number; created: number }>;
 
   createAdminRecommendation(seniorId: string, juniorId: string, note?: string): Promise<AdminRecommendation>;
   getAdminRecommendations(seniorId: string): Promise<(AdminRecommendation & { junior: User })[]>;
@@ -54,6 +108,22 @@ export interface IStorage {
   addFavorite(seniorId: string, juniorId: string): Promise<Favorite>;
   removeFavorite(seniorId: string, juniorId: string): Promise<void>;
   getFavoriteJuniorIds(seniorId: string): Promise<string[]>;
+
+  /**
+   * Remplace la photo de profil d'un utilisateur, octets et clé logique en une
+   * seule transaction. Sans cela, un échec entre les deux écritures laisserait
+   * User.profilePhoto pointer sur une photo inexistante.
+   */
+  replaceProfilePhoto(
+    userId: string,
+    photo: { filename: string; data: Buffer; mimeType: string }
+  ): Promise<User>;
+  /** Supprime la photo et remet User.profilePhoto à null. */
+  deleteProfilePhoto(userId: string): Promise<User>;
+  /** Octets d'une photo, par son nom de fichier logique. */
+  getProfilePhotoByFilename(
+    filename: string
+  ): Promise<{ data: Buffer; mimeType: string } | null>;
 
   getOrCreateConversation(relationId: string): Promise<Conversation>;
   getConversationsForUser(userId: string): Promise<any[]>;
@@ -206,17 +276,49 @@ class DatabaseStorage implements IStorage {
     });
   }
 
-  async createIntervention(data: { relationId: string; scheduledDate: Date; durationMinutes: number; location?: string; tasks?: string[] }): Promise<Intervention> {
-    return prisma.intervention.create({
-      data: {
-        relationId: data.relationId,
-        scheduledDate: data.scheduledDate,
-        durationMinutes: data.durationMinutes,
-        location: data.location || null,
-        tasks: data.tasks || [],
-        status: "PROPOSED",
-      },
-    });
+  async createInterventionSafe(
+    juniorId: string,
+    data: { relationId: string; scheduledDate: Date; durationMinutes: number; location?: string; tasks?: string[] },
+    checkConflict: (tx: Prisma.TransactionClient) => Promise<boolean>
+  ): Promise<{ intervention: Intervention } | { conflict: true } | { locked: true }> {
+    const maxAttempts = 3;
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      const result = await prisma.$transaction(async (tx) => {
+        // Verrou par jeune : empêche toute autre transaction concurrente de
+        // réserver un créneau pour le même jeune en même temps. Non-bloquant
+        // (try) pour ne pas mettre en file d'attente les requêtes suivantes :
+        // si le verrou est déjà pris, on échoue vite et on retente.
+        const rows = await tx.$queryRaw<{ locked: boolean }[]>`
+          SELECT pg_try_advisory_xact_lock(hashtext(${juniorId})) AS locked
+        `;
+        if (!rows[0]?.locked) {
+          return { locked: true as const };
+        }
+
+        if (await checkConflict(tx)) {
+          return { conflict: true as const };
+        }
+
+        const intervention = await tx.intervention.create({
+          data: {
+            relationId: data.relationId,
+            scheduledDate: data.scheduledDate,
+            durationMinutes: data.durationMinutes,
+            location: data.location || null,
+            tasks: data.tasks || [],
+            status: "PROPOSED",
+          },
+        });
+        return { intervention };
+      });
+
+      if (!("locked" in result) || attempt === maxAttempts) {
+        return result;
+      }
+      // Backoff court avant nouvelle tentative si le verrou était pris.
+      await new Promise((resolve) => setTimeout(resolve, 100 * attempt));
+    }
+    return { locked: true };
   }
 
   async updateIntervention(id: string, data: Prisma.InterventionUpdateInput): Promise<Intervention> {
@@ -253,6 +355,90 @@ class DatabaseStorage implements IStorage {
     return prisma.intervention.update({
       where: { id },
       data: { feedbackReminderSentAt: new Date() },
+    });
+  }
+
+  async getAvailabilitiesByUser(userId: string): Promise<Availability[]> {
+    return prisma.availability.findMany({
+      where: { userId, deletedAt: null },
+      orderBy: { startAt: "asc" },
+    });
+  }
+
+  async getAvailabilitiesInRange(userId: string, from: Date, to: Date): Promise<Availability[]> {
+    return prisma.availability.findMany({
+      where: {
+        userId,
+        deletedAt: null,
+        startAt: { lt: to },
+        endAt: { gt: from },
+      },
+      orderBy: { startAt: "asc" },
+    });
+  }
+
+  async createAvailability(data: { userId: string; startAt: Date; endAt: Date; kind: "AVAILABLE" | "UNAVAILABLE" }): Promise<Availability> {
+    return prisma.availability.create({ data });
+  }
+
+  async createManyAvailabilities(data: { userId: string; startAt: Date; endAt: Date; kind: "AVAILABLE" | "UNAVAILABLE" }[]): Promise<number> {
+    const result = await prisma.availability.createMany({ data });
+    return result.count;
+  }
+
+  async softDeleteAvailabilities(ids: string[]): Promise<number> {
+    const result = await prisma.availability.updateMany({
+      where: { id: { in: ids } },
+      data: { deletedAt: new Date() },
+    });
+    return result.count;
+  }
+
+  async getAvailability(id: string): Promise<Availability | null> {
+    return prisma.availability.findUnique({ where: { id } });
+  }
+
+  async getConfirmedInterventionsForUser(userId: string, from?: Date, to?: Date): Promise<Intervention[]> {
+    return prisma.intervention.findMany({
+      where: {
+        status: "CONFIRMED",
+        relation: { juniorId: userId },
+        ...(from || to
+          ? { scheduledDate: { ...(from ? { gte: from } : {}), ...(to ? { lte: to } : {}) } }
+          : {}),
+      },
+    });
+  }
+
+  async getActiveInterventionsForUser(
+    userId: string,
+    from?: Date,
+    to?: Date,
+    client: Prisma.TransactionClient | typeof prisma = prisma
+  ): Promise<Intervention[]> {
+    return client.intervention.findMany({
+      where: {
+        status: { in: ["PROPOSED", "CONFIRMED"] },
+        relation: { juniorId: userId },
+        ...(from || to
+          ? { scheduledDate: { ...(from ? { gte: from } : {}), ...(to ? { lte: to } : {}) } }
+          : {}),
+      },
+    });
+  }
+
+  async deleteAndCreateAvailabilities(
+    deleteIds: string[],
+    createData: { userId: string; startAt: Date; endAt: Date; kind: "AVAILABLE" | "UNAVAILABLE" }[]
+  ): Promise<{ deleted: number; created: number }> {
+    return prisma.$transaction(async (tx) => {
+      const deleted = deleteIds.length > 0
+        ? (await tx.availability.updateMany({ where: { id: { in: deleteIds } }, data: { deletedAt: new Date() } })).count
+        : 0;
+      const created = createData.length > 0
+        ? (await tx.availability.createMany({ data: createData })).count
+        : 0;
+      return { deleted, created };
     });
   }
 
@@ -432,6 +618,36 @@ class DatabaseStorage implements IStorage {
     });
   }
 
+  async getMeetingHistory(
+    scope: MeetingHistoryScope,
+    filters?: MeetingHistoryFilters
+  ): Promise<(Intervention & { relation: Relation & { senior: User; junior: User } })[]> {
+    const relationWhere: Prisma.RelationWhereInput | undefined =
+      scope.kind === "all"
+        ? undefined
+        : scope.kind === "user"
+          ? { OR: [{ seniorId: scope.userId }, { juniorId: scope.userId }] }
+          : scope.kind === "senior"
+            ? { seniorId: scope.seniorId }
+            : { juniorId: { in: scope.studentIds } };
+
+    const where: Prisma.InterventionWhereInput = {};
+    if (relationWhere) where.relation = relationWhere;
+    if (filters?.status?.length) where.status = { in: filters.status };
+    if (filters?.from || filters?.to) {
+      where.scheduledDate = {
+        ...(filters.from ? { gte: filters.from } : {}),
+        ...(filters.to ? { lte: filters.to } : {}),
+      };
+    }
+
+    return prisma.intervention.findMany({
+      where,
+      include: { relation: { include: { senior: true, junior: true } } },
+      orderBy: { scheduledDate: "desc" },
+    });
+  }
+
   async addFavorite(seniorId: string, juniorId: string): Promise<Favorite> {
     return prisma.favorite.upsert({
       where: { seniorId_juniorId: { seniorId, juniorId } },
@@ -452,6 +668,58 @@ class DatabaseStorage implements IStorage {
       select: { juniorId: true },
     });
     return favs.map((f) => f.juniorId);
+  }
+
+  async replaceProfilePhoto(
+    userId: string,
+    photo: { filename: string; data: Buffer; mimeType: string }
+  ): Promise<User> {
+    // Les deux écritures dans la même transaction : User.profilePhoto ne doit
+    // jamais désigner une photo absente de ProfilePhoto, ni l'inverse.
+    return prisma.$transaction(async (tx) => {
+      await tx.profilePhoto.upsert({
+        where: { userId },
+        create: {
+          userId,
+          filename: photo.filename,
+          data: photo.data,
+          mimeType: photo.mimeType,
+          byteSize: photo.data.byteLength,
+        },
+        update: {
+          filename: photo.filename,
+          data: photo.data,
+          mimeType: photo.mimeType,
+          byteSize: photo.data.byteLength,
+        },
+      });
+
+      return tx.user.update({
+        where: { id: userId },
+        data: { profilePhoto: `/uploads/${photo.filename}` },
+      });
+    });
+  }
+
+  async deleteProfilePhoto(userId: string): Promise<User> {
+    return prisma.$transaction(async (tx) => {
+      await tx.profilePhoto.deleteMany({ where: { userId } });
+      return tx.user.update({
+        where: { id: userId },
+        data: { profilePhoto: null },
+      });
+    });
+  }
+
+  async getProfilePhotoByFilename(
+    filename: string
+  ): Promise<{ data: Buffer; mimeType: string } | null> {
+    const photo = await prisma.profilePhoto.findUnique({
+      where: { filename },
+      select: { data: true, mimeType: true },
+    });
+    if (!photo) return null;
+    return { data: Buffer.from(photo.data), mimeType: photo.mimeType };
   }
 
   async getOrCreateConversation(relationId: string): Promise<Conversation> {

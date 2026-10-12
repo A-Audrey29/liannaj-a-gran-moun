@@ -1,4 +1,4 @@
-import type { Express } from "express";
+import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import passport from "passport";
 import bcrypt from "bcryptjs";
@@ -7,8 +7,10 @@ import multer from "multer";
 import path from "path";
 import fs from "fs";
 import rateLimit from "express-rate-limit";
-import { fileTypeFromFile } from "file-type";
+import { fileTypeFromBuffer } from "file-type";
+import sharp from "sharp";
 import { requireAuth, requireAdmin } from "./auth";
+import { pool } from "./db";
 import { storage } from "./storage";
 import { sendEmail } from "./lib/email";
 import {
@@ -19,25 +21,24 @@ import {
   getFeedbackReminderEmailHtml,
   getNewReportEmailHtml,
 } from "./lib/email-templates";
-import { insertUserSchema, createRelationSchema, insertInterventionSchema, feedbackSchema, createPaymentSchema, changePasswordSchema, createAdminSchema, insertReportSchema } from "../shared/schema";
+import { insertUserSchema, createRelationSchema, insertInterventionSchema, feedbackSchema, createPaymentSchema, changePasswordSchema, createAdminSchema, insertReportSchema, createAvailabilitySchema, createRecurringAvailabilitiesSchema, createDateExceptionSchema, updateUserCategoriesSchema, meetingHistoryQuerySchema, COMPLETED_STATUSES } from "../shared/schema";
+import type { MeetingHistoryEntry, MeetingHistoryResponse, MeetingHistorySummary, Role } from "../shared/schema";
+import type { MeetingHistoryScope } from "./storage";
+import { createRecurringAvailabilities, createDateException, deleteAvailability, isWithinAvailability, hasInterventionConflict } from "./lib/availability";
 import { addSSEClient, sendSSEEvent, isUserConnected } from "./lib/sse";
+import { fmtDayNumeric, fmtTime } from "../shared/dates";
+import { PLATFORM_NAME } from "../shared/branding";
 import { sendPushNotification, getVapidPublicKey } from "./lib/push";
 
-const uploadStorage = multer.diskStorage({
-  destination: (_req, _file, cb) => {
-    const dir = path.join(process.cwd(), "uploads");
-    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-    cb(null, dir);
-  },
-  filename: (_req, file, cb) => {
-    const ext = path.extname(file.originalname).toLowerCase();
-    cb(null, `${crypto.randomUUID()}${ext}`);
-  },
-});
+const TAILLE_MAX_PHOTO = 5 * 1024 * 1024;
 
+// Les photos sont gardées en mémoire puis écrites en base : le système de
+// fichiers de l'hébergeur est éphémère (tout uploads/ disparaît à chaque
+// redéploiement). Effet de bord utile : plus de fichier temporaire orphelin
+// quand la validation échoue.
 const upload = multer({
-  storage: uploadStorage,
-  limits: { fileSize: 5 * 1024 * 1024 },
+  storage: multer.memoryStorage(),
+  limits: { fileSize: TAILLE_MAX_PHOTO },
   fileFilter: (_req, file, cb) => {
     const allowed = [".jpg", ".jpeg", ".png", ".webp"];
     const ext = path.extname(file.originalname).toLowerCase();
@@ -49,9 +50,67 @@ const upload = multer({
   },
 });
 
+/**
+ * `upload.single()` dont les refus deviennent des réponses 400.
+ *
+ * multer signale un rejet (extension interdite, fichier trop lourd) en passant
+ * une Error à next(). Sans cette enveloppe, elle atteint le gestionnaire
+ * d'erreur global qui répond 500 : l'utilisateur voit « erreur serveur » alors
+ * que son fichier a simplement été refusé, et le message expliquant les
+ * formats acceptés est perdu.
+ *
+ * Enveloppe plutôt que middleware d'erreur séparé : un 4e handler dans la
+ * chaîne fait perdre à Express l'inférence de types sur req/res.
+ */
+function uploadSinglePhoto(champ: string) {
+  const middleware = upload.single(champ);
+
+  return (req: Request, res: Response, next: NextFunction) => {
+    middleware(req, res, (err: any) => {
+      if (!err) return next();
+
+      if (err instanceof multer.MulterError) {
+        if (err.code === "LIMIT_FILE_SIZE") {
+          return res.status(400).json({
+            message: `Fichier trop volumineux (maximum ${TAILLE_MAX_PHOTO / 1024 / 1024} Mo).`,
+          });
+        }
+        return res.status(400).json({ message: "Fichier invalide." });
+      }
+
+      // Erreur de notre fileFilter : le message est destiné à l'utilisateur.
+      if (err instanceof Error && err.message.startsWith("Format non supporté")) {
+        return res.status(400).json({ message: err.message });
+      }
+
+      return next(err);
+    });
+  };
+}
+
 function sanitizeUser(user: any) {
   const { password, validationToken, validationExpiry, ...safe } = user;
   return safe;
+}
+
+/**
+ * Lit un paramètre de route en le garantissant scalaire.
+ *
+ * Express 5 type req.params en `string | string[]` : une route à joker
+ * (`/files/*path`) peut produire un tableau. Aucune route de cette API n'en
+ * utilise — les paramètres y sont donc toujours des chaînes — mais le
+ * typage ne peut pas le savoir.
+ *
+ * Plutôt que de forcer le type par un `as string` répété (qui masquerait un
+ * vrai tableau si une route à joker était ajoutée un jour), on normalise :
+ * un tableau inattendu donne sa première valeur, et l'absence donne "" —
+ * ce qui échoue proprement à la validation en aval au lieu de propager
+ * `undefined` dans une requête SQL.
+ */
+function getParam(req: Request, name: string): string {
+  const value = req.params[name];
+  if (Array.isArray(value)) return value[0] ?? "";
+  return value ?? "";
 }
 
 function sanitizeUserPublic(user: any) {
@@ -72,6 +131,99 @@ function sanitizeUserPublic(user: any) {
     ...safe
   } = user;
   return safe;
+}
+
+function toMeetingHistoryEntry(i: any): MeetingHistoryEntry {
+  return {
+    id: i.id,
+    relationId: i.relationId,
+    scheduledDate: i.scheduledDate.toISOString(),
+    durationMinutes: i.durationMinutes,
+    location: i.location,
+    tasks: i.tasks || [],
+    status: i.status,
+    seniorId: i.relation.seniorId,
+    juniorId: i.relation.juniorId,
+    seniorName: `${i.relation.senior.firstName} ${i.relation.senior.lastName}`,
+    juniorName: `${i.relation.junior.firstName} ${i.relation.junior.lastName}`,
+    seniorRating: i.seniorRating,
+    seniorComment: i.seniorComment,
+    juniorRating: i.juniorRating,
+    juniorComment: i.juniorComment,
+  };
+}
+
+/**
+ * Réduit les feedbacks au strict nécessaire selon le rôle du lecteur.
+ *
+ * - ADMIN / TEACHER : encadrement, les deux feedbacks.
+ * - REFERENT_SENIOR : encadre le sénior, voit son feedback, pas celui du jeune.
+ * - SENIOR / JUNIOR : uniquement le sien. Ne pas leur renvoyer l'appréciation
+ *   que l'autre a portée sur eux.
+ *
+ * Filtrage serveur et non affichage conditionnel côté client : la donnée
+ * masquée ne doit pas partir sur le réseau.
+ */
+function scopeFeedback(entry: MeetingHistoryEntry, viewerRole: Role, viewerId: string): MeetingHistoryEntry {
+  if (viewerRole === "ADMIN" || viewerRole === "TEACHER") return entry;
+  if (viewerRole === "REFERENT_SENIOR") {
+    return { ...entry, juniorRating: null, juniorComment: null };
+  }
+  return entry.seniorId === viewerId
+    ? { ...entry, juniorRating: null, juniorComment: null }
+    : { ...entry, seniorRating: null, seniorComment: null };
+}
+
+/**
+ * Même règle de visibilité que scopeFeedback, appliquée à une intervention
+ * brute (routes /api/relations et /api/relations/:id).
+ *
+ * Ces routes servent les mêmes feedbacks que l'historique : sans ce filtre, la
+ * restriction serait contournable en ouvrant la fiche relation.
+ */
+function scopeInterventionFeedback<T extends {
+  seniorRating: number | null;
+  seniorComment: string | null;
+  juniorRating: number | null;
+  juniorComment: string | null;
+}>(intervention: T, viewerRole: Role, viewerId: string, seniorId: string): T {
+  if (viewerRole === "ADMIN" || viewerRole === "TEACHER") return intervention;
+  if (viewerRole === "REFERENT_SENIOR") {
+    return { ...intervention, juniorRating: null, juniorComment: null };
+  }
+  return seniorId === viewerId
+    ? { ...intervention, juniorRating: null, juniorComment: null }
+    : { ...intervention, seniorRating: null, seniorComment: null };
+}
+
+/**
+ * Récap : uniquement les rencontres réellement tenues. Une rencontre annulée ou
+ * encore proposée ne représente aucune heure passée.
+ *
+ * Une rencontre portant plusieurs ateliers compte sa durée entière pour chacun :
+ * la somme de byService peut donc dépasser totalMinutes (heures par service, pas
+ * une partition).
+ */
+function buildMeetingSummary(entries: MeetingHistoryEntry[]): MeetingHistorySummary {
+  const done = entries.filter((e) => COMPLETED_STATUSES.includes(e.status));
+  const byService = new Map<string, { count: number; minutes: number }>();
+
+  for (const entry of done) {
+    for (const service of entry.tasks) {
+      const acc = byService.get(service) || { count: 0, minutes: 0 };
+      acc.count += 1;
+      acc.minutes += entry.durationMinutes;
+      byService.set(service, acc);
+    }
+  }
+
+  return {
+    totalMeetings: done.length,
+    totalMinutes: done.reduce((sum, e) => sum + e.durationMinutes, 0),
+    byService: [...byService.entries()]
+      .map(([service, v]) => ({ service, ...v }))
+      .sort((a, b) => b.minutes - a.minutes),
+  };
 }
 
 const isDev = process.env.NODE_ENV !== "production";
@@ -95,13 +247,51 @@ const registerLimiter = rateLimit({
   legacyHeaders: false,
 });
 
-async function validateImageMagicBytes(filePath: string): Promise<void> {
-  const type = await fileTypeFromFile(filePath);
+/** Côté le plus long d'une photo de profil après redimensionnement. */
+const PHOTO_TAILLE_MAX_PX = 800;
+
+/**
+ * Valide et normalise une photo reçue.
+ *
+ * L'extension d'un fichier ne prouve rien : la vérification porte sur les
+ * octets de tête (magic bytes), pas sur le nom.
+ *
+ * L'image est ensuite redimensionnée et convertie en WebP. Deux bénéfices :
+ * une photo de 5 Mo tombe à ~150 Ko (elle est stockée en base, donc sa taille
+ * compte), et le ré-encodage supprime toutes les métadonnées EXIF — dont la
+ * géolocalisation, que les téléphones inscrivent par défaut. Sur une
+ * plateforme utilisée par des mineurs, publier la position du domicile
+ * dans un fichier serait un vrai problème.
+ */
+async function validateAndProcessImage(
+  buffer: Buffer
+): Promise<{ data: Buffer; mimeType: string; filename: string }> {
+  const type = await fileTypeFromBuffer(buffer);
   const allowedMimes = ["image/jpeg", "image/png", "image/webp"];
   if (!type || !allowedMimes.includes(type.mime)) {
-    fs.unlinkSync(filePath);
     throw new Error("Fichier invalide : seuls les formats JPG, PNG et WebP sont acceptés.");
   }
+
+  let data: Buffer;
+  try {
+    data = await sharp(buffer)
+      .rotate() // applique l'orientation EXIF avant de la supprimer
+      .resize(PHOTO_TAILLE_MAX_PX, PHOTO_TAILLE_MAX_PX, {
+        fit: "inside",
+        withoutEnlargement: true,
+      })
+      .webp({ quality: 82 })
+      .toBuffer();
+  } catch {
+    // Magic bytes corrects mais contenu illisible : fichier tronqué ou forgé.
+    throw new Error("Image illisible ou corrompue.");
+  }
+
+  return {
+    data,
+    mimeType: "image/webp",
+    filename: `${crypto.randomUUID()}.webp`,
+  };
 }
 
 function getBaseUrl(req: any): string {
@@ -110,12 +300,71 @@ function getBaseUrl(req: any): string {
   return `${proto}://${host}`;
 }
 
+/**
+ * Blocage dur d'un créneau de rencontre. Retourne un message d'erreur FR, ou
+ * null si le créneau est valide.
+ *
+ * Partagé par les trois chemins de création (Senior, Admin pour la 1ère
+ * rencontre, Référent au nom du Senior) : un seul d'entre eux non contrôlé
+ * suffirait à contourner la contrainte.
+ */
+async function validateSlot(
+  juniorId: string,
+  scheduledDate: Date,
+  durationMinutes: number,
+): Promise<string | null> {
+  if (!(await isWithinAvailability(juniorId, scheduledDate, durationMinutes))) {
+    return "Ce créneau ne fait pas partie des disponibilités déclarées par le jeune.";
+  }
+  if (await hasInterventionConflict(juniorId, scheduledDate, durationMinutes)) {
+    return "Une autre rencontre est déjà prévue sur ce créneau.";
+  }
+  return null;
+}
+
+const SLOT_CONFLICT_MESSAGE = "Une autre rencontre est déjà prévue sur ce créneau.";
+const LOCK_CONTENTION_MESSAGE = "Une autre action est en cours sur ce créneau, veuillez réessayer dans un instant.";
+
+/**
+ * Crée la rencontre via createInterventionSafe (verrou + re-check du conflit
+ * dans la transaction), pour fermer la fenêtre de course entre validateSlot()
+ * et l'insertion : deux requêtes concurrentes sur le même jeune ne peuvent
+ * plus toutes les deux passer la vérification.
+ */
+async function createInterventionOrConflict(
+  juniorId: string,
+  data: { relationId: string; scheduledDate: Date; durationMinutes: number; location?: string; tasks?: string[] }
+) {
+  return storage.createInterventionSafe(juniorId, data, (tx) =>
+    hasInterventionConflict(juniorId, data.scheduledDate, data.durationMinutes, tx)
+  );
+}
+
 export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
 
-  app.post("/api/auth/register", registerLimiter, upload.single("photo"), async (req, res) => {
+  /**
+   * Sonde de santé pour l'hébergeur (Render : Health Check Path).
+   * Publique et sans effet de bord : c'est le seul endpoint qui doit répondre
+   * 200 sans authentification.
+   *
+   * Vérifie aussi la base : un serveur qui répond mais dont la base est
+   * injoignable est en panne du point de vue de l'utilisateur, et doit être
+   * signalé comme tel plutôt que de recevoir du trafic.
+   */
+  app.get("/api/health", async (_req, res) => {
+    try {
+      await pool.query("SELECT 1");
+      res.status(200).json({ status: "ok", database: "up" });
+    } catch (err) {
+      console.error("[HEALTH] Base de données injoignable:", err);
+      res.status(503).json({ status: "error", database: "down" });
+    }
+  });
+
+  app.post("/api/auth/register", registerLimiter, uploadSinglePhoto("photo"), async (req, res) => {
     try {
       const body = typeof req.body.data === "string" ? JSON.parse(req.body.data) : req.body;
       const parsed = insertUserSchema.safeParse(body);
@@ -133,9 +382,10 @@ export async function registerRoutes(
         return res.status(409).json({ message: "Cet email est déjà utilisé" });
       }
 
+      let photo: { data: Buffer; mimeType: string; filename: string } | null = null;
       if (req.file) {
         try {
-          await validateImageMagicBytes(req.file.path);
+          photo = await validateAndProcessImage(req.file.buffer);
         } catch (validationErr: any) {
           return res.status(400).json({ message: validationErr.message });
         }
@@ -147,8 +397,6 @@ export async function registerRoutes(
 
       const { categoryIds, birthDate, ...userData } = data;
 
-      const profilePhoto = req.file ? `/uploads/${req.file.filename}` : undefined;
-
       const user = await storage.createUser({
         ...userData,
         email: userData.email.toLowerCase().trim(),
@@ -158,8 +406,11 @@ export async function registerRoutes(
         role: userData.role,
         validationToken,
         validationExpiry,
-        ...(profilePhoto ? { profilePhoto } : {}),
       });
+
+      if (photo) {
+        await storage.replaceProfilePhoto(user.id, photo);
+      }
 
       if (categoryIds && categoryIds.length > 0) {
         for (const categoryId of categoryIds) {
@@ -177,7 +428,7 @@ export async function registerRoutes(
 
       await sendEmail({
         to: data.validatorEmail,
-        subject: `FEVES - Validation d'inscription de ${userName}`,
+        subject: `${PLATFORM_NAME} - Validation d'inscription de ${userName}`,
         htmlContent: getValidationEmailHtml(null, userName, validationUrl),
       });
 
@@ -281,23 +532,46 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/auth/me/photo", requireAuth, upload.single("photo"), async (req, res) => {
+  app.get("/api/auth/me/categories", requireAuth, async (req, res) => {
+    try {
+      const userCategories = await storage.getUserCategories(req.user!.id);
+      res.json({ categoryIds: userCategories.map((uc) => uc.categoryId) });
+    } catch (err) {
+      res.status(500).json({ message: "Erreur lors de la récupération des ateliers" });
+    }
+  });
+
+  app.patch("/api/auth/me/categories", requireAuth, async (req, res) => {
+    try {
+      const parsed = updateUserCategoriesSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: "Données invalides", errors: parsed.error.flatten() });
+      }
+      await storage.deleteUserCategories(req.user!.id);
+      for (const categoryId of parsed.data.categoryIds) {
+        await storage.createUserCategory(req.user!.id, categoryId);
+      }
+      res.json({ categoryIds: parsed.data.categoryIds });
+    } catch (err) {
+      res.status(500).json({ message: "Erreur lors de la mise à jour des ateliers" });
+    }
+  });
+
+  app.post("/api/auth/me/photo", requireAuth, uploadSinglePhoto("photo"), async (req, res) => {
     try {
       if (!req.file) {
         return res.status(400).json({ message: "Aucun fichier envoyé" });
       }
+      let photo: { data: Buffer; mimeType: string; filename: string };
       try {
-        await validateImageMagicBytes(req.file.path);
+        photo = await validateAndProcessImage(req.file.buffer);
       } catch (validationErr: any) {
         return res.status(400).json({ message: validationErr.message });
       }
       const user = req.user!;
-      if (user.profilePhoto) {
-        const oldPath = path.join(process.cwd(), user.profilePhoto.replace(/^\//, ""));
-        if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
-      }
-      const photoPath = `/uploads/${req.file.filename}`;
-      const updated = await storage.updateUser(user.id, { profilePhoto: photoPath });
+      // L'upsert de replaceProfilePhoto remplace l'ancienne photo : rien à
+      // supprimer sur disque, et pas de résidu possible.
+      const updated = await storage.replaceProfilePhoto(user.id, photo);
       const safeUser = sanitizeUser(updated);
       req.login(safeUser, (err) => {
         if (err) return res.status(500).json({ message: "Erreur session" });
@@ -312,11 +586,7 @@ export async function registerRoutes(
   app.delete("/api/auth/me/photo", requireAuth, async (req, res) => {
     try {
       const user = req.user!;
-      if (user.profilePhoto) {
-        const oldPath = path.join(process.cwd(), user.profilePhoto.replace(/^\//, ""));
-        if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
-      }
-      const updated = await storage.updateUser(user.id, { profilePhoto: null });
+      const updated = await storage.deleteProfilePhoto(user.id);
       const safeUser = sanitizeUser(updated);
       req.login(safeUser, (err) => {
         if (err) return res.status(500).json({ message: "Erreur session" });
@@ -336,21 +606,48 @@ export async function registerRoutes(
     webp: "image/webp",
   };
 
-  app.get("/api/photos/:filename", requireAuth, (req, res) => {
-    const { filename } = req.params;
-    if (!VALID_PHOTO_FILENAME.test(filename)) {
-      return res.status(400).json({ message: "Nom de fichier invalide" });
-    }
-    const filePath = path.join(process.cwd(), "uploads", filename);
-    if (!fs.existsSync(filePath)) {
+  app.get("/api/photos/:filename", requireAuth, async (req, res) => {
+    try {
+      const filename = getParam(req, "filename");
+      // Le nom doit être exactement un UUID suivi d'une extension connue :
+      // c'est ce qui rend impossible toute traversée de répertoire pour les
+      // photos encore servies depuis le disque.
+      if (!VALID_PHOTO_FILENAME.test(filename)) {
+        return res.status(400).json({ message: "Nom de fichier invalide" });
+      }
+
+      const enTetesImage = (contentType: string) => {
+        res.setHeader("Content-Type", contentType);
+        // Empêche un navigateur de réinterpréter le contenu autrement que
+        // comme une image.
+        res.setHeader("X-Content-Type-Options", "nosniff");
+        // `private` : la photo est réservée aux utilisateurs authentifiés,
+        // aucun cache partagé ne doit la conserver.
+        res.setHeader("Cache-Control", "private, max-age=3600");
+        res.setHeader("Content-Disposition", "inline");
+      };
+
+      const photo = await storage.getProfilePhotoByFilename(filename);
+      if (photo) {
+        enTetesImage(photo.mimeType);
+        return res.send(photo.data);
+      }
+
+      // Photos d'avant la bascule en base : encore sur le disque tant que le
+      // script de migration n'a pas tourné. À retirer une fois la migration
+      // faite sur tous les environnements.
+      const filePath = path.join(process.cwd(), "uploads", filename);
+      if (fs.existsSync(filePath)) {
+        const ext = path.extname(filename).toLowerCase().slice(1);
+        enTetesImage(PHOTO_CONTENT_TYPES[ext] || "application/octet-stream");
+        return res.sendFile(filePath);
+      }
+
       return res.status(404).json({ message: "Photo non trouvée" });
+    } catch (err) {
+      console.error("[PHOTO_SERVE] Error:", err);
+      return res.status(500).json({ message: "Erreur lors du chargement de la photo" });
     }
-    const ext = path.extname(filename).toLowerCase().slice(1);
-    res.setHeader("Content-Type", PHOTO_CONTENT_TYPES[ext] || "application/octet-stream");
-    res.setHeader("X-Content-Type-Options", "nosniff");
-    res.setHeader("Cache-Control", "private, max-age=3600");
-    res.setHeader("Content-Disposition", "inline");
-    res.sendFile(filePath);
   });
 
   app.get("/api/favorites", requireAuth, async (req, res) => {
@@ -373,11 +670,11 @@ export async function registerRoutes(
       if (user.role !== "SENIOR") {
         return res.status(403).json({ message: "Réservé aux seniors" });
       }
-      const junior = await storage.getUser(req.params.juniorId);
+      const junior = await storage.getUser(getParam(req, "juniorId"));
       if (!junior || junior.role !== "JUNIOR") {
         return res.status(404).json({ message: "Jeune non trouvé" });
       }
-      const favorite = await storage.addFavorite(user.id, req.params.juniorId);
+      const favorite = await storage.addFavorite(user.id, getParam(req, "juniorId"));
       res.status(201).json(favorite);
     } catch (err) {
       console.error("[FAVORITE_ADD] Error:", err);
@@ -391,7 +688,7 @@ export async function registerRoutes(
       if (user.role !== "SENIOR") {
         return res.status(403).json({ message: "Réservé aux seniors" });
       }
-      await storage.removeFavorite(user.id, req.params.juniorId);
+      await storage.removeFavorite(user.id, getParam(req, "juniorId"));
       res.json({ message: "Favori supprimé" });
     } catch (err) {
       console.error("[FAVORITE_REMOVE] Error:", err);
@@ -485,11 +782,11 @@ export async function registerRoutes(
   app.patch("/api/notifications/:id/read", requireAuth, async (req, res) => {
     try {
       const notifications = await storage.getNotifications(req.user!.id);
-      const owns = notifications.some((n) => n.id === req.params.id);
+      const owns = notifications.some((n) => n.id === getParam(req, "id"));
       if (!owns) {
         return res.status(403).json({ message: "Accès refusé" });
       }
-      const notification = await storage.markNotificationRead(req.params.id);
+      const notification = await storage.markNotificationRead(getParam(req, "id"));
       res.json(notification);
     } catch (err) {
       res.status(500).json({ message: "Erreur" });
@@ -523,7 +820,7 @@ export async function registerRoutes(
         const userName = `${user.firstName} ${user.lastName}`;
         await sendEmail({
           to: user.validatorEmail,
-          subject: `FEVES - Nouvelle demande de validation d'inscription de ${userName}`,
+          subject: `${PLATFORM_NAME} - Nouvelle demande de validation d'inscription de ${userName}`,
           htmlContent: getValidationEmailHtml(null, userName, validationUrl),
         });
       }
@@ -569,6 +866,9 @@ export async function registerRoutes(
         ...r,
         senior: sanitizeUserPublic(r.senior),
         junior: sanitizeUserPublic(r.junior),
+        interventions: (r.interventions || []).map((i) =>
+          scopeInterventionFeedback(i, req.user!.role as Role, req.user!.id, r.seniorId)
+        ),
       }));
       res.json(sanitized);
     } catch (err) {
@@ -579,18 +879,23 @@ export async function registerRoutes(
 
   app.get("/api/relations/:id", requireAuth, async (req, res) => {
     try {
-      const relation = await storage.getRelationWithUsers(req.params.id);
+      const relation = await storage.getRelationWithUsers(getParam(req, "id"));
       if (!relation) {
         return res.status(404).json({ message: "Relation non trouvée" });
       }
       const userId = req.user!.id;
-      if (relation.seniorId !== userId && relation.juniorId !== userId && req.user!.role !== "ADMIN") {
+      const linkedSeniorId = req.user!.role === "REFERENT_SENIOR" ? (req.user as any).linkedSeniorId : null;
+      const isReferentOfSenior = linkedSeniorId !== null && relation.seniorId === linkedSeniorId;
+      if (relation.seniorId !== userId && relation.juniorId !== userId && !isReferentOfSenior && req.user!.role !== "ADMIN") {
         return res.status(403).json({ message: "Accès refusé" });
       }
       res.json({
         ...relation,
         senior: sanitizeUserPublic(relation.senior),
         junior: sanitizeUserPublic(relation.junior),
+        interventions: (relation.interventions || []).map((i) =>
+          scopeInterventionFeedback(i, req.user!.role as Role, userId, relation.seniorId)
+        ),
       });
     } catch (err) {
       console.error("[RELATION_DETAIL] Error:", err);
@@ -644,7 +949,7 @@ export async function registerRoutes(
 
   app.patch("/api/relations/:id/accept", requireAuth, async (req, res) => {
     try {
-      const relation = await storage.getRelation(req.params.id);
+      const relation = await storage.getRelation(getParam(req, "id"));
       if (!relation) {
         return res.status(404).json({ message: "Relation non trouvée" });
       }
@@ -671,7 +976,7 @@ export async function registerRoutes(
         const juniorName = `${req.user!.firstName} ${req.user!.lastName}`;
         sendEmail({
           to: senior.email,
-          subject: `FEVES - Votre demande de relation a été acceptée`,
+          subject: `${PLATFORM_NAME} - Votre demande de relation a été acceptée`,
           htmlContent: getRelationAcceptedEmailHtml(seniorName, juniorName, `${getBaseUrl(req)}/relations/${relation.id}`),
         }).catch(console.error);
       }
@@ -685,7 +990,7 @@ export async function registerRoutes(
 
   app.patch("/api/relations/:id/reject", requireAuth, async (req, res) => {
     try {
-      const relation = await storage.getRelation(req.params.id);
+      const relation = await storage.getRelation(getParam(req, "id"));
       if (!relation) {
         return res.status(404).json({ message: "Relation non trouvée" });
       }
@@ -715,7 +1020,7 @@ export async function registerRoutes(
 
   app.patch("/api/relations/:id/close", requireAuth, async (req, res) => {
     try {
-      const relation = await storage.getRelation(req.params.id);
+      const relation = await storage.getRelation(getParam(req, "id"));
       if (!relation) {
         return res.status(404).json({ message: "Relation non trouvée" });
       }
@@ -749,7 +1054,7 @@ export async function registerRoutes(
 
   app.post("/api/relations/:relationId/interventions", requireAuth, async (req, res) => {
     try {
-      const relation = await storage.getRelationWithUsers(req.params.relationId);
+      const relation = await storage.getRelationWithUsers(getParam(req, "relationId"));
       if (!relation) {
         return res.status(404).json({ message: "Relation non trouvée" });
       }
@@ -769,7 +1074,7 @@ export async function registerRoutes(
 
       const parsed = insertInterventionSchema.safeParse({
         ...req.body,
-        relationId: req.params.relationId,
+        relationId: getParam(req, "relationId"),
       });
       if (!parsed.success) {
         return res.status(400).json({
@@ -778,30 +1083,47 @@ export async function registerRoutes(
         });
       }
 
-      const intervention = await storage.createIntervention({
+      const scheduledDate = new Date(parsed.data.scheduledDate);
+      if (Number.isNaN(scheduledDate.getTime())) {
+        return res.status(400).json({ message: "Date invalide" });
+      }
+
+      const slotError = await validateSlot(relation.juniorId, scheduledDate, parsed.data.durationMinutes);
+      if (slotError) {
+        return res.status(400).json({ message: slotError });
+      }
+
+      const result = await createInterventionOrConflict(relation.juniorId, {
         relationId: parsed.data.relationId,
-        scheduledDate: new Date(parsed.data.scheduledDate),
+        scheduledDate,
         durationMinutes: parsed.data.durationMinutes,
         location: parsed.data.location,
         tasks: parsed.data.tasks,
       });
+      if ("conflict" in result) {
+        return res.status(400).json({ message: SLOT_CONFLICT_MESSAGE });
+      }
+      if ("locked" in result) {
+        return res.status(409).json({ message: LOCK_CONTENTION_MESSAGE });
+      }
+      const intervention = result.intervention;
 
       await storage.createNotification({
         user: { connect: { id: relation.juniorId } },
         type: "INTERVENTION_PROPOSED",
         title: "Nouvelle intervention proposée",
-        message: `Une intervention a été proposée pour le ${new Date(parsed.data.scheduledDate).toLocaleDateString("fr-FR")}.`,
+        message: `Une intervention a été proposée pour le ${fmtDayNumeric(new Date(parsed.data.scheduledDate))} à ${fmtTime(new Date(parsed.data.scheduledDate))}.`,
         link: `/relations/${relation.id}`,
       });
 
       const junior = await storage.getUser(relation.juniorId);
       if (junior?.email) {
         const juniorName = `${junior.firstName} ${junior.lastName}`;
-        const dateStr = new Date(parsed.data.scheduledDate).toLocaleDateString("fr-FR");
+        const dateStr = `${fmtDayNumeric(new Date(parsed.data.scheduledDate))} à ${fmtTime(new Date(parsed.data.scheduledDate))}`;
         const locationStr = parsed.data.location || "Non précisé";
         sendEmail({
           to: junior.email,
-          subject: `FEVES - Nouvelle intervention proposée pour le ${dateStr}`,
+          subject: `${PLATFORM_NAME} - Nouvelle intervention proposée pour le ${dateStr}`,
           htmlContent: getInterventionProposedEmailHtml(juniorName, dateStr, locationStr, `${getBaseUrl(req)}/relations/${relation.id}`),
         }).catch(console.error);
       }
@@ -815,7 +1137,7 @@ export async function registerRoutes(
 
   app.patch("/api/interventions/:id/confirm", requireAuth, async (req, res) => {
     try {
-      const intervention = await storage.getInterventionWithRelation(req.params.id);
+      const intervention = await storage.getInterventionWithRelation(getParam(req, "id"));
       if (!intervention) {
         return res.status(404).json({ message: "Intervention non trouvée" });
       }
@@ -832,17 +1154,17 @@ export async function registerRoutes(
         user: { connect: { id: intervention.relation.seniorId } },
         type: "INTERVENTION_CONFIRMED",
         title: "Intervention confirmée",
-        message: `${req.user!.firstName} ${req.user!.lastName} a confirmé l'intervention du ${intervention.scheduledDate.toLocaleDateString("fr-FR")}.`,
+        message: `${req.user!.firstName} ${req.user!.lastName} a confirmé l'intervention du ${fmtDayNumeric(intervention.scheduledDate)} à ${fmtTime(intervention.scheduledDate)}.`,
         link: `/relations/${intervention.relationId}`,
       });
 
       const senior = await storage.getUser(intervention.relation.seniorId);
       if (senior?.email) {
         const seniorName = `${senior.firstName} ${senior.lastName}`;
-        const dateStr = intervention.scheduledDate.toLocaleDateString("fr-FR");
+        const dateStr = fmtDayNumeric(intervention.scheduledDate);
         sendEmail({
           to: senior.email,
-          subject: `FEVES - Intervention confirmée pour le ${dateStr}`,
+          subject: `${PLATFORM_NAME} - Intervention confirmée pour le ${dateStr}`,
           htmlContent: getInterventionConfirmedEmailHtml(seniorName, dateStr, `${getBaseUrl(req)}/relations/${intervention.relationId}`),
         }).catch(console.error);
       }
@@ -856,7 +1178,7 @@ export async function registerRoutes(
 
   app.patch("/api/interventions/:id/done", requireAdmin, async (req, res) => {
     try {
-      const intervention = await storage.getInterventionWithRelation(req.params.id);
+      const intervention = await storage.getInterventionWithRelation(getParam(req, "id"));
       if (!intervention) {
         return res.status(404).json({ message: "Intervention non trouvée" });
       }
@@ -890,12 +1212,12 @@ export async function registerRoutes(
         link: `/relations/${intervention.relationId}`,
       });
 
-      const dateStr = intervention.scheduledDate.toLocaleDateString("fr-FR");
+      const dateStr = fmtDayNumeric(intervention.scheduledDate);
       const seniorUser = await storage.getUser(seniorId);
       if (seniorUser?.email) {
         sendEmail({
           to: seniorUser.email,
-          subject: `FEVES - Donnez votre avis sur l'intervention du ${dateStr}`,
+          subject: `${PLATFORM_NAME} - Donnez votre avis sur l'intervention du ${dateStr}`,
           htmlContent: getFeedbackReminderEmailHtml(`${seniorUser.firstName} ${seniorUser.lastName}`, dateStr, `${getBaseUrl(req)}/relations/${intervention.relationId}`),
         }).catch(console.error);
       }
@@ -903,7 +1225,7 @@ export async function registerRoutes(
       if (juniorUser?.email) {
         sendEmail({
           to: juniorUser.email,
-          subject: `FEVES - Donnez votre avis sur l'intervention du ${dateStr}`,
+          subject: `${PLATFORM_NAME} - Donnez votre avis sur l'intervention du ${dateStr}`,
           htmlContent: getFeedbackReminderEmailHtml(`${juniorUser.firstName} ${juniorUser.lastName}`, dateStr, `${getBaseUrl(req)}/relations/${intervention.relationId}`),
         }).catch(console.error);
       }
@@ -917,7 +1239,7 @@ export async function registerRoutes(
 
   app.patch("/api/interventions/:id/cancel", requireAuth, async (req, res) => {
     try {
-      const intervention = await storage.getInterventionWithRelation(req.params.id);
+      const intervention = await storage.getInterventionWithRelation(getParam(req, "id"));
       if (!intervention) {
         return res.status(404).json({ message: "Intervention non trouvée" });
       }
@@ -940,13 +1262,124 @@ export async function registerRoutes(
         user: { connect: { id: otherId } },
         type: "SYSTEM",
         title: "Intervention annulée",
-        message: `L'intervention du ${intervention.scheduledDate.toLocaleDateString("fr-FR")} a été annulée.`,
+        message: `L'intervention du ${fmtDayNumeric(intervention.scheduledDate)} a été annulée.`,
         link: `/relations/${intervention.relationId}`,
       });
 
       res.json(updated);
     } catch (err) {
       console.error("[CANCEL_INTERVENTION] Error:", err);
+      res.status(500).json({ message: "Erreur" });
+    }
+  });
+
+  // ==================== AVAILABILITIES ====================
+
+  app.get("/api/availabilities/me", requireAuth, async (req, res) => {
+    try {
+      const availabilities = await storage.getAvailabilitiesByUser(req.user!.id);
+      res.json(availabilities);
+    } catch (err) {
+      console.error("[GET_MY_AVAILABILITIES] Error:", err);
+      res.status(500).json({ message: "Erreur" });
+    }
+  });
+
+  app.post("/api/availabilities", requireAuth, async (req, res) => {
+    try {
+      if (req.user!.role !== "JUNIOR") {
+        return res.status(403).json({ message: "Seul un Junior peut déclarer une disponibilité" });
+      }
+      const parsed = createAvailabilitySchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: "Données invalides", errors: parsed.error.flatten().fieldErrors });
+      }
+      const availability = await storage.createAvailability({
+        userId: req.user!.id,
+        startAt: new Date(parsed.data.startAt),
+        endAt: new Date(parsed.data.endAt),
+        kind: parsed.data.kind,
+      });
+      res.status(201).json(availability);
+    } catch (err) {
+      console.error("[CREATE_AVAILABILITY] Error:", err);
+      res.status(500).json({ message: "Erreur" });
+    }
+  });
+
+  app.post("/api/availabilities/recurring", requireAuth, async (req, res) => {
+    try {
+      if (req.user!.role !== "JUNIOR") {
+        return res.status(403).json({ message: "Seul un Junior peut déclarer un planning récurrent" });
+      }
+      const parsed = createRecurringAvailabilitiesSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: "Données invalides", errors: parsed.error.flatten().fieldErrors });
+      }
+      const result = await createRecurringAvailabilities(req.user!.id, parsed.data);
+      res.status(201).json(result);
+    } catch (err) {
+      console.error("[CREATE_RECURRING_AVAILABILITIES] Error:", err);
+      res.status(500).json({ message: "Erreur" });
+    }
+  });
+
+  app.post("/api/availabilities/exception", requireAuth, async (req, res) => {
+    try {
+      if (req.user!.role !== "JUNIOR") {
+        return res.status(403).json({ message: "Seul un Junior peut déclarer une exception" });
+      }
+      const parsed = createDateExceptionSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: "Données invalides", errors: parsed.error.flatten().fieldErrors });
+      }
+      const result = await createDateException(req.user!.id, parsed.data);
+      res.status(201).json(result);
+    } catch (err) {
+      console.error("[CREATE_DATE_EXCEPTION] Error:", err);
+      res.status(500).json({ message: "Erreur" });
+    }
+  });
+
+  app.delete("/api/availabilities/:id", requireAuth, async (req, res) => {
+    try {
+      if (req.user!.role !== "JUNIOR") {
+        return res.status(403).json({ message: "Seul un Junior peut supprimer une disponibilité" });
+      }
+      const ok = await deleteAvailability(req.user!.id, getParam(req, "id"));
+      if (!ok) {
+        return res.status(404).json({ message: "Disponibilité introuvable" });
+      }
+      res.status(204).end();
+    } catch (err) {
+      console.error("[DELETE_AVAILABILITY] Error:", err);
+      res.status(500).json({ message: "Erreur" });
+    }
+  });
+
+  app.get("/api/users/:juniorId/availabilities", requireAuth, async (req, res) => {
+    try {
+      const user = req.user!;
+      const juniorId = getParam(req, "juniorId");
+      if (user.role !== "ADMIN") {
+        // Le référent consulte au nom du sénior auquel il est rattaché : il
+        // propose des rencontres, il lui faut donc les mêmes créneaux.
+        const seniorId =
+          user.role === "REFERENT_SENIOR" ? (user as any).linkedSeniorId : user.id;
+        if ((user.role !== "SENIOR" && user.role !== "REFERENT_SENIOR") || !seniorId) {
+          return res.status(403).json({ message: "Accès refusé" });
+        }
+        const relation = await storage.getRelationBySeniorAndJunior(seniorId, juniorId);
+        // PENDING_FIRST_MEETING compte : c'est justement la phase où la 1ère
+        // rencontre se cale, donc celle où les dispos servent le plus.
+        if (!relation || (relation.status !== "ACTIVE" && relation.status !== "PENDING_FIRST_MEETING")) {
+          return res.status(403).json({ message: "Aucune relation active avec ce Junior" });
+        }
+      }
+      const availabilities = await storage.getAvailabilitiesByUser(juniorId);
+      res.json(availabilities);
+    } catch (err) {
+      console.error("[GET_JUNIOR_AVAILABILITIES] Error:", err);
       res.status(500).json({ message: "Erreur" });
     }
   });
@@ -971,7 +1404,7 @@ export async function registerRoutes(
 
   app.post("/api/interventions/:id/feedback", requireAuth, async (req, res) => {
     try {
-      const intervention = await storage.getInterventionWithRelation(req.params.id);
+      const intervention = await storage.getInterventionWithRelation(getParam(req, "id"));
       if (!intervention) {
         return res.status(404).json({ message: "Intervention non trouvée" });
       }
@@ -1037,6 +1470,84 @@ export async function registerRoutes(
     }
   });
 
+  // ==================== HISTORIQUE DES RENCONTRES ====================
+
+  /**
+   * Historique unifié, une seule route pour les cinq rôles.
+   *
+   * Deux garde-fous distincts, à ne pas confondre :
+   *  - le PÉRIMÈTRE (quelles rencontres sont retournées) dérive de req.user ;
+   *  - la VISIBILITÉ des feedbacks est ensuite réduite selon le rôle, avant
+   *    sérialisation, pour que la réponse ne transporte jamais un commentaire
+   *    que l'appelant n'a pas le droit de lire.
+   *
+   * `?userId=` n'élargit jamais le périmètre : réservé à l'admin, et au prof
+   * pour ses seuls élèves affiliés.
+   */
+  app.get("/api/meetings/history", requireAuth, async (req, res) => {
+    try {
+      const parsed = meetingHistoryQuerySchema.safeParse(req.query);
+      if (!parsed.success) {
+        return res.status(400).json({
+          message: "Paramètres invalides",
+          errors: parsed.error.flatten().fieldErrors,
+        });
+      }
+
+      const user = req.user!;
+      const role = user.role as Role;
+      const { userId, status, from, to } = parsed.data;
+
+      let scope: MeetingHistoryScope;
+
+      if (userId) {
+        if (role === "ADMIN") {
+          scope = { kind: "user", userId };
+        } else if (role === "TEACHER") {
+          const isLinked = await storage.isTeacherOfStudent(user.id, userId);
+          if (!isLinked) {
+            return res.status(403).json({ message: "Cet élève ne vous est pas affilié" });
+          }
+          scope = { kind: "user", userId };
+        } else {
+          return res.status(403).json({ message: "Accès refusé" });
+        }
+      } else if (role === "ADMIN") {
+        scope = { kind: "all" };
+      } else if (role === "TEACHER") {
+        const students = await storage.getTeacherStudents(user.id);
+        scope = { kind: "students", studentIds: students.map((s) => s.studentId) };
+      } else if (role === "REFERENT_SENIOR") {
+        const linkedSeniorId = (user as any).linkedSeniorId;
+        if (!linkedSeniorId) {
+          return res.status(404).json({ message: "Aucun sénior lié" });
+        }
+        scope = { kind: "senior", seniorId: linkedSeniorId };
+      } else {
+        scope = { kind: "user", userId: user.id };
+      }
+
+      const interventions = await storage.getMeetingHistory(scope, {
+        status,
+        from: from ? new Date(`${from}T00:00:00.000Z`) : undefined,
+        to: to ? new Date(`${to}T23:59:59.999Z`) : undefined,
+      });
+
+      const entries = interventions
+        .map((i) => toMeetingHistoryEntry(i))
+        .map((e) => scopeFeedback(e, role, user.id));
+
+      const response: MeetingHistoryResponse = {
+        entries,
+        summary: buildMeetingSummary(entries),
+      };
+      res.json(response);
+    } catch (err) {
+      console.error("[MEETING_HISTORY] Error:", err);
+      res.status(500).json({ message: "Erreur lors du chargement de l'historique" });
+    }
+  });
+
   // ==================== ADMIN RECOMMENDATIONS ====================
 
   app.post("/api/admin/recommendations", requireAdmin, async (req, res) => {
@@ -1058,7 +1569,7 @@ export async function registerRoutes(
 
   app.delete("/api/admin/recommendations/:id", requireAdmin, async (req, res) => {
     try {
-      await storage.deleteAdminRecommendation(req.params.id);
+      await storage.deleteAdminRecommendation(getParam(req, "id"));
       res.json({ message: "Recommandation supprimée" });
     } catch (err) {
       console.error("[DELETE_RECOMMENDATION] Error:", err);
@@ -1080,7 +1591,7 @@ export async function registerRoutes(
 
   app.patch("/api/admin/users/:id/validate", requireAdmin, async (req, res) => {
     try {
-      const user = await storage.getUser(req.params.id);
+      const user = await storage.getUser(getParam(req, "id"));
       if (!user) return res.status(404).json({ message: "Utilisateur non trouvé" });
       if (user.status !== "PENDING_VALIDATION") {
         return res.status(400).json({ message: "Cet utilisateur n'est pas en attente de validation" });
@@ -1095,7 +1606,7 @@ export async function registerRoutes(
 
   app.patch("/api/admin/users/:id/suspend", requireAdmin, async (req, res) => {
     try {
-      const user = await storage.getUser(req.params.id);
+      const user = await storage.getUser(getParam(req, "id"));
       if (!user) return res.status(404).json({ message: "Utilisateur non trouvé" });
       if (user.role === "ADMIN") return res.status(403).json({ message: "Impossible de suspendre un administrateur" });
       const updated = await storage.updateUser(user.id, { status: "SUSPENDED" });
@@ -1108,9 +1619,12 @@ export async function registerRoutes(
 
   app.delete("/api/admin/users/:id", requireAdmin, async (req, res) => {
     try {
-      const user = await storage.getUser(req.params.id);
+      const user = await storage.getUser(getParam(req, "id"));
       if (!user) return res.status(404).json({ message: "Utilisateur non trouvé" });
       if (user.role === "ADMIN") return res.status(403).json({ message: "Impossible de supprimer un administrateur" });
+      // La photo en base part avec l'utilisateur (ProfilePhoto est en cascade).
+      // Ce nettoyage ne concerne que les photos d'avant la bascule, encore
+      // présentes sur le disque.
       if (user.profilePhoto) {
         const photoPath = path.join(process.cwd(), user.profilePhoto.replace(/^\//, ""));
         if (fs.existsSync(photoPath)) fs.unlinkSync(photoPath);
@@ -1139,7 +1653,7 @@ export async function registerRoutes(
 
   app.patch("/api/admin/relations/:id/advance", requireAdmin, async (req, res) => {
     try {
-      const relation = await storage.getRelation(req.params.id);
+      const relation = await storage.getRelation(getParam(req, "id"));
       if (!relation) return res.status(404).json({ message: "Relation non trouvée" });
       if (relation.status !== "PENDING") {
         return res.status(400).json({ message: "Seules les relations en attente peuvent être avancées" });
@@ -1150,14 +1664,14 @@ export async function registerRoutes(
         user: { connect: { id: relation.seniorId } },
         type: "RELATION_REQUEST",
         title: "Demande acceptée",
-        message: "Un administrateur FEVES a validé l'accord du jeune. La première rencontre va être organisée.",
+        message: `Un administrateur ${PLATFORM_NAME} a validé l'accord du jeune. La première rencontre va être organisée.`,
         link: `/relations/${relation.id}`,
       });
       await storage.createNotification({
         user: { connect: { id: relation.juniorId } },
         type: "RELATION_REQUEST",
         title: "Relation confirmée",
-        message: "Un administrateur FEVES a confirmé votre participation. La première rencontre va être organisée.",
+        message: `Un administrateur ${PLATFORM_NAME} a confirmé votre participation. La première rencontre va être organisée.`,
         link: `/relations/${relation.id}`,
       });
 
@@ -1317,7 +1831,7 @@ export async function registerRoutes(
 
   app.get("/api/messages/conversations/:id", requireAuth, async (req, res) => {
     try {
-      const relationId = req.params.id as string;
+      const relationId = getParam(req, "id") as string;
       const relation = await storage.getRelationWithUsers(relationId);
       if (!relation) return res.status(404).json({ message: "Relation non trouvée" });
 
@@ -1350,7 +1864,7 @@ export async function registerRoutes(
         return res.status(400).json({ message: "Le message est trop long (max 2000 caractères)" });
       }
 
-      const relationId = req.params.id as string;
+      const relationId = getParam(req, "id") as string;
       const relation = await storage.getRelationWithUsers(relationId);
       if (!relation) return res.status(404).json({ message: "Relation non trouvée" });
 
@@ -1397,7 +1911,7 @@ export async function registerRoutes(
 
   app.patch("/api/messages/conversations/:id/read", requireAuth, async (req, res) => {
     try {
-      const relationId = req.params.id as string;
+      const relationId = getParam(req, "id") as string;
       const relation = await storage.getRelationWithUsers(relationId);
       if (!relation) return res.status(404).json({ message: "Relation non trouvée" });
 
@@ -1461,7 +1975,7 @@ export async function registerRoutes(
     try {
       const { prisma } = await import("./prisma");
       const conv = await prisma.conversation.findUnique({
-        where: { id: req.params.id },
+        where: { id: getParam(req, "id") },
         include: {
           relation: {
             include: {
@@ -1473,7 +1987,7 @@ export async function registerRoutes(
       });
       if (!conv) {
         const convByRelation = await prisma.conversation.findUnique({
-          where: { relationId: req.params.id },
+          where: { relationId: getParam(req, "id") },
           include: {
             relation: {
               include: {
@@ -1511,7 +2025,7 @@ export async function registerRoutes(
 
   app.delete("/api/admin/messages/:messageId", requireAdmin, async (req, res) => {
     try {
-      const message = await storage.deleteMessage(req.params.messageId);
+      const message = await storage.deleteMessage(getParam(req, "messageId"));
       const { prisma } = await import("./prisma");
       const conv = await prisma.conversation.findUnique({
         where: { id: message.conversationId },
@@ -1566,7 +2080,7 @@ export async function registerRoutes(
         // les admins ne recevaient jamais les signalements.
         sendEmail({
           to: admin.email,
-          subject: "Nouveau signalement reçu - FEVES",
+          subject: `Nouveau signalement reçu - ${PLATFORM_NAME}`,
           htmlContent: getNewReportEmailHtml(admin.firstName, reporterName, reason, message || null, adminUrl),
         }).catch((err) => console.error("[REPORT_EMAIL] Error sending to admin:", err));
       }
@@ -1601,7 +2115,7 @@ export async function registerRoutes(
       return res.status(400).json({ message: "Un commentaire de traitement est obligatoire." });
     }
     try {
-      const report = await storage.updateReportStatus(req.params.id, "HANDLED", handledNote.trim());
+      const report = await storage.updateReportStatus(getParam(req, "id"), "HANDLED", handledNote.trim());
       res.json(report);
     } catch (err) {
       console.error("[ADMIN_REPORT_HANDLE] Error:", err);
@@ -1684,10 +2198,10 @@ export async function registerRoutes(
   app.get("/api/teacher/students/:id", requireTeacher, async (req, res) => {
     try {
       const teacherId = (req.user as any).id;
-      const isLinked = await storage.isTeacherOfStudent(teacherId, req.params.id);
+      const isLinked = await storage.isTeacherOfStudent(teacherId, getParam(req, "id"));
       if (!isLinked) return res.status(403).json({ message: "Cet élève ne vous est pas affilié" });
 
-      const student = await storage.getUser(req.params.id);
+      const student = await storage.getUser(getParam(req, "id"));
       if (!student || student.role !== "JUNIOR") return res.status(404).json({ message: "Élève introuvable" });
 
       // Toutes les relations avec leur sénior et interventions complètes (feedback inclus)
@@ -1735,14 +2249,14 @@ export async function registerRoutes(
   app.patch("/api/teacher/students/:id/bio", requireTeacher, async (req, res) => {
     try {
       const teacherId = (req.user as any).id;
-      const isLinked = await storage.isTeacherOfStudent(teacherId, req.params.id);
+      const isLinked = await storage.isTeacherOfStudent(teacherId, getParam(req, "id"));
       if (!isLinked) return res.status(403).json({ message: "Cet élève ne vous est pas affilié" });
 
       const { updateStudentBioSchema } = await import("../shared/schema");
       const parsed = updateStudentBioSchema.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ message: "Données invalides", errors: parsed.error.flatten().fieldErrors });
 
-      const student = await storage.updateUser(req.params.id, parsed.data);
+      const student = await storage.updateUser(getParam(req, "id"), parsed.data);
       res.json(sanitizeUserPublic(student));
     } catch (err) {
       console.error("[TEACHER_UPDATE_BIO] Error:", err);
@@ -1754,18 +2268,18 @@ export async function registerRoutes(
   app.post("/api/teacher/students/:id/comments", requireTeacher, async (req, res) => {
     try {
       const teacherId = (req.user as any).id;
-      const isLinked = await storage.isTeacherOfStudent(teacherId, req.params.id);
+      const isLinked = await storage.isTeacherOfStudent(teacherId, getParam(req, "id"));
       if (!isLinked) return res.status(403).json({ message: "Cet élève ne vous est pas affilié" });
 
       const { createTeacherCommentSchema } = await import("../shared/schema");
       const parsed = createTeacherCommentSchema.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ message: "Données invalides", errors: parsed.error.flatten().fieldErrors });
 
-      const comment = await storage.createTeacherComment(teacherId, req.params.id, parsed.data.content);
+      const comment = await storage.createTeacherComment(teacherId, getParam(req, "id"), parsed.data.content);
 
       // Notification email aux admins
       const teacher = req.user as any;
-      const student = await storage.getUser(req.params.id);
+      const student = await storage.getUser(getParam(req, "id"));
       const admins = await storage.getAdmins();
       const teacherName = `${teacher.firstName} ${teacher.lastName}`;
       const studentName = student ? `${student.firstName} ${student.lastName}` : "un élève";
@@ -1773,7 +2287,7 @@ export async function registerRoutes(
       for (const admin of admins) {
         sendEmail({
           to: admin.email,
-          subject: `FEVES — Note professeur de ${teacherName} sur ${studentName}`,
+          subject: `${PLATFORM_NAME} — Note professeur de ${teacherName} sur ${studentName}`,
           htmlContent: `<h2 style="color:#16a34a">Nouvelle note professeur</h2><p><strong>Professeur :</strong> ${teacherName} (${teacher.email})</p><p><strong>Élève :</strong> ${studentName}</p><hr><p>${parsed.data.content.replace(/\n/g, "<br>")}</p><hr><p><a href="${baseUrl}/admin">Voir dans l'espace admin → onglet "Notes profs"</a></p>`,
         }).catch(console.error);
       }
@@ -1793,7 +2307,7 @@ export async function registerRoutes(
       const parsed = updateTeacherCommentSchema.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ message: "Données invalides", errors: parsed.error.flatten().fieldErrors });
 
-      const comment = await storage.updateTeacherComment(req.params.commentId, teacherId, parsed.data.content);
+      const comment = await storage.updateTeacherComment(getParam(req, "commentId"), teacherId, parsed.data.content);
       res.json(comment);
     } catch (err) {
       console.error("[TEACHER_UPDATE_COMMENT] Error:", err);
@@ -1805,7 +2319,7 @@ export async function registerRoutes(
   app.delete("/api/teacher/students/:studentId/comments/:commentId", requireTeacher, async (req, res) => {
     try {
       const teacherId = (req.user as any).id;
-      await storage.deleteTeacherComment(req.params.commentId, teacherId);
+      await storage.deleteTeacherComment(getParam(req, "commentId"), teacherId);
       res.json({ message: "Commentaire supprimé" });
     } catch (err) {
       console.error("[TEACHER_DELETE_COMMENT] Error:", err);
@@ -1817,10 +2331,10 @@ export async function registerRoutes(
   app.get("/api/teacher/students/:id/internships", requireTeacher, async (req, res) => {
     try {
       const teacherId = (req.user as any).id;
-      const isLinked = await storage.isTeacherOfStudent(teacherId, req.params.id);
+      const isLinked = await storage.isTeacherOfStudent(teacherId, getParam(req, "id"));
       if (!isLinked) return res.status(403).json({ message: "Cet élève ne vous est pas affilié" });
 
-      const internships = await storage.getStudentInternships(req.params.id);
+      const internships = await storage.getStudentInternships(getParam(req, "id"));
       res.json(internships);
     } catch (err) {
       res.status(500).json({ message: "Erreur" });
@@ -1831,7 +2345,7 @@ export async function registerRoutes(
   app.post("/api/teacher/students/:id/internships", requireTeacher, async (req, res) => {
     try {
       const teacherId = (req.user as any).id;
-      const isLinked = await storage.isTeacherOfStudent(teacherId, req.params.id);
+      const isLinked = await storage.isTeacherOfStudent(teacherId, getParam(req, "id"));
       if (!isLinked) return res.status(403).json({ message: "Cet élève ne vous est pas affilié" });
 
       const { createInternshipSchema } = await import("../shared/schema");
@@ -1839,7 +2353,7 @@ export async function registerRoutes(
       if (!parsed.success) return res.status(400).json({ message: "Données invalides", errors: parsed.error.flatten().fieldErrors });
 
       const internship = await storage.createInternship({
-        studentId: req.params.id,
+        studentId: getParam(req, "id"),
         companyName: parsed.data.companyName,
         companyAddress: parsed.data.companyAddress,
         supervisorName: parsed.data.supervisorName,
@@ -1861,7 +2375,7 @@ export async function registerRoutes(
   app.patch("/api/teacher/students/:studentId/internships/:internshipId", requireTeacher, async (req, res) => {
     try {
       const teacherId = (req.user as any).id;
-      const isLinked = await storage.isTeacherOfStudent(teacherId, req.params.studentId);
+      const isLinked = await storage.isTeacherOfStudent(teacherId, getParam(req, "studentId"));
       if (!isLinked) return res.status(403).json({ message: "Cet élève ne vous est pas affilié" });
 
       const { updateInternshipSchema } = await import("../shared/schema");
@@ -1872,7 +2386,7 @@ export async function registerRoutes(
       if (data.startDate) data.startDate = new Date(data.startDate);
       if (data.endDate) data.endDate = new Date(data.endDate);
 
-      const internship = await storage.updateInternship(req.params.internshipId, data);
+      const internship = await storage.updateInternship(getParam(req, "internshipId"), data);
       res.json(internship);
     } catch (err) {
       console.error("[TEACHER_UPDATE_INTERNSHIP] Error:", err);
@@ -1884,10 +2398,10 @@ export async function registerRoutes(
   app.delete("/api/teacher/students/:studentId/internships/:internshipId", requireTeacher, async (req, res) => {
     try {
       const teacherId = (req.user as any).id;
-      const isLinked = await storage.isTeacherOfStudent(teacherId, req.params.studentId);
+      const isLinked = await storage.isTeacherOfStudent(teacherId, getParam(req, "studentId"));
       if (!isLinked) return res.status(403).json({ message: "Cet élève ne vous est pas affilié" });
 
-      await storage.deleteInternship(req.params.internshipId);
+      await storage.deleteInternship(getParam(req, "internshipId"));
       res.json({ message: "Stage supprimé" });
     } catch (err) {
       res.status(500).json({ message: "Erreur" });
@@ -1936,7 +2450,7 @@ export async function registerRoutes(
 
   app.get("/api/admin/teachers/:teacherId/students", requireAdmin, async (req, res) => {
     try {
-      const links = await storage.getTeacherStudents(req.params.teacherId);
+      const links = await storage.getTeacherStudents(getParam(req, "teacherId"));
       res.json(links.map((l) => ({ ...sanitizeUser(l.student), linkedAt: l.createdAt })));
     } catch (err) {
       res.status(500).json({ message: "Erreur" });
@@ -1949,7 +2463,7 @@ export async function registerRoutes(
       if (!studentId) return res.status(400).json({ message: "studentId requis" });
       const student = await storage.getUser(studentId);
       if (!student || student.role !== "JUNIOR") return res.status(400).json({ message: "Élève invalide" });
-      const link = await storage.addTeacherStudent(req.params.teacherId, studentId);
+      const link = await storage.addTeacherStudent(getParam(req, "teacherId"), studentId);
       res.status(201).json(link);
     } catch (err: any) {
       if (err.code === "P2002") return res.status(409).json({ message: "Liaison déjà existante" });
@@ -1959,7 +2473,7 @@ export async function registerRoutes(
 
   app.delete("/api/admin/teachers/:teacherId/students/:studentId", requireAdmin, async (req, res) => {
     try {
-      await storage.removeTeacherStudent(req.params.teacherId, req.params.studentId);
+      await storage.removeTeacherStudent(getParam(req, "teacherId"), getParam(req, "studentId"));
       res.json({ message: "Liaison supprimée" });
     } catch (err) {
       res.status(500).json({ message: "Erreur" });
@@ -2046,13 +2560,30 @@ export async function registerRoutes(
       if (relation.seniorId !== linkedSeniorId) return res.status(403).json({ message: "Cette relation n'appartient pas à votre sénior" });
       if (relation.status !== "ACTIVE") return res.status(400).json({ message: "La relation doit être active pour planifier une intervention" });
 
-      const intervention = await storage.createIntervention({
+      const scheduledDate = new Date(parsed.data.scheduledDate);
+      if (Number.isNaN(scheduledDate.getTime())) {
+        return res.status(400).json({ message: "Date invalide" });
+      }
+
+      const slotError = await validateSlot(relation.juniorId, scheduledDate, parsed.data.durationMinutes);
+      if (slotError) {
+        return res.status(400).json({ message: slotError });
+      }
+
+      const result = await createInterventionOrConflict(relation.juniorId, {
         relationId: parsed.data.relationId,
-        scheduledDate: new Date(parsed.data.scheduledDate),
+        scheduledDate,
         durationMinutes: parsed.data.durationMinutes,
         location: parsed.data.location,
         tasks: parsed.data.tasks,
       });
+      if ("conflict" in result) {
+        return res.status(400).json({ message: SLOT_CONFLICT_MESSAGE });
+      }
+      if ("locked" in result) {
+        return res.status(409).json({ message: LOCK_CONTENTION_MESSAGE });
+      }
+      const intervention = result.intervention;
 
       const referentUser = req.user as any;
       const senderName = `${referentUser.firstName} ${referentUser.lastName} (référent de ${relation.senior.firstName} ${relation.senior.lastName})`;
@@ -2060,7 +2591,7 @@ export async function registerRoutes(
         user: { connect: { id: relation.juniorId } },
         type: "INTERVENTION_PROPOSED",
         title: "Nouvelle intervention proposée",
-        message: `${senderName} propose une intervention le ${new Date(parsed.data.scheduledDate).toLocaleDateString("fr-FR")}.`,
+        message: `${senderName} propose une intervention le ${fmtDayNumeric(new Date(parsed.data.scheduledDate))} à ${fmtTime(new Date(parsed.data.scheduledDate))}.`,
         link: null,
       });
       sendSSEEvent(relation.juniorId, "invalidate", { queryKey: ["/api/relations"] });
@@ -2095,12 +2626,12 @@ export async function registerRoutes(
       for (const admin of admins) {
         sendEmail({
           to: admin.email,
-          subject: `FEVES — Message du référent sénior ${senderName} : ${subject}`,
+          subject: `${PLATFORM_NAME} — Message du référent sénior ${senderName} : ${subject}`,
           htmlContent: `<h2 style="color:#8b5cf6">Message du référent sénior</h2><p><strong>De :</strong> ${senderName} (${user.email})</p><p><strong>Sujet :</strong> ${subject}</p><hr><p>${message.replace(/\n/g, "<br>")}</p><hr><p><a href="${baseUrl}/admin">Voir dans l'espace admin</a></p>`,
         }).catch(console.error);
       }
 
-      res.json({ message: "Votre message a été envoyé à l'équipe FEVES." });
+      res.json({ message: `Votre message a été envoyé à l'équipe ${PLATFORM_NAME}.` });
     } catch (err) {
       console.error("[REFERENT_CONTACT] Error:", err);
       res.status(500).json({ message: "Erreur lors de l'envoi du message" });

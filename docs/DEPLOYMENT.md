@@ -33,15 +33,25 @@ Toute base PostgreSQL accessible publiquement fonctionne (Supabase, Neon, Railwa
 
 | Paramètre | Valeur |
 |---|---|
-| **Name** | `feves` (ou le nom de votre choix) |
+| **Name** | `lyannaj` (ou le nom de votre choix) |
 | **Region** | Frankfurt EU Central (pour la Guadeloupe, EU est recommandé) |
 | **Branch** | `main` |
 | **Runtime** | `Node` |
-| **Build Command** | `npm install && npx prisma generate && npx prisma db push && npm run build` |
-| **Start Command** | `node dist/index.js` |
+| **Build Command** | `npm install && npx prisma generate && npx prisma migrate deploy && npm run build` |
+| **Start Command** | `npm start` |
 | **Plan** | Free ou Starter |
 
-> **Note sur `prisma db push`** : cette commande applique automatiquement le schéma Prisma à la base de données à chaque déploiement. Elle est idempotente (sans danger à relancer). Pas besoin de migrations séparées.
+> **Start Command** : utiliser `npm start`, qui pointe sur le fichier réellement
+> produit par le build (`dist/index.cjs`) avec `NODE_ENV=production`. Écrire
+> `node dist/index.js` fait échouer le démarrage — ce fichier n'existe pas.
+
+> **Note sur `prisma migrate deploy`** : cette commande applique les migrations
+> versionnées de `prisma/migrations/` qui ne sont pas encore passées sur la base.
+> Elle est idempotente (sans danger à relancer) et ne fait rien d'autre.
+>
+> **Ne jamais utiliser `prisma db push` en production** : cette commande aligne
+> la base sur le schéma sans historique et peut supprimer une colonne — donc des
+> données — sans confirmation ni rollback possible. Voir `docs/DATABASE.md`.
 
 ---
 
@@ -80,9 +90,14 @@ Render vérifie que le service est démarré via une URL de santé. Configurez :
 
 | Paramètre | Valeur |
 |---|---|
-| **Health Check Path** | `/api/auth/me` |
+| **Health Check Path** | `/api/health` |
 
-Cette route retourne 401 si non connecté, mais un code HTTP 401 suffit à indiquer que le serveur fonctionne.
+Cette route est publique et vérifie aussi la connexion à la base : elle répond
+`200 {"status":"ok"}` si tout va bien, `503` si la base est injoignable. Render
+retire alors l'instance du trafic.
+
+> Ne pas utiliser `/api/auth/me` : cette route répond `401` quand personne n'est
+> connecté, ce que Render interprète comme un échec du service.
 
 ---
 
@@ -92,33 +107,57 @@ Cette route retourne 401 si non connecté, mais un code HTTP 401 suffit à indiq
 2. Suivez les logs de déploiement — les étapes importantes sont :
    - `npm install` — installation des dépendances
    - `npx prisma generate` — génération du client Prisma
-   - `npx prisma db push` — application du schéma sur la DB
+   - `npx prisma migrate deploy` — application des migrations en attente
    - `npm run build` — compilation TypeScript + Vite
 3. Une fois déployé, allez sur l'URL du service
-4. Pour peupler la base avec les données de test (une seule fois) :
-   - Dans le shell Render (onglet **Shell** du service), exécutez :
+4. Créer le compte administrateur initial. Dans le shell Render (onglet
+   **Shell** du service) :
    ```bash
-   npx tsx prisma/seed.ts
+   ADMIN_EMAIL=votre@email.fr \
+   ADMIN_PASSWORD='<mot de passe long et unique>' \
+   ADMIN_FIRST_NAME=Prenom \
+   ADMIN_LAST_NAME=Nom \
+     npx tsx prisma/create-admin.ts
    ```
+   Ce script est **additif** : il ne supprime rien et peut être relancé sans
+   risque (il réinitialise alors le mot de passe du compte).
+
+> **Ne jamais exécuter `npx tsx prisma/seed.ts` en production.** Ce script vide
+> toutes les tables — utilisateurs, rencontres, messages — avant de recréer des
+> données de démonstration. Il refuse désormais de tourner sur une base distante,
+> mais la garde ne remplace pas la vigilance.
 
 ---
 
-## 6. Persistance des fichiers uploadés
+## 6. Persistance des photos de profil
 
-> **Attention** : Sur Render en plan Free/Starter, le système de fichiers est **éphémère**. Les photos de profil uploadées dans `uploads/` sont perdues à chaque déploiement.
+Le système de fichiers de Render est **éphémère** : tout ce qui est écrit dans
+`uploads/` disparaît à chaque déploiement.
 
-**Solutions :**
+Les photos sont donc **stockées en base de données** (table `ProfilePhoto`).
+Aucun disque à monter, aucun service externe à configurer, et les photos
+entrent dans les sauvegardes PostgreSQL — ce qu'un disque monté ne permet pas.
 
-| Option | Recommandation |
-|---|---|
-| **Render Disks** (payant) | Monter un disque persistant sur `/uploads` dans les paramètres du service |
-| **Stockage objet externe** | Migrer vers AWS S3, Cloudflare R2 ou Backblaze B2 (nécessite refactoring) |
-| **Plan Free** | Acceptable pour les tests, pas pour la production |
+Chaque photo est redimensionnée (800 px max) et convertie en WebP à l'upload :
+environ 150 Ko par photo, soit ~75 Mo pour 500 utilisateurs.
 
-Pour configurer un **Render Disk** :
-1. Dans les paramètres du service → **Disks**
-2. **Mount Path** : `/uploads` (dans le dossier racine du projet)
-3. **Size** : 1 GB minimum
+### Migration des photos existantes
+
+Si une base contient déjà des photos référencées sur le disque, les importer
+une fois, via le shell Render :
+
+```bash
+npx tsx prisma/migrate-photos-to-db.ts            # simulation
+npx tsx prisma/migrate-photos-to-db.ts --apply    # import réel
+```
+
+Le script est additif et rejouable : il ne supprime aucun fichier et ignore
+les photos déjà en base. Les URL externes (avatars de démonstration) sont
+laissées telles quelles.
+
+> Tant que la migration n'a pas tourné, la route `/api/photos/:filename` sert
+> encore les photos depuis le disque en dernier recours. Cette compatibilité
+> pourra être retirée une fois tous les environnements migrés.
 
 ---
 
@@ -127,7 +166,7 @@ Pour configurer un **Render Disk** :
 Chaque push sur la branche `main` déclenche un déploiement automatique sur Render (si **Auto-Deploy** est activé). Le processus est :
 
 ```
-Push git → Render détecte → Build → prisma db push → Démarrage
+Push git → Render détecte → Build → prisma migrate deploy → Démarrage
 ```
 
 Aucune action manuelle n'est nécessaire pour les mises à jour normales.
@@ -146,13 +185,15 @@ Aucune action manuelle n'est nécessaire pour les mises à jour normales.
 
 ```bash
 # Build Command (Render)
-npm install && npx prisma generate && npx prisma db push && npm run build
+npm install && npx prisma generate && npx prisma migrate deploy && npm run build
 
 # Start Command (Render)
-node dist/index.js
+npm start
 
-# Seed données de test (une seule fois, via Shell Render)
-npx tsx prisma/seed.ts
+# Compte administrateur initial (via Shell Render) — additif, rejouable
+ADMIN_EMAIL=votre@email.fr ADMIN_PASSWORD='<long>' \
+ADMIN_FIRST_NAME=Prenom ADMIN_LAST_NAME=Nom \
+  npx tsx prisma/create-admin.ts
 
 # Générer SESSION_SECRET
 node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
@@ -160,3 +201,6 @@ node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 # Générer clés VAPID
 npx web-push generate-vapid-keys
 ```
+
+> **Jamais en production** : `prisma db push`, `prisma migrate reset`,
+> `npx tsx prisma/seed.ts`.

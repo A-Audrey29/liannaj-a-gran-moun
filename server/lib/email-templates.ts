@@ -1,3 +1,5 @@
+import { PLATFORM_NAME, PLATFORM_TAGLINE, PLATFORM_ATTRIBUTION } from "../../shared/branding";
+
 export function getValidationEmailHtml(
   validatorName: string | null,
   userName: string,
@@ -12,7 +14,7 @@ export function getValidationEmailHtml(
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Validation d'inscription FEVES</title>
+  <title>Validation d'inscription ${PLATFORM_NAME}</title>
 </head>
 <body style="margin:0;padding:0;background-color:#f8f4fc;font-family:Arial,Helvetica,sans-serif;">
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f8f4fc;padding:32px 16px;">
@@ -21,8 +23,8 @@ export function getValidationEmailHtml(
         <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;background-color:#ffffff;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.06);">
           <tr>
             <td style="background:linear-gradient(135deg,#e91e8c,#7c3aed);padding:28px 32px;text-align:center;">
-              <h1 style="margin:0;color:#ffffff;font-size:26px;font-weight:700;letter-spacing:1px;">FEVES</h1>
-              <p style="margin:6px 0 0;color:rgba(255,255,255,0.85);font-size:13px;">Favoriser les Echanges et la Valorisation Entre les Seniors</p>
+              <h1 style="margin:0;color:#ffffff;font-size:26px;font-weight:700;letter-spacing:1px;">${PLATFORM_NAME}</h1>
+              <p style="margin:6px 0 0;color:rgba(255,255,255,0.85);font-size:13px;">${PLATFORM_TAGLINE}</p>
             </td>
           </tr>
           <tr>
@@ -32,7 +34,7 @@ export function getValidationEmailHtml(
                 Une nouvelle inscription est en attente de votre validation.
               </p>
               <p style="margin:0 0 18px;color:#1f1f1f;font-size:15px;line-height:1.6;">
-                <strong>${userName}</strong> souhaite rejoindre FEVES et vous a d&eacute;sign&eacute;(e) comme r&eacute;f&eacute;rent(e).
+                <strong>${userName}</strong> souhaite rejoindre ${PLATFORM_NAME} et vous a d&eacute;sign&eacute;(e) comme r&eacute;f&eacute;rent(e).
               </p>
               <p style="margin:0 0 24px;color:#1f1f1f;font-size:15px;line-height:1.6;">
                 Cliquez sur le bouton ci-dessous pour valider son inscription&nbsp;:
@@ -60,7 +62,8 @@ export function getValidationEmailHtml(
           <tr>
             <td style="background-color:#f9fafb;padding:20px 32px;text-align:center;border-top:1px solid #e5e7eb;">
               <p style="margin:0;color:#9ca3af;font-size:12px;line-height:1.5;">
-                Cet email a &eacute;t&eacute; envoy&eacute; automatiquement par la plateforme FEVES.<br />
+                Cet email a &eacute;t&eacute; envoy&eacute; automatiquement par la plateforme ${PLATFORM_NAME}.<br />
+                ${PLATFORM_ATTRIBUTION}<br />
                 Si vous n'&ecirc;tes pas concern&eacute;(e), veuillez ignorer ce message.
               </p>
             </td>
@@ -88,8 +91,8 @@ function emailWrapper(title: string, bodyContent: string): string {
         <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;background-color:#ffffff;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.06);">
           <tr>
             <td style="background:linear-gradient(135deg,#e91e8c,#7c3aed);padding:28px 32px;text-align:center;">
-              <h1 style="margin:0;color:#ffffff;font-size:26px;font-weight:700;letter-spacing:1px;">FEVES</h1>
-              <p style="margin:6px 0 0;color:rgba(255,255,255,0.85);font-size:13px;">Favoriser les Echanges et la Valorisation Entre les Seniors</p>
+              <h1 style="margin:0;color:#ffffff;font-size:26px;font-weight:700;letter-spacing:1px;">${PLATFORM_NAME}</h1>
+              <p style="margin:6px 0 0;color:rgba(255,255,255,0.85);font-size:13px;">${PLATFORM_TAGLINE}</p>
             </td>
           </tr>
           <tr>
@@ -100,7 +103,8 @@ function emailWrapper(title: string, bodyContent: string): string {
           <tr>
             <td style="background-color:#f9fafb;padding:20px 32px;text-align:center;border-top:1px solid #e5e7eb;">
               <p style="margin:0;color:#9ca3af;font-size:12px;line-height:1.5;">
-                Cet email a &eacute;t&eacute; envoy&eacute; automatiquement par la plateforme FEVES.<br />
+                Cet email a &eacute;t&eacute; envoy&eacute; automatiquement par la plateforme ${PLATFORM_NAME}.<br />
+                ${PLATFORM_ATTRIBUTION}<br />
                 Si vous n'&ecirc;tes pas concern&eacute;(e), veuillez ignorer ce message.
               </p>
             </td>
@@ -124,7 +128,7 @@ export function getRelationAcceptedEmailHtml(
       Bonne nouvelle ! Votre demande de relation avec <strong>${juniorName}</strong> a &eacute;t&eacute; accept&eacute;e.
     </p>
     <p style="margin:0 0 18px;color:#1f1f1f;font-size:15px;line-height:1.6;">
-      Vous pouvez d&egrave;s maintenant planifier des interventions ensemble sur la plateforme FEVES.
+      Vous pouvez d&egrave;s maintenant planifier des interventions ensemble sur la plateforme ${PLATFORM_NAME}.
     </p>
     <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 auto 28px;">
       <tr>
@@ -135,7 +139,7 @@ export function getRelationAcceptedEmailHtml(
         </td>
       </tr>
     </table>`;
-  return emailWrapper("Relation accept\u00e9e - FEVES", body);
+  return emailWrapper(`Relation accept\u00e9e - ${PLATFORM_NAME}`, body);
 }
 
 export function getInterventionProposedEmailHtml(
@@ -175,7 +179,7 @@ export function getInterventionProposedEmailHtml(
         </td>
       </tr>
     </table>`;
-  return emailWrapper("Nouvelle intervention propos\u00e9e - FEVES", body);
+  return emailWrapper(`Nouvelle intervention propos\u00e9e - ${PLATFORM_NAME}`, body);
 }
 
 export function getInterventionConfirmedEmailHtml(
@@ -200,7 +204,7 @@ export function getInterventionConfirmedEmailHtml(
         </td>
       </tr>
     </table>`;
-  return emailWrapper("Intervention confirm\u00e9e - FEVES", body);
+  return emailWrapper(`Intervention confirm\u00e9e - ${PLATFORM_NAME}`, body);
 }
 
 export function getFeedbackReminderEmailHtml(
@@ -226,9 +230,9 @@ export function getFeedbackReminderEmailHtml(
       </tr>
     </table>
     <p style="margin:0 0 18px;color:#6b7280;font-size:13px;line-height:1.5;">
-      Ce retour aide &agrave; am&eacute;liorer la qualit&eacute; des &eacute;changes sur la plateforme FEVES.
+      Ce retour aide &agrave; am&eacute;liorer la qualit&eacute; des &eacute;changes sur la plateforme ${PLATFORM_NAME}.
     </p>`;
-  return emailWrapper("Rappel : donnez votre avis - FEVES", body);
+  return emailWrapper(`Rappel : donnez votre avis - ${PLATFORM_NAME}`, body);
 }
 
 export function getNewReportEmailHtml(
@@ -273,7 +277,7 @@ export function getNewReportEmailHtml(
         </td>
       </tr>
     </table>`;
-  return emailWrapper("Nouveau signalement - FEVES", body);
+  return emailWrapper(`Nouveau signalement - ${PLATFORM_NAME}`, body);
 }
 
 export function getNewAdminNotificationEmailHtml(
@@ -306,5 +310,5 @@ export function getNewAdminNotificationEmailHtml(
         </td>
       </tr>
     </table>`;
-  return emailWrapper("Notification admin - FEVES", body);
+  return emailWrapper(`Notification admin - ${PLATFORM_NAME}`, body);
 }

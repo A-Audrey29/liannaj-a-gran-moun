@@ -16,7 +16,7 @@ async function getWebPush() {
 function getVapidKeys() {
   const publicKey = process.env.VAPID_PUBLIC_KEY;
   const privateKey = process.env.VAPID_PRIVATE_KEY;
-  const subject = process.env.VAPID_SUBJECT || "mailto:contact@feves.fr";
+  const subject = process.env.VAPID_SUBJECT || "mailto:contact@lyannaj.fr";
   return { publicKey, privateKey, subject };
 }
 
