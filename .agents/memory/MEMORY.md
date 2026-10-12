@@ -1,3 +1,4 @@
 - [Teacher feature](teacher-feature.md) — rôle TEACHER + TeacherStudent + TeacherComment; Internship (stages) retiré 2026-09-16, hors sujet Lyannaj.
 - [Blockers connus](blockers.md) — 3 points de dette + zones jamais testées, trouvés lors du QA du 2026-09-09/10, à traiter avant prod.
 - [Roadmap](roadmap.md) — auto-inscription référent/prof avec mdp temporaire, reportée le 2026-09-16.
+- [Incidents DB](incidents.md) — 2026-10-07 : `migrate dev --create-only` a quand même appliqué une migration en attente sur Neon prod, jamais relancer cette commande sans check `migrate status` d'abord.
