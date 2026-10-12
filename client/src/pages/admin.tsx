@@ -70,6 +70,7 @@ import {
   AlertTriangle,
   CheckCheck,
   GraduationCap,
+  ThumbsUp,
 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import type { User, Relation, Intervention, PaymentRecord, Notification } from "@shared/schema";
@@ -77,6 +78,7 @@ import { ATELIERS } from "@shared/ateliers";
 import { isMeetingOverdue } from "@shared/meeting-check";
 import { CREDIT_OFFERS } from "@shared/credit-offers";
 import MessagerieAdminTab from "@/components/admin-messages-tab";
+import SatisfactionTab from "@/components/admin-satisfaction-tab";
 import { fmtTime, fmtDayLongMonthYear, gpParts } from "@/lib/availability-format";
 
 type SafeUser = Omit<User, "password" | "validationToken" | "validationExpiry">;
@@ -93,6 +95,7 @@ const ADMIN_TABS = [
   { id: "messagerie", label: "Messagerie", icon: MessageSquare },
   { id: "paiements", label: "Paiements", icon: CreditCard },
   { id: "signalements", label: "Signalements", icon: Flag },
+  { id: "satisfaction", label: "Satisfaction", icon: ThumbsUp },
   { id: "notifications", label: "Notifications", icon: Bell },
   { id: "mon-compte", label: "Mon compte", icon: UserCog },
 ] as const;
@@ -2248,6 +2251,7 @@ export default function Admin() {
       {activeTab === "messagerie" && <MessagerieAdminTab />}
       {activeTab === "paiements" && <PaiementsTab />}
       {activeTab === "signalements" && <SignalementsTab />}
+      {activeTab === "satisfaction" && <SatisfactionTab />}
       {activeTab === "notifications" && <NotificationsAdminTab />}
       {activeTab === "mon-compte" && <MonCompteTab />}
     </div>

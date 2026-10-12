@@ -25,6 +25,7 @@ import { MobileTabsMenu } from "@/components/mobile-tabs-menu";
 import MeetingHistory from "@/components/meeting-history";
 import { fmtTime, fmtDayLongMonthYear } from "@/lib/availability-format";
 import { CreditOffersCard } from "@/components/credit-offers-card";
+import { NpsPrompt } from "@/components/nps-prompt";
 
 type RelationWithUsers = Relation & { senior: UserType; junior: UserType; interventions?: Intervention[] };
 
@@ -97,6 +98,7 @@ function DashboardTab({ senior, relations }: { senior: UserType | null; relation
 
   return (
     <div className="space-y-6">
+      <NpsPrompt />
       {senior && (
         <Card data-testid="card-linked-senior">
           <CardContent className="pt-6">
