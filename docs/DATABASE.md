@@ -91,6 +91,7 @@ npx tsx prisma/seed.ts
 | `20260824000100_add_reminder_and_email_tracking` | `Intervention.reminderSentAt` (idempotence du rappel J-1), `Notification.emailSentAt` / `emailError` (traçabilité des envois Brevo). |
 | `20260827000000_profile_photo_in_db` | Table `ProfilePhoto` (photos stockées en base, disque Render éphémère). |
 | `20260907000000_add_credit_ledger` | Table `CreditLedger` et enum `CreditMovementType` (système de crédits prépayés pour les ateliers). Migration additive, sans impact sur les tables existantes. |
+| `20261007111325_add_meeting_check_reminder` | Valeur `MEETING_CHECK` sur l'enum `NotificationType`, colonne `Intervention.meetingCheckReminderSentAt` (idempotence de la relance « la rencontre a-t-elle eu lieu ? »). Additive. Appliquée sur Neon avant d'avoir son rollback : celui-ci est dans `down.sql` (le `migration.sql` n'est plus modifiable, son empreinte est vérifiée par Prisma). Postgres ne sachant pas retirer une valeur d'enum, le rollback recrée le type. |
 
 > **Note sur la table `session`** : elle est créée par `connect-pg-simple` et
 > n'existe pas dans `schema.prisma` (aucun accès via le client Prisma). Une

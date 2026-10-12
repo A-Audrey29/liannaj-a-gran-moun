@@ -27,6 +27,13 @@ toujours 3 lignes — pas de perte de données malgré le warning. Le drop
 annoncé par le warning n'a en fait pas eu lieu (la commande s'est arrêtée
 avant d'exécuter le SQL de la migration suivante).
 
+**Correction du 2026-10-12** : `npx prisma migrate status` (lecture seule)
+sur Neon indique « Database schema is up to date » avec
+`20261007111325_add_meeting_check_reminder` comprise. Cette migration est
+donc bien appliquée sur Neon (par cet incident ou plus tard, impossible à
+dire). Conséquence : son fichier SQL ne doit plus être modifié, et son
+rollback est documenté dans `docs/DATABASE.md`.
+
 **Root cause** : mauvaise hypothèse sur ce que fait `--create-only`, combinée
 à l'absence d'environnement de dev isolé. Aucune des deux règles
 "jamais `migrate dev`/`db push` sur la base avec des données réelles" n'a été
