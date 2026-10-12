@@ -19,6 +19,7 @@ import { Calendar as CalendarWidget } from "@/components/ui/calendar";
 import { Calendar, Plus, Trash2, AlertTriangle } from "lucide-react";
 import type { Availability } from "@shared/schema";
 import { fmtDayLong, fmtTime, gpDecimalHour, JOURS_LONGS } from "@/lib/availability-format";
+import { gpDateTimeToUtc, gpDayISO } from "@shared/dates";
 
 const GRID_START_HOUR = 8;
 const GRID_END_HOUR = 20;
@@ -56,8 +57,7 @@ function addDaysISO(iso: string, days: number): string {
 
 const SOMMAIRE = [
   { id: "section-recurrentes", label: "1. Dispos récurrentes" },
-  { id: "section-exceptions", label: "2. Exceptions" },
-  { id: "section-calendrier", label: "3. Calendrier" },
+  { id: "section-calendrier", label: "2. Calendrier" },
 ];
 
 function scrollToSection(id: string) {
@@ -104,10 +104,6 @@ export default function DisponibilitesTab() {
 
       <div id="section-recurrentes">
         <RecurringForm availabilities={availabilities || []} />
-      </div>
-
-      <div id="section-exceptions">
-        <ExceptionForm />
       </div>
 
       <div id="section-calendrier">
@@ -238,70 +234,13 @@ function RecurringForm({ availabilities }: { availabilities: Availability[] }) {
   );
 }
 
-function ExceptionForm() {
-  const { toast } = useToast();
-  const [date, setDate] = useState("");
-  const [kind, setKind] = useState<"AVAILABLE" | "UNAVAILABLE">("UNAVAILABLE");
-
-  const submit = useMutation({
-    mutationFn: async () => {
-      await apiRequest("POST", "/api/availabilities/exception", { date, kind });
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/availabilities/me"] });
-      toast({ title: "Journée mise à jour" });
-      setDate("");
-    },
-    onError: () => toast({ title: "Erreur", variant: "destructive" }),
-  });
-
-  return (
-    <Card className="rounded-2xl border-0 shadow-sm">
-      <CardContent className="py-6">
-        <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1">Un jour particulier</h4>
-        <p className="text-xs text-muted-foreground mb-4">Pour signaler une journée exceptionnelle (absent ou disponible en plus de d'habitude).</p>
-
-        <div className="flex flex-wrap items-end gap-3">
-          <div>
-            <Label>Date</Label>
-            <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} data-testid="input-exception-date" />
-          </div>
-          <div className="flex gap-2">
-            <Button
-              type="button"
-              variant={kind === "UNAVAILABLE" ? "default" : "outline"}
-              className={kind === "UNAVAILABLE" ? "rounded-full bg-[#dc4256] hover:bg-[#c73848] text-white" : "rounded-full"}
-              onClick={() => setKind("UNAVAILABLE")}
-              data-testid="button-kind-unavailable"
-            >
-              Je ne suis pas disponible
-            </Button>
-            <Button
-              type="button"
-              variant={kind === "AVAILABLE" ? "default" : "outline"}
-              className={kind === "AVAILABLE" ? "rounded-full bg-emerald-600 hover:bg-emerald-700 text-white" : "rounded-full"}
-              onClick={() => setKind("AVAILABLE")}
-              data-testid="button-kind-available"
-            >
-              Je suis disponible toute la journée
-            </Button>
-          </div>
-          <Button
-            className="rounded-full"
-            variant="secondary"
-            onClick={() => submit.mutate()}
-            disabled={submit.isPending || !date}
-            data-testid="button-submit-exception"
-          >
-            <Plus className="w-4 h-4 mr-1" /> Ajouter
-          </Button>
-        </div>
-      </CardContent>
-    </Card>
-  );
+/** Clé du jour GP pour un instant UTC réel (ex: Availability.startAt). */
+function dayKey(d: Date): string {
+  return gpDayISO(d);
 }
 
-function dayKey(d: Date): string {
+/** Clé du jour pour un Date "calendrier" local (ex: `selected` du day-picker, pas un instant réel). */
+function localDayKey(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
@@ -326,8 +265,9 @@ function CalendarView({ availabilities }: { availabilities: Availability[] }) {
     mutationFn: async ({ date, startTime, endTime }: { date: Date; startTime: string; endTime: string }) => {
       const [sh, sm] = startTime.split(":").map(Number);
       const [eh, em] = endTime.split(":").map(Number);
-      const startAt = new Date(date.getFullYear(), date.getMonth(), date.getDate(), sh, sm);
-      const endAt = new Date(date.getFullYear(), date.getMonth(), date.getDate(), eh, em);
+      const dayISO = localDayKey(date);
+      const startAt = gpDateTimeToUtc(dayISO, sh, sm);
+      const endAt = gpDateTimeToUtc(dayISO, eh, em);
       await apiRequest("POST", "/api/availabilities", {
         startAt: startAt.toISOString(),
         endAt: endAt.toISOString(),
@@ -369,7 +309,7 @@ function CalendarView({ availabilities }: { availabilities: Availability[] }) {
     [byDay]
   );
 
-  const selectedSlots = selected ? byDay.get(dayKey(selected)) || [] : [];
+  const selectedSlots = selected ? byDay.get(localDayKey(selected)) || [] : [];
 
   return (
     <Card className="rounded-2xl border-0 shadow-sm">

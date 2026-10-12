@@ -3,6 +3,73 @@
 Journal des choix d'architecture et de leurs raisons. Une entrée par décision,
 la plus récente en haut.
 
+## 2026-09-14 — Paiement en ligne des crédits via Stripe Checkout
+
+**Contexte.** La décision du 2026-09-07 excluait Stripe du MVP (achat 100%
+admin manuel). Revenu dessus : le parcours admin-only demandait un
+aller-retour humain à chaque achat, non tenable au-delà de quelques seniors.
+
+**Décision — provider abstrait, pas de couplage direct au SDK Stripe.**
+`server/lib/payment-provider.ts` définit un contrat (`PaymentProvider`)
+indépendant du prestataire ; `server/lib/stripe-provider.ts` l'implémente.
+Routes et webhook n'importent jamais `stripe` directement — changer de
+prestataire = nouvelle implémentation du contrat + changer l'export dans
+`payment-provider.ts`.
+
+**Décision — webhook idempotent, toujours 200 après signature valide.**
+`POST /api/webhooks/payment` déduplique par `stripeSessionId` et renvoie 200
+même en cas d'erreur métier post-validation, pour éviter que Stripe ne
+retente indéfiniment un événement qu'on ne peut de toute façon pas traiter
+différemment. Nécessite le body brut (`req.rawBody`, capturé dans
+`server/app.ts`) pour la vérification de signature — jamais le body déjà
+parsé en JSON.
+
+**Le parcours admin manuel (`POST /api/admin/payments`) reste actif** en
+parallèle, pour les cas où un aidant paie hors ligne.
+
+**Non traité par ce changement** (voir `.agents/memory/blockers.md`) : le
+solde crédit peut passer négatif si un admin valide deux interventions
+`CONFIRMED` coup sur coup sur un solde à 1 — `completeIntervention` ne
+revérifie pas le solde au moment du décompte, seule la création le bloque.
+
+## 2026-09-07 — Crédits prépayés : 1 crédit = 1 atelier, décompte à la complétion
+
+**Contexte.** La facturation était 100% manuelle et déclarative : un admin
+saisit un `PaymentRecord` (montant + libellé) qui active juste un booléen
+`subscriptionActive`, sans aucune notion de quantité ni de contrôle bloquant.
+On passe à un modèle où le Senior (ou son aidant) achète un pack de N crédits,
+1 crédit = 1 atelier consommé.
+
+**Décision 1 — solde par Senior, historisé.** Le solde de crédits appartient
+toujours au Senior, jamais à l'aidant/référent même quand c'est lui qui paie
+(`linkedSeniorId` résolu côté route admin). Il est dérivé d'un historique
+`CreditLedger` (achats, consommations, ajustements), pas d'un compteur brut,
+pour rester justifiable en cas de litige aidant/senior.
+
+**Décision 2 — décompte à la complétion, pas à la création.** Le crédit est
+retiré au passage `CONFIRMED` → `COMPLETED_PENDING_FEEDBACK`
+(`storage.completeIntervention`), le seul point de non-retour du cycle de vie
+actuel (`CANCELLED` n'est plus possible après). Décrémenter plus tôt aurait
+demandé une logique de remboursement en cas d'annulation.
+
+**Décision 3 — première rencontre gratuite sous 30 minutes.** La toute
+première rencontre d'une relation (`PENDING_FIRST_MEETING`) ne consomme pas de
+crédit tant que sa durée prévue ne dépasse pas 30 minutes ; au-delà, elle est
+traitée comme n'importe quelle rencontre suivante. Seule la durée **prévue** à
+la création compte, jamais une durée réelle mesurée après coup.
+
+**Décision 4 — blocage à la création, pas à la complétion.** Solde à 0 → 402
+sur les trois chemins de création d'intervention, avec message et code
+`INSUFFICIENT_CREDITS`. Un solde négatif au moment de la complétion (cas des
+rencontres déjà engagées avant l'introduction du système) n'est pas bloqué :
+il documente une dette plutôt que de figer une intervention déjà confirmée
+sans porte de sortie.
+
+**Pas de paiement en ligne.** L'achat reste un geste admin via le formulaire
+`POST /api/admin/payments` existant, étendu d'un champ `credits` optionnel —
+cohérent avec la cible (seniors peu digital-native, aidants souvent payeurs à
+distance) et évite d'introduire Stripe/checkout pour ce MVP.
+
 ## 2026-08-13 — Historique des rencontres : endpoint unique et feedbacks cloisonnés
 
 **Contexte.** Chaque rôle devait disposer d'un historique/récap des rencontres

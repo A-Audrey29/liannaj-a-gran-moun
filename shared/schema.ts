@@ -365,6 +365,11 @@ export const createPaymentSchema = z.object({
   amount: z.number().positive("Montant doit être positif"),
   label: z.string().min(1, "Libellé requis"),
   date: z.string().optional(),
+  credits: z.number().int().positive().optional(),
+});
+
+export const checkoutSchema = z.object({
+  offerId: z.string().min(1, "Offre requise"),
 });
 
 export const changePasswordSchema = z.object({

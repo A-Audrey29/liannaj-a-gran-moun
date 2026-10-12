@@ -78,6 +78,10 @@ const envSchema = z.object({
       message: "VAPID_SUBJECT doit commencer par 'mailto:' ou 'https://' (exigence de la spéc. Web Push)",
     })
     .optional(),
+
+  STRIPE_SECRET_KEY: z.string().startsWith("sk_", "STRIPE_SECRET_KEY doit commencer par sk_").optional(),
+  STRIPE_WEBHOOK_SECRET: z.string().startsWith("whsec_", "STRIPE_WEBHOOK_SECRET doit commencer par whsec_").optional(),
+  STRIPE_PUBLISHABLE_KEY: z.string().startsWith("pk_", "STRIPE_PUBLISHABLE_KEY doit commencer par pk_").optional(),
 });
 
 export type Env = z.infer<typeof envSchema>;
@@ -105,6 +109,12 @@ function loadEnv(): Env {
       "Notifications push (VAPID)"
     )
   );
+  errors.push(
+    ...allOrNothing(
+      ["STRIPE_SECRET_KEY", "STRIPE_WEBHOOK_SECRET", "STRIPE_PUBLISHABLE_KEY"],
+      "Paiement en ligne (Stripe)"
+    )
+  );
 
   if (errors.length > 0) {
     console.error(
@@ -128,6 +138,9 @@ function loadEnv(): Env {
     }
     if (!env.VAPID_PUBLIC_KEY) {
       console.warn("[ENV] VAPID non configuré : les notifications push sont désactivées.");
+    }
+    if (!env.STRIPE_SECRET_KEY) {
+      console.warn("[ENV] Stripe non configuré : l'achat de crédits en ligne est désactivé.");
     }
   }
 

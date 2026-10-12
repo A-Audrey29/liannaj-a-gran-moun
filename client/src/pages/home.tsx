@@ -30,6 +30,7 @@ import { useSSE } from "@/hooks/use-sse";
 import { useUnreadMessageCount } from "@/hooks/use-unread-count";
 import { usePushNotifications } from "@/hooks/use-push";
 import { fmtTime, gpParts, MOIS_LONGS } from "@/lib/availability-format";
+import { CreditOffersCard } from "@/components/credit-offers-card";
 
 type RelationWithUsers = Relation & { senior: UserType; junior: UserType; interventions?: Intervention[] };
 type MatchSuggestion = { user: UserType; commonCategories: string[]; isRecommended: boolean; isFavorite: boolean };
@@ -121,6 +122,10 @@ export default function Home() {
 
   const { data: relations, isLoading: relLoading } = useQuery<RelationWithUsers[]>({ queryKey: ["/api/relations"] });
   const { data: pendingFB } = useQuery<Intervention[]>({ queryKey: ["/api/interventions/pending-feedback"] });
+  const { data: creditData } = useQuery<{ balance: number }>({
+    queryKey: ["/api/credits/balance"],
+    enabled: user?.role === "SENIOR",
+  });
 
   const counts = useDashboardCounts(relations, pendingFB, user);
 
@@ -159,7 +164,17 @@ export default function Home() {
       )}
 
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl md:text-3xl font-bold" data-testid="text-mon-espace">Bonjour {user?.firstName}</h1>
+        <div className="flex items-center gap-3">
+          <h1 className="text-2xl md:text-3xl font-bold" data-testid="text-mon-espace">Bonjour {user?.firstName}</h1>
+          {user?.role === "SENIOR" && creditData && (
+            <span
+              className="px-3 py-1 rounded-full text-sm font-medium bg-[#dc4256]/10 text-[#dc4256]"
+              data-testid="badge-credit-balance"
+            >
+              {creditData.balance} crédit{creditData.balance > 1 ? "s" : ""}
+            </span>
+          )}
+        </div>
         {isNotAdmin && (
           <button
             onClick={() => setActiveTab("aide")}
@@ -173,6 +188,12 @@ export default function Home() {
           </button>
         )}
       </div>
+
+      {user?.role === "SENIOR" && creditData && (
+        <div className="mb-6">
+          <CreditOffersCard />
+        </div>
+      )}
 
       {user?.role === "SENIOR" && relLoading && (
         <Skeleton className="w-full mb-6 rounded-2xl h-14" data-testid="skeleton-proposer-rencontre-permanent" />

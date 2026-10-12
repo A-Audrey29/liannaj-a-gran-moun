@@ -30,6 +30,8 @@ const TeacherHome = lazy(() => import("@/pages/teacher"));
 const MentionsLegales = lazy(() => import("@/pages/mentions-legales"));
 const PolitiqueConfidentialite = lazy(() => import("@/pages/politique-confidentialite"));
 const CGU = lazy(() => import("@/pages/cgu"));
+const CreditsSuccess = lazy(() => import("@/pages/credits-success"));
+const CreditsCancel = lazy(() => import("@/pages/credits-cancel"));
 
 function AdminGuard({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
@@ -76,6 +78,12 @@ function Router() {
         </Route>
         <Route path="/relations/:id">
           <AuthGuard><RelationDetail /></AuthGuard>
+        </Route>
+        <Route path="/credits/success">
+          <AuthGuard><CreditsSuccess /></AuthGuard>
+        </Route>
+        <Route path="/credits/cancel">
+          <AuthGuard><CreditsCancel /></AuthGuard>
         </Route>
         {/* Accessibles sans authentification : un visiteur doit pouvoir les
             lire avant de créer un compte. */}

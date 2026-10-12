@@ -24,6 +24,7 @@ import { useSSE } from "@/hooks/use-sse";
 import { MobileTabsMenu } from "@/components/mobile-tabs-menu";
 import MeetingHistory from "@/components/meeting-history";
 import { fmtTime, fmtDayLongMonthYear } from "@/lib/availability-format";
+import { CreditOffersCard } from "@/components/credit-offers-card";
 
 type RelationWithUsers = Relation & { senior: UserType; junior: UserType; interventions?: Intervention[] };
 
@@ -80,6 +81,7 @@ type TabId = typeof TABS[number]["id"];
 // ==================== DASHBOARD TAB ====================
 
 function DashboardTab({ senior, relations }: { senior: UserType | null; relations: RelationWithUsers[] }) {
+  const { data: creditData } = useQuery<{ balance: number }>({ queryKey: ["/api/credits/balance"] });
   const activeRelations = relations.filter((r) => r.status === "ACTIVE");
   const pendingRelations = relations.filter((r) => r.status === "PENDING" || r.status === "PENDING_FIRST_MEETING");
 
@@ -102,17 +104,32 @@ function DashboardTab({ senior, relations }: { senior: UserType | null; relation
                 alt={`${senior.firstName} ${senior.lastName}`}
                 className="w-14 h-14 rounded-full object-cover"
               />
-              <div>
+              <div className="flex-1">
                 <p className="text-sm text-muted-foreground">Sénior lié</p>
                 <p className="text-lg font-bold" data-testid="text-senior-name">
                   {senior.firstName} {senior.lastName}
                 </p>
                 <p className="text-sm text-muted-foreground">{senior.city || ""}</p>
               </div>
+              {creditData && (
+                <div className="text-right">
+                  <p className="text-2xl font-bold text-[#dc4256]" data-testid="text-credit-balance">
+                    {creditData.balance}
+                  </p>
+                  <p className="text-xs text-muted-foreground">crédit{creditData.balance > 1 ? "s" : ""}</p>
+                </div>
+              )}
             </div>
+            {creditData && creditData.balance <= 0 && (
+              <p className="text-sm text-amber-700 bg-amber-50 rounded-lg px-3 py-2 mt-4">
+                Le solde de crédits est épuisé. Achetez un nouveau pack ci-dessous.
+              </p>
+            )}
           </CardContent>
         </Card>
       )}
+
+      {senior && creditData && <CreditOffersCard />}
 
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
         <Card>

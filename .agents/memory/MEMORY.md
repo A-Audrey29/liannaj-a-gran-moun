@@ -1,1 +1,2 @@
 - [Teacher feature](teacher-feature.md) — rôle TEACHER + TeacherStudent + TeacherComment + Internship ajoutés; db push utilisé (pas migrate) car pas de migration history.
+- [Blockers connus](blockers.md) — 3 points de dette + zones jamais testées, trouvés lors du QA du 2026-09-09/10, à traiter avant prod.

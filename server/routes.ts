@@ -20,8 +20,10 @@ import {
   getInterventionConfirmedEmailHtml,
   getFeedbackReminderEmailHtml,
   getNewReportEmailHtml,
+  getCreditPurchaseConfirmedEmailHtml,
+  getNegativeCreditBalanceEmailHtml,
 } from "./lib/email-templates";
-import { insertUserSchema, createRelationSchema, insertInterventionSchema, feedbackSchema, createPaymentSchema, changePasswordSchema, createAdminSchema, insertReportSchema, createAvailabilitySchema, createRecurringAvailabilitiesSchema, createDateExceptionSchema, updateUserCategoriesSchema, meetingHistoryQuerySchema, COMPLETED_STATUSES } from "../shared/schema";
+import { insertUserSchema, createRelationSchema, insertInterventionSchema, feedbackSchema, createPaymentSchema, checkoutSchema, changePasswordSchema, createAdminSchema, insertReportSchema, createAvailabilitySchema, createRecurringAvailabilitiesSchema, createDateExceptionSchema, updateUserCategoriesSchema, meetingHistoryQuerySchema, COMPLETED_STATUSES } from "../shared/schema";
 import type { MeetingHistoryEntry, MeetingHistoryResponse, MeetingHistorySummary, Role } from "../shared/schema";
 import type { MeetingHistoryScope } from "./storage";
 import { createRecurringAvailabilities, createDateException, deleteAvailability, isWithinAvailability, hasInterventionConflict } from "./lib/availability";
@@ -29,6 +31,9 @@ import { addSSEClient, sendSSEEvent, isUserConnected } from "./lib/sse";
 import { fmtDayNumeric, fmtTime } from "../shared/dates";
 import { PLATFORM_NAME } from "../shared/branding";
 import { sendPushNotification, getVapidPublicKey } from "./lib/push";
+import { paymentProvider } from "./lib/payment-provider";
+import { findCreditOffer } from "../shared/credit-offers";
+import { env } from "./env";
 
 const TAILLE_MAX_PHOTO = 5 * 1024 * 1024;
 
@@ -247,6 +252,14 @@ const registerLimiter = rateLimit({
   legacyHeaders: false,
 });
 
+const checkoutLimiter = rateLimit({
+  windowMs: 10 * 60 * 1000,
+  limit: isDev ? 1000 : 10,
+  message: { message: "Trop de tentatives d'achat. Réessayez dans 10 minutes." },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
 /** Côté le plus long d'une photo de profil après redimensionnement. */
 const PHOTO_TAILLE_MAX_PX = 800;
 
@@ -324,17 +337,41 @@ async function validateSlot(
 
 const SLOT_CONFLICT_MESSAGE = "Une autre rencontre est déjà prévue sur ce créneau.";
 const LOCK_CONTENTION_MESSAGE = "Une autre action est en cours sur ce créneau, veuillez réessayer dans un instant.";
+const NO_CREDITS_MESSAGE = "Le solde de crédits du senior est épuisé. Veuillez acheter un nouveau pack pour continuer.";
+const FREE_FIRST_MEETING_MAX_MINUTES = 30;
+
+/**
+ * La toute première rencontre d'une relation est gratuite tant qu'elle ne
+ * dépasse pas 30 minutes prévues — au-delà, elle consomme un crédit comme
+ * n'importe quelle rencontre suivante. Seule la durée prévue à la création
+ * compte, pas une durée réelle mesurée après coup.
+ */
+function isFreeFirstMeeting(relationStatus: string, durationMinutes: number): boolean {
+  return relationStatus === "PENDING_FIRST_MEETING" && durationMinutes <= FREE_FIRST_MEETING_MAX_MINUTES;
+}
 
 /**
  * Crée la rencontre via createInterventionSafe (verrou + re-check du conflit
  * dans la transaction), pour fermer la fenêtre de course entre validateSlot()
  * et l'insertion : deux requêtes concurrentes sur le même jeune ne peuvent
  * plus toutes les deux passer la vérification.
+ *
+ * Vérifie aussi le solde de crédits du Senior avant création, sauf pour la
+ * première rencontre gratuite (cf isFreeFirstMeeting) — un seul point d'entrée
+ * pour ce contrôle, partagé par les trois chemins de création.
  */
 async function createInterventionOrConflict(
   juniorId: string,
+  seniorId: string,
+  relationStatus: string,
   data: { relationId: string; scheduledDate: Date; durationMinutes: number; location?: string; tasks?: string[] }
 ) {
+  if (!isFreeFirstMeeting(relationStatus, data.durationMinutes)) {
+    const balance = await storage.getCreditBalance(seniorId);
+    if (balance <= 0) {
+      return { noCredits: true as const };
+    }
+  }
   return storage.createInterventionSafe(juniorId, data, (tx) =>
     hasInterventionConflict(juniorId, data.scheduledDate, data.durationMinutes, tx)
   );
@@ -1093,13 +1130,16 @@ export async function registerRoutes(
         return res.status(400).json({ message: slotError });
       }
 
-      const result = await createInterventionOrConflict(relation.juniorId, {
+      const result = await createInterventionOrConflict(relation.juniorId, relation.seniorId, relation.status, {
         relationId: parsed.data.relationId,
         scheduledDate,
         durationMinutes: parsed.data.durationMinutes,
         location: parsed.data.location,
         tasks: parsed.data.tasks,
       });
+      if ("noCredits" in result) {
+        return res.status(402).json({ message: NO_CREDITS_MESSAGE, code: "INSUFFICIENT_CREDITS" });
+      }
       if ("conflict" in result) {
         return res.status(400).json({ message: SLOT_CONFLICT_MESSAGE });
       }
@@ -1186,7 +1226,12 @@ export async function registerRoutes(
         return res.status(400).json({ message: "L'intervention doit être confirmée avant d'être marquée comme réalisée" });
       }
 
-      const updated = await storage.updateIntervention(intervention.id, { status: "COMPLETED_PENDING_FEEDBACK" });
+      const updated = await storage.completeIntervention(
+        intervention.id,
+        intervention.relation.seniorId,
+        req.user!.id,
+        isFreeFirstMeeting(intervention.relation.status, intervention.durationMinutes),
+      );
 
       if (intervention.relation.status === "PENDING_FIRST_MEETING") {
         await storage.updateRelationStatus(intervention.relationId, "ACTIVE");
@@ -1195,6 +1240,42 @@ export async function registerRoutes(
 
       const seniorId = intervention.relation.seniorId;
       const juniorId = intervention.relation.juniorId;
+
+      // Cas rare : plusieurs interventions CONFIRMED simultanées sur un solde
+      // insuffisant peuvent faire passer le solde en négatif à la validation.
+      // On ne bloque jamais la complétion elle-même (l'intervention n'a plus
+      // de porte de sortie une fois COMPLETED_PENDING_FEEDBACK, CANCELLED
+      // n'étant plus possible) — on se contente d'avertir le sénior et son
+      // référent, le blocage réel se fait déjà à la création de toute
+      // nouvelle intervention (solde <= 0 → 402).
+      const balanceAfter = await storage.getCreditBalance(seniorId);
+      if (balanceAfter < 0) {
+        const seniorForAlert = await storage.getUser(seniorId);
+        const referents = await storage.getReferentsBySeniorId(seniorId);
+        const alertRecipients = [seniorForAlert, ...referents].filter(
+          (u): u is NonNullable<typeof u> => !!u
+        );
+        for (const recipient of alertRecipients) {
+          await storage.createNotification({
+            user: { connect: { id: recipient.id } },
+            type: "SYSTEM",
+            title: "Solde de crédits négatif",
+            message: `Le solde de crédits est de ${balanceAfter}. Un rattrapage est nécessaire pour organiser de nouvelles rencontres.`,
+            link: `/relations/${intervention.relationId}`,
+          });
+          if (recipient.email && seniorForAlert) {
+            sendEmail({
+              to: recipient.email,
+              subject: `Solde de crédits négatif — ${PLATFORM_NAME}`,
+              htmlContent: getNegativeCreditBalanceEmailHtml(
+                `${recipient.firstName} ${recipient.lastName}`,
+                `${seniorForAlert.firstName} ${seniorForAlert.lastName}`,
+                balanceAfter
+              ),
+            }).catch(console.error);
+          }
+        }
+      }
 
       await storage.createNotification({
         user: { connect: { id: seniorId } },
@@ -1776,11 +1857,28 @@ export async function registerRoutes(
       }
       const user = await storage.getUser(parsed.data.userId);
       if (!user) return res.status(404).json({ message: "Utilisateur non trouvé" });
+
+      let creditSeniorId: string | null = null;
+      if (parsed.data.credits) {
+        if (user.role === "SENIOR") {
+          creditSeniorId = user.id;
+        } else if (user.role === "REFERENT_SENIOR" && user.linkedSeniorId) {
+          creditSeniorId = user.linkedSeniorId;
+        } else {
+          return res.status(400).json({
+            message: "Impossible d'attribuer des crédits : cet utilisateur n'est ni un senior, ni un référent lié à un senior",
+          });
+        }
+      }
+
       const payment = await storage.createPayment({
         userId: parsed.data.userId,
         amount: parsed.data.amount,
         label: parsed.data.label,
         date: parsed.data.date ? new Date(parsed.data.date) : undefined,
+        credits: parsed.data.credits,
+        creditSeniorId,
+        triggeredById: req.user!.id,
       });
       res.status(201).json(payment);
     } catch (err) {
@@ -2570,13 +2668,16 @@ export async function registerRoutes(
         return res.status(400).json({ message: slotError });
       }
 
-      const result = await createInterventionOrConflict(relation.juniorId, {
+      const result = await createInterventionOrConflict(relation.juniorId, relation.seniorId, relation.status, {
         relationId: parsed.data.relationId,
         scheduledDate,
         durationMinutes: parsed.data.durationMinutes,
         location: parsed.data.location,
         tasks: parsed.data.tasks,
       });
+      if ("noCredits" in result) {
+        return res.status(402).json({ message: NO_CREDITS_MESSAGE, code: "INSUFFICIENT_CREDITS" });
+      }
       if ("conflict" in result) {
         return res.status(400).json({ message: SLOT_CONFLICT_MESSAGE });
       }
@@ -2600,6 +2701,139 @@ export async function registerRoutes(
     } catch (err) {
       console.error("[REFERENT_INTERVENTION] Error:", err);
       res.status(500).json({ message: "Erreur lors de la création de l'intervention" });
+    }
+  });
+
+  app.get("/api/credits/balance", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as any;
+      let seniorId: string;
+      if (user.role === "SENIOR") {
+        seniorId = user.id;
+      } else if (user.role === "REFERENT_SENIOR" && user.linkedSeniorId) {
+        seniorId = user.linkedSeniorId;
+      } else if (user.role === "ADMIN" && typeof req.query.seniorId === "string") {
+        seniorId = req.query.seniorId;
+      } else {
+        return res.status(400).json({ message: "Impossible de déterminer le solde de crédits pour cet utilisateur" });
+      }
+      const balance = await storage.getCreditBalance(seniorId);
+      res.json({ balance });
+    } catch (err) {
+      console.error("[CREDITS_BALANCE] Error:", err);
+      res.status(500).json({ message: "Erreur" });
+    }
+  });
+
+  app.post("/api/credits/checkout", requireAuth, checkoutLimiter, async (req, res) => {
+    try {
+      if (!paymentProvider.isConfigured()) {
+        return res.status(503).json({ message: "Le paiement en ligne n'est pas disponible actuellement." });
+      }
+
+      const parsed = checkoutSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: "Données invalides", errors: parsed.error.flatten() });
+      }
+      const offer = findCreditOffer(parsed.data.offerId);
+      if (!offer) {
+        return res.status(400).json({ message: "Offre invalide" });
+      }
+
+      const user = req.user as any;
+      let seniorId: string;
+      if (user.role === "SENIOR") {
+        seniorId = user.id;
+      } else if (user.role === "REFERENT_SENIOR" && user.linkedSeniorId) {
+        seniorId = user.linkedSeniorId;
+      } else {
+        return res.status(400).json({ message: "Seul un sénior ou un référent lié à un sénior peut acheter des crédits" });
+      }
+
+      const baseUrl = getBaseUrl(req);
+      const { url } = await paymentProvider.createCheckoutSession({
+        offerId: offer.id,
+        offerLabel: offer.label,
+        priceEuros: offer.priceEuros,
+        seniorId,
+        purchasedByUserId: user.id,
+        successUrl: `${baseUrl}/credits/success`,
+        cancelUrl: `${baseUrl}/credits/cancel`,
+      });
+
+      res.json({ url });
+    } catch (err) {
+      console.error("[CREDITS_CHECKOUT] Error:", err);
+      res.status(500).json({ message: "Erreur lors de la création du paiement" });
+    }
+  });
+
+  app.post("/api/webhooks/payment", async (req, res) => {
+    if (!paymentProvider.isConfigured()) return res.status(503).send();
+
+    const event = paymentProvider.verifyWebhookAndExtract(
+      req.rawBody as Buffer,
+      req.headers["stripe-signature"] as string | undefined
+    );
+    if (!event) {
+      return res.status(400).send("Webhook invalide");
+    }
+
+    // Événement valide à partir d'ici : toujours 200, même en cas d'erreur
+    // métier, pour éviter que le prestataire ne réessaie indéfiniment un
+    // événement qu'on ne pourra jamais traiter différemment.
+    try {
+      const existing = await storage.getPaymentByStripeSessionId(event.externalSessionId);
+      if (existing) {
+        return res.status(200).send();
+      }
+
+      const offer = findCreditOffer(event.metadata.offerId);
+      if (!offer) {
+        console.error(`[PAYMENT_WEBHOOK] Offre inconnue "${event.metadata.offerId}" sur ${event.externalSessionId}`);
+        return res.status(200).send();
+      }
+
+      const { seniorId, purchasedByUserId } = event.metadata;
+
+      await storage.createPayment({
+        userId: purchasedByUserId,
+        amount: event.amountPaidEuros,
+        label: `Achat en ligne — ${offer.label}`,
+        credits: offer.credits,
+        creditSeniorId: seniorId,
+        triggeredById: purchasedByUserId,
+        stripeSessionId: event.externalSessionId,
+      });
+
+      try {
+        const senior = await storage.getUser(seniorId);
+        const balance = await storage.getCreditBalance(seniorId);
+        if (senior) {
+          await sendEmail({
+            to: senior.email,
+            subject: `Confirmation de votre achat — ${PLATFORM_NAME}`,
+            htmlContent: getCreditPurchaseConfirmedEmailHtml(`${senior.firstName} ${senior.lastName}`, offer.label, balance),
+          });
+        }
+        if (purchasedByUserId !== seniorId) {
+          const payeur = await storage.getUser(purchasedByUserId);
+          if (payeur) {
+            await sendEmail({
+              to: payeur.email,
+              subject: `Confirmation de votre achat — ${PLATFORM_NAME}`,
+              htmlContent: getCreditPurchaseConfirmedEmailHtml(`${payeur.firstName} ${payeur.lastName}`, offer.label, balance),
+            });
+          }
+        }
+      } catch (emailErr) {
+        console.error("[PAYMENT_WEBHOOK] Échec envoi email:", emailErr);
+      }
+
+      res.status(200).send();
+    } catch (err) {
+      console.error("[PAYMENT_WEBHOOK] Erreur de traitement:", err);
+      res.status(200).send();
     }
   });
 

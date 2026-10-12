@@ -1,5 +1,5 @@
 import { prisma } from "./prisma";
-import type { User, Category, UserCategory, Relation, Intervention, AdminRecommendation, Notification, PaymentRecord, Favorite, Conversation, Message, PushSubscription, Report, TeacherStudent, TeacherComment, Internship, Availability, Prisma } from "../generated/prisma/client.ts";
+import type { User, Category, UserCategory, Relation, Intervention, AdminRecommendation, Notification, PaymentRecord, Favorite, Conversation, Message, PushSubscription, Report, TeacherStudent, TeacherComment, Internship, Availability, CreditLedger, Prisma } from "../generated/prisma/client.ts";
 
 /**
  * Périmètre d'un historique de rencontres. Construit serveur à partir du rôle
@@ -21,6 +21,7 @@ export interface MeetingHistoryFilters {
 export interface IStorage {
   getUser(id: string): Promise<User | null>;
   getUserByEmail(email: string): Promise<User | null>;
+  getReferentsBySeniorId(seniorId: string): Promise<User[]>;
   getUserByValidationToken(token: string): Promise<User | null>;
   createUser(data: Prisma.UserCreateInput): Promise<User>;
   updateUser(id: string, data: Prisma.UserUpdateInput): Promise<User>;
@@ -54,6 +55,7 @@ export interface IStorage {
     checkConflict: (tx: Prisma.TransactionClient) => Promise<boolean>
   ): Promise<{ intervention: Intervention } | { conflict: true } | { locked: true }>;
   updateIntervention(id: string, data: Prisma.InterventionUpdateInput): Promise<Intervention>;
+  completeIntervention(interventionId: string, seniorId: string, triggeredById: string, isFreeFirstMeeting: boolean): Promise<Intervention>;
   getPendingFeedbackInterventions(userId: string): Promise<(Intervention & { relation: Relation })[]>;
   getPendingFeedbackForReminder(): Promise<(Intervention & { relation: Relation & { senior: User; junior: User } })[]>;
   updateInterventionFeedbackReminderSent(id: string): Promise<Intervention>;
@@ -101,8 +103,11 @@ export interface IStorage {
   deleteUser(id: string): Promise<void>;
   getAllRelations(): Promise<(Relation & { senior: User; junior: User })[]>;
   getAllRelationsByStatus(status: string): Promise<(Relation & { senior: User; junior: User })[]>;
-  createPayment(data: { userId: string; amount: number; label: string; date?: Date }): Promise<PaymentRecord>;
+  createPayment(data: { userId: string; amount: number; label: string; date?: Date; credits?: number; creditSeniorId?: string | null; triggeredById: string; stripeSessionId?: string | null }): Promise<PaymentRecord>;
   getPayments(): Promise<(PaymentRecord & { user: User })[]>;
+  getPaymentByStripeSessionId(stripeSessionId: string): Promise<PaymentRecord | null>;
+  getCreditBalance(seniorId: string): Promise<number>;
+  getCreditLedger(seniorId: string): Promise<CreditLedger[]>;
   getAllInterventions(): Promise<(Intervention & { relation: Relation & { senior: User; junior: User } })[]>;
 
   addFavorite(seniorId: string, juniorId: string): Promise<Favorite>;
@@ -175,6 +180,10 @@ class DatabaseStorage implements IStorage {
 
   async getUserByEmail(email: string): Promise<User | null> {
     return prisma.user.findUnique({ where: { email } });
+  }
+
+  async getReferentsBySeniorId(seniorId: string): Promise<User[]> {
+    return prisma.user.findMany({ where: { linkedSeniorId: seniorId } });
   }
 
   async getUserByValidationToken(token: string): Promise<User | null> {
@@ -586,22 +595,76 @@ class DatabaseStorage implements IStorage {
     });
   }
 
-  async createPayment(data: { userId: string; amount: number; label: string; date?: Date }): Promise<PaymentRecord> {
-    const [payment] = await prisma.$transaction([
-      prisma.paymentRecord.create({
+  async createPayment(data: { userId: string; amount: number; label: string; date?: Date; credits?: number; creditSeniorId?: string | null; triggeredById: string; stripeSessionId?: string | null }): Promise<PaymentRecord> {
+    return prisma.$transaction(async (tx) => {
+      const payment = await tx.paymentRecord.create({
         data: {
           userId: data.userId,
           amount: data.amount,
           label: data.label,
           date: data.date || new Date(),
+          stripeSessionId: data.stripeSessionId ?? null,
         },
-      }),
-      prisma.user.update({
+      });
+      await tx.user.update({
         where: { id: data.userId },
         data: { subscriptionActive: true },
-      }),
-    ]);
-    return payment;
+      });
+      if (data.credits && data.creditSeniorId) {
+        await tx.creditLedger.create({
+          data: {
+            seniorId: data.creditSeniorId,
+            type: "PURCHASE",
+            amount: data.credits,
+            reason: `Achat pack ${data.credits} crédit(s) (${data.label})`,
+            triggeredById: data.triggeredById,
+            paymentRecordId: payment.id,
+          },
+        });
+      }
+      return payment;
+    });
+  }
+
+  async getPaymentByStripeSessionId(stripeSessionId: string): Promise<PaymentRecord | null> {
+    return prisma.paymentRecord.findUnique({ where: { stripeSessionId } });
+  }
+
+  async getCreditBalance(seniorId: string): Promise<number> {
+    const result = await prisma.creditLedger.aggregate({
+      where: { seniorId },
+      _sum: { amount: true },
+    });
+    return result._sum.amount ?? 0;
+  }
+
+  async getCreditLedger(seniorId: string): Promise<CreditLedger[]> {
+    return prisma.creditLedger.findMany({
+      where: { seniorId },
+      orderBy: { createdAt: "desc" },
+    });
+  }
+
+  async completeIntervention(interventionId: string, seniorId: string, triggeredById: string, isFreeFirstMeeting: boolean): Promise<Intervention> {
+    return prisma.$transaction(async (tx) => {
+      const updated = await tx.intervention.update({
+        where: { id: interventionId },
+        data: { status: "COMPLETED_PENDING_FEEDBACK" },
+      });
+      if (!isFreeFirstMeeting) {
+        await tx.creditLedger.create({
+          data: {
+            seniorId,
+            type: "CONSUMPTION",
+            amount: -1,
+            reason: "Consommation d'un crédit — intervention réalisée",
+            triggeredById,
+            interventionId,
+          },
+        });
+      }
+      return updated;
+    });
   }
 
   async getPayments(): Promise<(PaymentRecord & { user: User })[]> {

@@ -83,6 +83,8 @@ npx tsx prisma/seed.ts
 |---|---|
 | `20260824000000_init` | Baseline. Schéma complet à la mise en place des migrations, **marquée comme déjà appliquée** (`migrate resolve --applied`) sur la base existante qui contenait déjà des données. Inclut la table `session` de `connect-pg-simple`. |
 | `20260824000100_add_reminder_and_email_tracking` | `Intervention.reminderSentAt` (idempotence du rappel J-1), `Notification.emailSentAt` / `emailError` (traçabilité des envois Brevo). |
+| `20260827000000_profile_photo_in_db` | Table `ProfilePhoto` (photos stockées en base, disque Render éphémère). |
+| `20260907000000_add_credit_ledger` | Table `CreditLedger` et enum `CreditMovementType` (système de crédits prépayés pour les ateliers). Migration additive, sans impact sur les tables existantes. |
 
 > **Note sur la table `session`** : elle est créée par `connect-pg-simple` et
 > n'existe pas dans `schema.prisma` (aucun accès via le client Prisma). Une
@@ -147,6 +149,15 @@ Types de notifications in-app.
 | `FEEDBACK_REMINDER` | Rappel de feedback en attente |
 | `NEW_MESSAGE` | Nouveau message reçu (présent dans le schéma, non utilisé activement) |
 | `SYSTEM` | Message système générique |
+
+### `CreditMovementType`
+Type de mouvement dans l'historique de crédits d'un Senior.
+
+| Valeur | Description |
+|---|---|
+| `PURCHASE` | Achat d'un pack de crédits, enregistré par un admin |
+| `CONSUMPTION` | Décompte d'un crédit à la complétion d'une intervention facturable |
+| `ADJUSTMENT` | Correction manuelle par un admin (erreur, geste commercial) |
 
 ---
 
@@ -252,6 +263,25 @@ Historique des paiements enregistrés par l'admin.
 | `amount` | Float | Montant |
 | `label` | String | Libellé du paiement |
 | `date` | DateTime | Date du paiement |
+
+### `CreditLedger`
+Historique des mouvements de crédits d'un Senior (achats, consommations,
+ajustements). Le solde d'un Senior est toujours dérivé de la somme des
+`amount` de ses entrées, jamais stocké comme compteur séparé.
+
+| Champ | Type | Description |
+|---|---|---|
+| `seniorId` | String | Senior propriétaire du solde (jamais l'aidant/référent, même si c'est lui qui paie) |
+| `type` | CreditMovementType | PURCHASE / CONSUMPTION / ADJUSTMENT |
+| `amount` | Int | Signé : positif pour un achat, négatif pour une consommation |
+| `reason` | String | Explication lisible du mouvement |
+| `triggeredById` | String? | Admin ayant déclenché le mouvement |
+| `interventionId` | String? | Intervention concernée (pour une CONSUMPTION) |
+| `paymentRecordId` | String? | Paiement à l'origine du mouvement (pour un PURCHASE) |
+
+> La première rencontre d'une relation (`PENDING_FIRST_MEETING`) est gratuite
+> par défaut et ne génère pas de CONSUMPTION, sauf si sa durée prévue dépasse
+> 30 minutes.
 
 ### `Report`
 Signalement d'un utilisateur par un autre.

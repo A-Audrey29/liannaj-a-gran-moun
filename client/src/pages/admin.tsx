@@ -76,6 +76,7 @@ import {
 import { useAuth } from "@/hooks/use-auth";
 import type { User, Relation, Intervention, PaymentRecord, Notification } from "@shared/schema";
 import { ATELIERS } from "@shared/ateliers";
+import { CREDIT_OFFERS } from "@shared/credit-offers";
 import MessagerieAdminTab from "@/components/admin-messages-tab";
 import { fmtTime, fmtDayLongMonthYear, gpParts } from "@/lib/availability-format";
 
@@ -706,7 +707,7 @@ function CadrageTab() {
   const [selectedRelation, setSelectedRelation] = useState<RelationWithUsers | null>(null);
   const [formData, setFormData] = useState({
     scheduledDate: "",
-    durationMinutes: 120,
+    durationMinutes: 30,
     location: "",
     tasks: [] as string[],
   });
@@ -732,7 +733,7 @@ function CadrageTab() {
       queryClient.invalidateQueries({ queryKey: ["/api/relations"] });
       setDialogOpen(false);
       setSelectedRelation(null);
-      setFormData({ scheduledDate: "", durationMinutes: 120, location: "", tasks: [] });
+      setFormData({ scheduledDate: "", durationMinutes: 30, location: "", tasks: [] });
       toast({ title: "1ère rencontre organisée" });
     },
     onError: () => {
@@ -837,7 +838,7 @@ function CadrageTab() {
                 min={30}
                 max={480}
                 value={formData.durationMinutes}
-                onChange={(e) => setFormData({ ...formData, durationMinutes: parseInt(e.target.value) || 120 })}
+                onChange={(e) => setFormData({ ...formData, durationMinutes: parseInt(e.target.value) || 30 })}
                 data-testid="input-cadrage-duration"
               />
             </div>
@@ -890,6 +891,13 @@ function CadrageTab() {
 // ==================== FICHE PROFIL DIALOG ====================
 
 function ProfileDialog({ user, open, onOpenChange }: { user: SafeUser | null; open: boolean; onOpenChange: (v: boolean) => void }) {
+  const creditSeniorId = user?.role === "SENIOR" ? user.id : user?.role === "REFERENT_SENIOR" ? user.linkedSeniorId : null;
+  const { data: creditData } = useQuery<{ balance: number }>({
+    queryKey: ["/api/credits/balance", creditSeniorId],
+    queryFn: () => apiRequest("GET", `/api/credits/balance?seniorId=${creditSeniorId}`).then((res) => res.json()),
+    enabled: open && !!creditSeniorId,
+  });
+
   if (!user) return null;
 
   const fields: { label: string; value: string | null | undefined; show?: boolean }[] = [
@@ -908,6 +916,7 @@ function ProfileDialog({ user, open, onOpenChange }: { user: SafeUser | null; op
     { label: "Personne de confiance", value: user.trustedPersonName },
     { label: "Email personne de confiance", value: user.trustedPersonEmail },
     { label: "Abonnement", value: user.subscriptionActive ? "Actif" : "Inactif" },
+    { label: "Solde de crédits", value: creditData ? `${creditData.balance} crédit(s)` : null, show: !!creditSeniorId },
     { label: "Inscrit le", value: formatDate(user.createdAt) },
   ];
 
@@ -938,6 +947,11 @@ function ProfileDialog({ user, open, onOpenChange }: { user: SafeUser | null; op
             </div>
           ))}
         </div>
+        {creditData && creditData.balance < 0 && (
+          <p className="text-sm text-red-700 bg-red-50 rounded-lg px-3 py-2 mt-4" data-testid="alert-negative-credit-balance">
+            Solde de crédits négatif — un rattrapage est nécessaire.
+          </p>
+        )}
       </DialogContent>
     </Dialog>
   );
@@ -1116,6 +1130,7 @@ function PaiementsTab() {
     amount: "",
     label: "",
     date: new Date().toISOString().split("T")[0],
+    credits: "",
   });
 
   const { data: payments = [], isLoading } = useQuery<PaymentWithUser[]>({ queryKey: ["/api/admin/payments"] });
@@ -1124,13 +1139,13 @@ function PaiementsTab() {
   const eligibleUsers = users.filter((u) => u.role !== "ADMIN" && u.status === "ACTIVE");
 
   const createMut = useMutation({
-    mutationFn: (data: { userId: string; amount: number; label: string; date?: string }) =>
+    mutationFn: (data: { userId: string; amount: number; label: string; date?: string; credits?: number }) =>
       apiRequest("POST", "/api/admin/payments", data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/payments"] });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
       setDialogOpen(false);
-      setFormData({ userId: "", amount: "", label: "", date: new Date().toISOString().split("T")[0] });
+      setFormData({ userId: "", amount: "", label: "", date: new Date().toISOString().split("T")[0], credits: "" });
       toast({ title: "Paiement enregistré", description: "L'abonnement a été activé." });
     },
     onError: () => {
@@ -1146,6 +1161,7 @@ function PaiementsTab() {
       amount: parseFloat(formData.amount),
       label: formData.label,
       date: formData.date || undefined,
+      credits: formData.credits ? parseInt(formData.credits, 10) : undefined,
     });
   }
 
@@ -1155,6 +1171,24 @@ function PaiementsTab() {
 
   return (
     <div>
+      <div className="rounded-2xl border bg-muted/30 p-4 mb-6" data-testid="section-credit-offers">
+        <p className="text-sm font-semibold mb-1">Offres de crédits en ligne (Stripe)</p>
+        <p className="text-xs text-muted-foreground mb-3">
+          Lecture seule — ces prix sont fixés dans le code (<code>shared/credit-offers.ts</code>),
+          pas modifiables depuis cet écran. Changer un montant nécessite un déploiement.
+        </p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {CREDIT_OFFERS.map((offer) => (
+            <div key={offer.id} className="rounded-xl border bg-background px-4 py-3" data-testid={`row-offer-${offer.id}`}>
+              <p className="text-sm font-medium">{offer.label}</p>
+              <p className="text-xs text-muted-foreground mt-1">
+                {offer.credits} crédit{offer.credits > 1 ? "s" : ""} — {offer.priceEuros} €
+              </p>
+            </div>
+          ))}
+        </div>
+      </div>
+
       <div className="flex justify-end mb-4">
         <Button
           className="bg-[#dc4256] hover:bg-[#c53a4d] text-white"
@@ -1256,6 +1290,22 @@ function PaiementsTab() {
                 onChange={(e) => setFormData({ ...formData, date: e.target.value })}
                 data-testid="input-payment-date"
               />
+            </div>
+            <div>
+              <Label htmlFor="payment-credits">Crédits accordés (ateliers)</Label>
+              <Input
+                id="payment-credits"
+                type="number"
+                step="1"
+                min="1"
+                value={formData.credits}
+                onChange={(e) => setFormData({ ...formData, credits: e.target.value })}
+                placeholder="Ex: 5 (laisser vide si aucun crédit)"
+                data-testid="input-payment-credits"
+              />
+              <p className="text-xs text-muted-foreground mt-1">
+                Si l'utilisateur est un référent, les crédits sont attribués à son senior lié.
+              </p>
             </div>
             <DialogFooter>
               <Button type="submit" className="bg-[#dc4256] hover:bg-[#c53a4d]" disabled={createMut.isPending} data-testid="btn-submit-payment">

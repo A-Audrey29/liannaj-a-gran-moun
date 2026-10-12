@@ -55,6 +55,12 @@ enum NotificationType {
   SYSTEM
 }
 
+enum CreditMovementType {
+  PURCHASE
+  CONSUMPTION
+  ADJUSTMENT
+}
+
 model User {
   id                  String     @id @default(cuid())
   email               String     @unique
@@ -108,6 +114,9 @@ model User {
   isRecommendedFor        AdminRecommendation[] @relation("IsRecommendedFor")
 
   payments            PaymentRecord[]
+
+  creditLedgerEntries      CreditLedger[] @relation("SeniorCreditLedger")
+  triggeredCreditMovements CreditLedger[] @relation("TriggeredCreditMovements")
 
   reportsFiled        Report[] @relation("Reporter")
   reportsReceived     Report[] @relation("Target")
@@ -220,6 +229,8 @@ model Intervention {
 
   createdAt       DateTime           @default(now())
 
+  creditLedgerEntries CreditLedger[]
+
   @@index([relationId, status])
   @@index([status, scheduledDate])
 }
@@ -269,7 +280,34 @@ model PaymentRecord {
   date      DateTime @default(now())
   createdAt DateTime @default(now())
 
+  // Rempli uniquement pour un achat en ligne (Stripe Checkout). Unique :
+  // garantit qu'un webhook rejoue ne credite jamais deux fois le meme achat.
+  // Null pour les paiements manuels admin.
+  stripeSessionId String? @unique
+
+  creditLedgerEntries CreditLedger[]
+
   @@index([userId])
+}
+
+model CreditLedger {
+  id              String             @id @default(cuid())
+  seniorId        String
+  senior          User               @relation("SeniorCreditLedger", fields: [seniorId], references: [id], onDelete: Cascade)
+  type            CreditMovementType
+  amount          Int
+  reason          String
+  triggeredById   String?
+  triggeredBy     User?              @relation("TriggeredCreditMovements", fields: [triggeredById], references: [id], onDelete: SetNull)
+  interventionId  String?
+  intervention    Intervention?      @relation(fields: [interventionId], references: [id], onDelete: SetNull)
+  paymentRecordId String?
+  paymentRecord   PaymentRecord?     @relation(fields: [paymentRecordId], references: [id], onDelete: SetNull)
+  createdAt       DateTime           @default(now())
+
+  @@index([seniorId])
+  @@index([seniorId, createdAt])
+  @@index([interventionId])
 }
 
 model Report {

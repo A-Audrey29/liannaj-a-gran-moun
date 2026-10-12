@@ -33,7 +33,7 @@ export async function resetDatabase() {
   await prisma.$executeRawUnsafe(`
     TRUNCATE TABLE
       "Report", "Favorite", "UserCategory", "AdminRecommendation",
-      "Message", "Conversation", "Intervention", "Availability",
+      "Message", "Conversation", "CreditLedger", "Intervention", "Availability",
       "Relation", "Notification", "PaymentRecord", "PushSubscription",
       "TeacherComment", "TeacherStudent", "Internship", "Category", "User",
       "session"
@@ -106,6 +106,22 @@ export async function createRelation(
 ) {
   return prisma.relation.create({
     data: { seniorId, juniorId, status },
+  });
+}
+
+/**
+ * Credite un senior pour les tests qui creent une intervention sur une
+ * relation ACTIVE : sans credit, la creation est refusee (402) avant meme
+ * d'atteindre la logique testee (double-booking, permissions, etc).
+ */
+export async function crediterSenior(seniorId: string, credits = 10) {
+  return prisma.creditLedger.create({
+    data: {
+      seniorId,
+      type: "PURCHASE",
+      amount: credits,
+      reason: "Credit de test",
+    },
   });
 }
 
