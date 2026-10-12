@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Calendar, Clock, MapPin, Download, Loader2, ChevronRight, Users } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import StatusBadge from "@/components/status-badge";
 import StarRating from "@/components/star-rating";
@@ -39,6 +40,14 @@ const STATUS_FILTERS = [
   { id: "COMPLETED", label: "Terminées" },
   { id: "CANCELLED", label: "Annulées" },
 ];
+
+/** Passée et jamais clôturée par les participants : à traiter par un admin. */
+function isOverdue(entry: MeetingHistoryEntry): boolean {
+  return (
+    (entry.status === "PROPOSED" || entry.status === "CONFIRMED") &&
+    new Date(entry.scheduledDate).getTime() < Date.now()
+  );
+}
 
 /** 135 → "2h15", 120 → "2h", 45 → "45 min". */
 export function fmtDuration(minutes: number): string {
@@ -90,7 +99,13 @@ export default function MeetingHistory({
 
   const entries = data?.entries ?? [];
   const summary = data?.summary;
-  const filtered = filter === "all" ? entries : entries.filter((e) => e.status === filter);
+  const overdueCount = entries.filter(isOverdue).length;
+  const filtered =
+    filter === "all"
+      ? entries
+      : filter === "OVERDUE"
+        ? entries.filter(isOverdue)
+        : entries.filter((e) => e.status === filter);
 
   function exportCSV() {
     const header = [
@@ -185,6 +200,19 @@ export default function MeetingHistory({
               {f.label}
             </button>
           ))}
+          {viewerRole === "ADMIN" && overdueCount > 0 && (
+            <button
+              onClick={() => setFilter("OVERDUE")}
+              className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
+                filter === "OVERDUE"
+                  ? "bg-red-600 text-white"
+                  : "bg-red-50 text-red-700 hover:bg-red-100 border border-red-200"
+              }`}
+              data-testid="filter-history-OVERDUE"
+            >
+              À traiter ({overdueCount})
+            </button>
+          )}
         </div>
         {showExport && (
           <Button
@@ -279,6 +307,15 @@ function MeetingRow({
               )}
             </div>
             <div className="flex items-center gap-2 shrink-0">
+              {isOverdue(entry) && (
+                <Badge
+                  variant="outline"
+                  className="text-xs font-medium bg-red-100 text-red-800 border-red-200"
+                  data-testid={`badge-overdue-${entry.id}`}
+                >
+                  En retard
+                </Badge>
+              )}
               <StatusBadge status={entry.status} />
               <ChevronRight
                 className={`w-4 h-4 text-muted-foreground transition-transform ${isExpanded ? "rotate-90" : ""}`}
