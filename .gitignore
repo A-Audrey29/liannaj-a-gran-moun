@@ -15,3 +15,9 @@ vite.config.ts.*
 # (Une photo de demo est deja suivie dans l'historique : ce filtre ne
 # concerne que les nouveaux fichiers.)
 /uploads/*
+
+# Outils locaux : captures/logs de session Playwright, reglages Claude Code
+# personnels, fichier workspace VS Code. Propres a chaque poste.
+.playwright-mcp/
+.claude/settings.local.json
+*.code-workspace
