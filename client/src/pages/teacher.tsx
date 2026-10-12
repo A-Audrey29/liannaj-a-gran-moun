@@ -386,6 +386,7 @@ function RelationsSection({ data }: { data: StudentDetail }) {
         ).length;
         const nextMeeting = relInterventions
           .filter((i) => i.status === "CONFIRMED" || i.status === "PROPOSED")
+          .filter((i) => new Date(i.scheduledDate).getTime() >= Date.now())
           .sort(
             (a, b) =>
               new Date(a.scheduledDate).getTime() - new Date(b.scheduledDate).getTime()

@@ -2632,6 +2632,27 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/credits/history", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as any;
+      let seniorId: string;
+      if (user.role === "SENIOR") {
+        seniorId = user.id;
+      } else if (user.role === "REFERENT_SENIOR" && user.linkedSeniorId) {
+        seniorId = user.linkedSeniorId;
+      } else if (user.role === "ADMIN" && typeof req.query.seniorId === "string") {
+        seniorId = req.query.seniorId;
+      } else {
+        return res.status(400).json({ message: "Impossible de déterminer l'historique de crédits pour cet utilisateur" });
+      }
+      const history = await storage.getCreditLedger(seniorId);
+      res.json(history);
+    } catch (err) {
+      console.error("[CREDITS_HISTORY] Error:", err);
+      res.status(500).json({ message: "Erreur" });
+    }
+  });
+
   app.post("/api/credits/checkout", requireAuth, checkoutLimiter, async (req, res) => {
     try {
       if (!paymentProvider.isConfigured()) {
