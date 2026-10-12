@@ -127,6 +127,11 @@ export interface IStorage {
 
   getUserCategories(userId: string): Promise<(UserCategory & { category: Category })[]>;
   createUserCategory(userId: string, categoryId: string): Promise<UserCategory>;
+  /**
+   * Replaces the user's ateliers in one transaction. Returns false (and
+   * changes nothing) if any id is not an existing category.
+   */
+  replaceUserCategories(userId: string, categoryIds: string[]): Promise<boolean>;
   deleteUserCategories(userId: string): Promise<void>;
 
   getRelation(id: string): Promise<Relation | null>;
@@ -326,6 +331,17 @@ class DatabaseStorage implements IStorage {
   async createUserCategory(userId: string, categoryId: string): Promise<UserCategory> {
     return prisma.userCategory.create({
       data: { userId, categoryId },
+    });
+  }
+
+  async replaceUserCategories(userId: string, categoryIds: string[]): Promise<boolean> {
+    const ids = [...new Set(categoryIds)];
+    return prisma.$transaction(async (tx) => {
+      const known = await tx.category.count({ where: { id: { in: ids } } });
+      if (known !== ids.length) return false;
+      await tx.userCategory.deleteMany({ where: { userId } });
+      await tx.userCategory.createMany({ data: ids.map((categoryId) => ({ userId, categoryId })) });
+      return true;
     });
   }
 

@@ -572,12 +572,15 @@ export async function registerRoutes(
       if (!parsed.success) {
         return res.status(400).json({ message: "Données invalides", errors: parsed.error.flatten() });
       }
-      await storage.deleteUserCategories(req.user!.id);
-      for (const categoryId of parsed.data.categoryIds) {
-        await storage.createUserCategory(req.user!.id, categoryId);
+      // One transaction: a failure can no longer leave the user with a
+      // partial or empty list of ateliers.
+      const ok = await storage.replaceUserCategories(req.user!.id, parsed.data.categoryIds);
+      if (!ok) {
+        return res.status(400).json({ message: "Atelier inconnu" });
       }
-      res.json({ categoryIds: parsed.data.categoryIds });
+      res.json({ categoryIds: [...new Set(parsed.data.categoryIds)] });
     } catch (err) {
+      console.error("[UPDATE_MY_CATEGORIES] Error:", err);
       res.status(500).json({ message: "Erreur lors de la mise à jour des ateliers" });
     }
   });

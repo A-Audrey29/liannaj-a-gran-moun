@@ -314,7 +314,7 @@ export const createRelationSchema = z.object({
 });
 
 export const updateUserCategoriesSchema = z.object({
-  categoryIds: z.array(z.string()),
+  categoryIds: z.array(z.string().min(1)).max(100),
 });
 
 export type UpdateUserCategoriesInput = z.infer<typeof updateUserCategoriesSchema>;
