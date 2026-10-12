@@ -6,6 +6,9 @@ import type { Prisma } from "../../generated/prisma/client.ts";
 
 export { overlaps };
 
+/** Longest meeting accepted by the creation schemas (durationMinutes max). */
+const MAX_MEETING_MINUTES = 480;
+
 /** Intervalles occupés par des rencontres (début, début + durée). */
 function meetingIntervals(interventions: { scheduledDate: Date; durationMinutes: number }[]) {
   return interventions.map((i) => ({
@@ -86,7 +89,9 @@ export async function createDateException(
     // a meeting outside their availability. They should decline it instead.
     const [existing, planned] = await Promise.all([
       storage.getAvailabilitiesInRange(userId, rangeStart, rangeEnd),
-      storage.getActiveInterventionsForUser(userId, rangeStart, rangeEnd),
+      // A meeting that started before the range can still run into it: look
+      // back by the longest possible meeting, the overlap test does the rest.
+      storage.getActiveInterventionsForUser(userId, new Date(rangeStart.getTime() - MAX_MEETING_MINUTES * 60_000), rangeEnd),
     ]);
     const protectedIntervals = meetingIntervals(planned);
 

@@ -151,3 +151,25 @@ describe("exception sur une rencontre proposee", () => {
     expect(await actif(occupe.id)).toBe(true);
   });
 });
+
+describe("exception qui commence pendant une rencontre", () => {
+  it("protege une rencontre commencee avant la plage de l'exception", async () => {
+    const junior = await createUser("JUNIOR");
+    const senior = await createUser("SENIOR");
+    const relation = await createRelation(senior.id, junior.id);
+    // Creneau 08:00-12:00 GP le 4 novembre ; rencontre 09:00-11:00 GP.
+    const creneauMatin = await creneau(junior.id, {
+      startAt: new Date("2026-11-04T12:00:00Z"),
+      endAt: new Date("2026-11-04T16:00:00Z"),
+    });
+    await prisma.intervention.create({
+      data: { relationId: relation.id, status: "CONFIRMED", scheduledDate: new Date("2026-11-04T13:00:00Z"), durationMinutes: 120 },
+    });
+
+    await (await loginAs(junior))
+      .post("/api/availabilities/exception")
+      .send({ date: "2026-11-04", kind: "UNAVAILABLE", startTime: "10:00", endTime: "12:00" });
+
+    expect(await actif(creneauMatin.id)).toBe(true);
+  });
+});

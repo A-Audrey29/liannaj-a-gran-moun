@@ -29,7 +29,9 @@ notification dans l'appli est la garantie (créée avec le marquage, dans une
 transaction), l'e-mail est best effort. Rappel de feedback (e-mail seul) :
 la rencontre est marquée dès qu'un destinataire a été servi ; si **tous**
 les envois échouent (panne Brevo), personne n'a rien reçu et on retente à la
-passe suivante. Avant, un échec empêchait le marquage et le destinataire
+passe suivante, jusqu'à 7 jours après la rencontre (au-delà, abandon
+journalisé : sinon une adresse définitivement invalide serait retentée sans
+fin). Avant, un échec empêchait le marquage et le destinataire
 servi recevait le même e-mail toutes les 6h, sans fin si l'autre adresse
 était invalide.
 
@@ -65,14 +67,18 @@ Le résultat est stocké dans `Intervention.isFree` (migration
 rencontres prévues non gratuites, le débit à la complétion lit le drapeau.
 Recalculer à la complétion dépendait de l'ordre de clôture (une payante
 clôturée avant la gratuite faisait passer la relation ACTIVE, et la gratuite
-était débitée à son tour). Si la rencontre gratuite est annulée, la suivante
-redevient gratuite.
+était débitée à son tour). Si la rencontre gratuite est annulée, le
+drapeau passe à la plus ancienne rencontre courte encore prévue sur la
+relation (`cancelIntervention`, même transaction), qui libère ainsi son
+crédit réservé.
 
 **Décision — clôture idempotente.** `completeIntervention` ne passe à
 `COMPLETED_PENDING_FEEDBACK` que si la rencontre est encore `CONFIRMED`, et
 `cancelIntervention` ne passe à `CANCELLED` que si elle est encore
-`PROPOSED`/`CONFIRMED` (mises à jour conditionnelles) ; sinon 409. Une
-rencontre ne peut donc être ni débitée deux fois, ni annulée après débit.
+`PROPOSED`/`CONFIRMED`, et `confirmIntervention` ne confirme qu'une rencontre
+encore `PROPOSED` (mises à jour conditionnelles) ; sinon 409. Une rencontre
+ne peut donc être ni débitée deux fois, ni annulée après débit, ni
+reconfirmée après annulation.
 
 **Conséquence.** Le solde négatif ne peut plus venir que d'un ajustement
 admin après réservation ; l'alerte « Solde de crédits négatif » est conservée

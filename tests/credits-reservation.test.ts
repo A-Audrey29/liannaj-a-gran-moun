@@ -14,6 +14,7 @@
 import { describe, it, expect, beforeEach, afterAll } from "vitest";
 import { resetDatabase, createUser, loginAs, createRelation, crediterSenior } from "./helpers";
 import { prisma } from "../server/prisma";
+import { storage } from "../server/storage";
 
 async function disponible(juniorId: string) {
   return prisma.availability.create({
@@ -238,3 +239,79 @@ describe("annulation et validation simultanees", () => {
     }
   });
 });
+
+describe("annulation de la rencontre gratuite", () => {
+  it("la gratuite passe a la rencontre courte suivante et libere son credit", async () => {
+    const senior = await createUser("SENIOR");
+    const junior = await createUser("JUNIOR");
+    const admin = await createUser("ADMIN");
+    const relation = await createRelation(senior.id, junior.id, "PENDING_FIRST_MEETING");
+    await disponible(junior.id);
+    await crediterSenior(senior.id, 1);
+    const adminAgent = await loginAs(admin);
+
+    const a = await adminAgent.post(`/api/relations/${relation.id}/interventions`).send(rencontre(10, 30));
+    const b = await adminAgent.post(`/api/relations/${relation.id}/interventions`).send(rencontre(14, 30));
+    expect((await prisma.intervention.findUniqueOrThrow({ where: { id: b.body.id } })).isFree).toBe(false);
+
+    await adminAgent.patch(`/api/interventions/${a.body.id}/cancel`);
+
+    expect((await prisma.intervention.findUniqueOrThrow({ where: { id: b.body.id } })).isFree).toBe(true);
+    const solde = await (await loginAs(senior)).get("/api/credits/balance");
+    expect(solde.body).toEqual({ balance: 1, available: 1 });
+  });
+});
+
+describe("confirmation et annulation simultanees", () => {
+  it("une rencontre annulee ne redevient jamais confirmee", async () => {
+    for (let essai = 0; essai < 5; essai++) {
+      await resetDatabase();
+      const senior = await createUser("SENIOR");
+      const { junior, relation } = await relationActive(senior.id);
+      await crediterSenior(senior.id, 2);
+      const seniorAgent = await loginAs(senior);
+      const creee = await seniorAgent.post(`/api/relations/${relation.id}/interventions`).send(rencontre(10));
+      const juniorAgent = await loginAs(junior);
+
+      const [confirmation, annulation] = await Promise.all([
+        juniorAgent.patch(`/api/interventions/${creee.body.id}/confirm`),
+        seniorAgent.patch(`/api/interventions/${creee.body.id}/cancel`),
+      ]);
+
+      const finale = await prisma.intervention.findUniqueOrThrow({ where: { id: creee.body.id } });
+      if (annulation.status === 200) expect(finale.status).toBe("CANCELLED");
+      if (confirmation.status === 200 && annulation.status !== 200) expect(finale.status).toBe("CONFIRMED");
+    }
+  });
+});
+
+describe("transitions conditionnelles (garde contre les ecritures concurrentes)", () => {
+  async function rencontreAvecStatut(status: "PROPOSED" | "CONFIRMED" | "CANCELLED" | "COMPLETED_PENDING_FEEDBACK") {
+    const senior = await createUser("SENIOR");
+    const junior = await createUser("JUNIOR");
+    const relation = await createRelation(senior.id, junior.id);
+    return prisma.intervention.create({
+      data: { relationId: relation.id, status, scheduledDate: new Date("2026-06-15T14:00:00Z") },
+    });
+  }
+
+  it("confirmer une rencontre deja annulee ne la ressuscite pas", async () => {
+    const r = await rencontreAvecStatut("CANCELLED");
+    expect(await storage.confirmIntervention(r.id)).toBeNull();
+    expect((await prisma.intervention.findUniqueOrThrow({ where: { id: r.id } })).status).toBe("CANCELLED");
+  });
+
+  it("annuler une rencontre deja realisee (donc debitee) est refuse", async () => {
+    const r = await rencontreAvecStatut("COMPLETED_PENDING_FEEDBACK");
+    expect(await storage.cancelIntervention(r.id)).toBeNull();
+    expect((await prisma.intervention.findUniqueOrThrow({ where: { id: r.id } })).status).toBe("COMPLETED_PENDING_FEEDBACK");
+  });
+
+  it("valider une rencontre deja annulee ne debite rien", async () => {
+    const r = await rencontreAvecStatut("CANCELLED");
+    const relation = await prisma.relation.findUniqueOrThrow({ where: { id: r.relationId } });
+    expect(await storage.completeIntervention(r.id, relation.seniorId, relation.seniorId)).toBeNull();
+    expect(await consommations(relation.seniorId)).toBe(0);
+  });
+});
+

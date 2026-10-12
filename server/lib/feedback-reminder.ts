@@ -22,6 +22,12 @@ import { getBaseUrl } from "../env";
  * Valeur arbitraire mais stable : elle doit seulement être unique parmi les
  * verrous consultatifs de l'application.
  */
+/**
+ * Au-delà, un rappel dont tous les envois échouent est abandonné (marqué) :
+ * le rappel part 3 jours après la rencontre, on retente donc ~4 jours.
+ */
+const RAPPEL_ABANDON_APRES_MS = 7 * 24 * 60 * 60 * 1000;
+
 const FEEDBACK_REMINDER_LOCK_ID = 4_812_357;
 
 export async function checkAndSendFeedbackReminders() {
@@ -92,7 +98,10 @@ export async function checkAndSendFeedbackReminders() {
         }
       }
 
-      if (destinataires.length > 0 && echecs === destinataires.length) {
+      // Retried for a few days only: a permanently invalid address (the only
+      // recipient left) would otherwise be retried every 6h forever.
+      const retryUntil = intervention.scheduledDate.getTime() + RAPPEL_ABANDON_APRES_MS;
+      if (destinataires.length > 0 && echecs === destinataires.length && Date.now() < retryUntil) {
         console.warn(
           `[FEEDBACK-REMINDER] Intervention ${intervention.id} : tous les envois en échec — ` +
             `nouvelle tentative à la prochaine passe.`

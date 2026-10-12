@@ -1181,7 +1181,10 @@ export async function registerRoutes(
         return res.status(400).json({ message: "Cette intervention ne peut plus être confirmée" });
       }
 
-      const updated = await storage.updateIntervention(intervention.id, { status: "CONFIRMED" });
+      const updated = await storage.confirmIntervention(intervention.id);
+      if (!updated) {
+        return res.status(409).json({ message: "Cette rencontre a déjà été traitée" });
+      }
 
       await storage.createNotification({
         user: { connect: { id: intervention.relation.seniorId } },

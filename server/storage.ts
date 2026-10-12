@@ -159,6 +159,8 @@ export interface IStorage {
    * debited meeting can never end up CANCELLED.
    */
   cancelIntervention(id: string): Promise<Intervention | null>;
+  /** PROPOSED -> CONFIRMED, conditionally: null if cancelled meanwhile. */
+  confirmIntervention(id: string): Promise<Intervention | null>;
   getPendingFeedbackInterventions(userId: string): Promise<(Intervention & { relation: Relation })[]>;
   getPendingFeedbackForReminder(): Promise<(Intervention & { relation: Relation & { senior: User; junior: User } })[]>;
   updateInterventionFeedbackReminderSent(id: string): Promise<Intervention>;
@@ -795,11 +797,7 @@ class DatabaseStorage implements IStorage {
   }
 
   async getCreditBalance(seniorId: string): Promise<number> {
-    const result = await prisma.creditLedger.aggregate({
-      where: { seniorId },
-      _sum: { amount: true },
-    });
-    return result._sum.amount ?? 0;
+    return (await computeCredits(prisma, seniorId)).balance;
   }
 
   async getCreditLedger(seniorId: string): Promise<CreditLedger[]> {
@@ -846,9 +844,38 @@ class DatabaseStorage implements IStorage {
   }
 
   async cancelIntervention(id: string): Promise<Intervention | null> {
+    return prisma.$transaction(async (tx) => {
+      const { count } = await tx.intervention.updateMany({
+        where: { id, status: { in: [...RESERVING_STATUSES] } },
+        data: { status: "CANCELLED" },
+      });
+      if (count === 0) return null;
+      const cancelled = await tx.intervention.findUniqueOrThrow({ where: { id } });
+
+      // The free meeting was cancelled: the relation keeps its free meeting,
+      // which passes to the oldest short meeting still planned (if any).
+      if (cancelled.isFree) {
+        const relation = await tx.relation.findUnique({ where: { id: cancelled.relationId }, select: { status: true } });
+        if (relation?.status === "PENDING_FIRST_MEETING") {
+          const next = await tx.intervention.findFirst({
+            where: {
+              relationId: cancelled.relationId,
+              status: { in: [...RESERVING_STATUSES] },
+              durationMinutes: { lte: FREE_FIRST_MEETING_MAX_MINUTES },
+            },
+            orderBy: { createdAt: "asc" },
+          });
+          if (next) await tx.intervention.update({ where: { id: next.id }, data: { isFree: true } });
+        }
+      }
+      return cancelled;
+    });
+  }
+
+  async confirmIntervention(id: string): Promise<Intervention | null> {
     const { count } = await prisma.intervention.updateMany({
-      where: { id, status: { in: [...RESERVING_STATUSES] } },
-      data: { status: "CANCELLED" },
+      where: { id, status: "PROPOSED" },
+      data: { status: "CONFIRMED" },
     });
     return count === 0 ? null : prisma.intervention.findUnique({ where: { id } });
   }

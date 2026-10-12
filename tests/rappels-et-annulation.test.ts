@@ -118,3 +118,29 @@ describe("rappel de feedback : panne totale", () => {
     expect(apresRetour.feedbackReminderSentAt).not.toBeNull();
   });
 });
+
+describe("rappel de feedback : adresse definitivement invalide", () => {
+  it("abandonne apres quelques jours au lieu de retenter toutes les 6h indefiniment", async () => {
+    const senior = await createUser("SENIOR");
+    const junior = await createUser("JUNIOR");
+    const relation = await createRelation(senior.id, junior.id);
+    // Le senior a deja note : seul le jeune est destinataire, et son adresse rebondit.
+    const rencontre = await prisma.intervention.create({
+      data: {
+        relationId: relation.id,
+        status: "COMPLETED_PENDING_FEEDBACK",
+        seniorRating: 5,
+        scheduledDate: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000),
+      },
+    });
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    vi.mocked(sendEmail).mockRejectedValue(new Error("Brevo error (400): invalid email"));
+
+    await checkAndSendFeedbackReminders();
+
+    const apres = await prisma.intervention.findUniqueOrThrow({ where: { id: rencontre.id } });
+    expect(apres.feedbackReminderSentAt).not.toBeNull();
+  });
+});

@@ -2200,7 +2200,9 @@ export default function Admin() {
     const tab = new URLSearchParams(search).get("tab");
     if (!tab || !ADMIN_TABS.some((t) => t.id === tab)) return;
     setActiveTab(tab);
-    window.history.replaceState(null, "", window.location.pathname);
+    const url = new URL(window.location.href);
+    url.searchParams.delete("tab");
+    window.history.replaceState(window.history.state, "", url.pathname + url.search + url.hash);
   }, [search]);
 
   const { data: pendingMeetings = [] } = useQuery<RelationWithUsers[]>({
