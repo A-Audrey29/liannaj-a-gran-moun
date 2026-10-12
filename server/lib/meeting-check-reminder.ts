@@ -1,9 +1,10 @@
 import { storage } from "../storage";
 import { pool } from "../db";
 import { sendEmail } from "./email";
-import { getMeetingCheckEmailHtml } from "./email-templates";
+import { getMeetingCheckAdminEmailHtml } from "./email-templates";
 import { gpParts, MOIS_LONGS } from "../../shared/dates";
 import { PLATFORM_NAME } from "../../shared/branding";
+import { MEETING_CHECK_GRACE_HOURS } from "../../shared/meeting-check";
 import { getBaseUrl } from "../env";
 
 /**
@@ -13,15 +14,25 @@ import { getBaseUrl } from "../env";
  */
 const MEETING_CHECK_LOCK_ID = 4_812_358;
 
+/** Lien direct vers l'onglet admin où l'on clôture les rencontres. */
+export const MEETING_CHECK_ADMIN_PATH = "/admin?tab=rencontres";
+
 /**
- * Relance "la rencontre a-t-elle eu lieu ?" pour les interventions terminées
- * depuis plus de 24h sans que le statut ait avancé (toujours PROPOSED ou
- * CONFIRMED) — ni confirmée réalisée, ni annulée par personne. Règle exacte :
- * isMeetingOverdue (shared/meeting-check.ts).
+ * Relance les ADMINS pour les rencontres terminées depuis plus de 24h et
+ * jamais clôturées (toujours PROPOSED/CONFIRMED). Règle exacte :
+ * isMeetingOverdue (shared/meeting-check.ts). Processus côté équipe :
+ * docs/PROCESSUS-RENCONTRES.md.
  *
- * Volontairement pas de changement de statut automatique ici : seule une
- * action humaine (junior/senior via /confirm /cancel, ou admin via /done
- * /cancel) fait avancer l'intervention. Ce job notifie, il ne décide pas.
+ * Les admins, et non les participants : seul un admin peut marquer une
+ * rencontre réalisée (c'est ce qui débite le crédit). Une passe produit UNE
+ * notification et UN e-mail récapitulatif par admin, puis marque les
+ * rencontres comme relancées (une seule relance par rencontre).
+ *
+ * E-mail en une seule tentative : la notification dans l'appli est la
+ * garantie, l'e-mail un confort. Un échec Brevo est journalisé, pas rejoué
+ * (sinon relance toutes les 6h tant que l'adresse est invalide).
+ *
+ * Ce job notifie, il ne change jamais le statut d'une rencontre.
  */
 export async function checkAndSendMeetingCheckReminders() {
   const client = await pool.connect();
@@ -39,68 +50,55 @@ export async function checkAndSendMeetingCheckReminders() {
       return;
     }
 
-    const interventions = await storage.getOverdueInterventionsForReminder();
-    if (interventions.length === 0) return;
+    const overdue = await storage.getOverdueInterventionsForReminder();
+    if (overdue.length === 0) return;
 
-    console.log(`[MEETING-CHECK] ${interventions.length} intervention(s) en retard à relancer`);
-    const baseUrl = getBaseUrl();
-
-    for (const intervention of interventions) {
-      const { relation } = intervention;
-      const p = gpParts(intervention.scheduledDate);
-      const dateStr = `${p.d} ${MOIS_LONGS[p.mo]} ${p.y}`;
-      const relationUrl = `${baseUrl}/relations/${intervention.relationId}`;
-
-      const destinataires = [
-        { user: relation.senior, partner: relation.junior },
-        { user: relation.junior, partner: relation.senior },
-      ];
-
-      let echecs = 0;
-      for (const { user, partner } of destinataires) {
-        await storage.createNotification({
-          user: { connect: { id: user.id } },
-          type: "MEETING_CHECK",
-          title: "La rencontre a-t-elle eu lieu ?",
-          message: `La rencontre du ${dateStr} avec ${partner.firstName} ${partner.lastName} est passée. Merci de confirmer ou annuler.`,
-          link: `/relations/${intervention.relationId}`,
-        });
-
-        if (user.email) {
-          try {
-            await sendEmail({
-              to: user.email,
-              subject: `La rencontre du ${dateStr} a-t-elle eu lieu ? - ${PLATFORM_NAME}`,
-              htmlContent: getMeetingCheckEmailHtml(
-                user.firstName || user.email,
-                `${partner.firstName} ${partner.lastName}`,
-                dateStr,
-                relationUrl
-              ),
-            });
-          } catch (err) {
-            echecs++;
-            console.error(`[MEETING-CHECK] Erreur envoi email à ${user.email}:`, err);
-          }
-        }
-      }
-
-      // Notifications in-app toujours créées même si un email échoue (ne
-      // bloque pas sur Brevo) — seul le flag "déjà relancé" est conditionné
-      // au succès des emails, même logique que feedback-reminder.ts : sinon
-      // un échec Brevo masqué par l'autre envoi empêcherait toute nouvelle
-      // tentative à la prochaine passe.
-      if (echecs > 0) {
-        console.warn(
-          `[MEETING-CHECK] Intervention ${intervention.id} : ${echecs}/${destinataires.length} ` +
-            `envoi(s) email en échec — non marquée comme relancée, nouvelle tentative à la prochaine passe.`
-        );
-        continue;
-      }
-
-      await storage.updateInterventionMeetingCheckReminderSent(intervention.id);
-      console.log(`[MEETING-CHECK] Relance envoyée pour intervention ${intervention.id}`);
+    const admins = await storage.getAdmins();
+    if (admins.length === 0) {
+      // Rien de marqué : la relance repartira dès qu'un admin actif existe.
+      console.warn(`[MEETING-CHECK] ${overdue.length} rencontre(s) à clôturer mais aucun admin actif à prévenir.`);
+      return;
     }
+
+    const meetings = overdue.map((intervention) => {
+      const p = gpParts(intervention.scheduledDate);
+      return {
+        date: `${p.d} ${MOIS_LONGS[p.mo]} ${p.y}`,
+        seniorName: `${intervention.relation.senior.firstName} ${intervention.relation.senior.lastName}`,
+        juniorName: `${intervention.relation.junior.firstName} ${intervention.relation.junior.lastName}`,
+      };
+    });
+    const n = overdue.length;
+    const adminUrl = `${getBaseUrl()}${MEETING_CHECK_ADMIN_PATH}`;
+
+    // Notifications + marking in one transaction first: they are the
+    // guarantee. E-mails follow, best effort, one attempt each.
+    await storage.recordMeetingCheckReminder(
+      admins.map((a) => a.id),
+      {
+        title: "Rencontres à clôturer",
+        message:
+          `${n} rencontre${n > 1 ? "s" : ""} terminée${n > 1 ? "s" : ""} depuis plus de ` +
+          `${MEETING_CHECK_GRACE_HOURS}h ${n > 1 ? "attendent" : "attend"} d'être marquée${n > 1 ? "s" : ""} réalisée${n > 1 ? "s" : ""} ou annulée${n > 1 ? "s" : ""}.`,
+        link: MEETING_CHECK_ADMIN_PATH,
+      },
+      overdue.map((i) => i.id)
+    );
+
+    for (const admin of admins) {
+      if (!admin.email) continue;
+      try {
+        await sendEmail({
+          to: admin.email,
+          subject: `${n} rencontre${n > 1 ? "s" : ""} à clôturer - ${PLATFORM_NAME}`,
+          htmlContent: getMeetingCheckAdminEmailHtml(admin.firstName || admin.email, meetings, adminUrl),
+        });
+      } catch (err) {
+        console.error(`[MEETING-CHECK] Échec e-mail à ${admin.email} (non rejoué, notification créée):`, err);
+      }
+    }
+
+    console.log(`[MEETING-CHECK] ${n} rencontre(s) signalée(s) à ${admins.length} admin(s)`);
   } catch (error) {
     console.error("[MEETING-CHECK] Erreur lors de la vérification:", error);
   } finally {

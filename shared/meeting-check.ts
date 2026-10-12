@@ -1,11 +1,12 @@
 /**
- * Rencontre "en retard" : sa fin est passée depuis plus de
- * MEETING_CHECK_GRACE_HOURS et personne ne l'a clôturée (toujours PROPOSED ou
- * CONFIRMED). Règle unique pour la relance e-mail (serveur) et le badge
- * "En retard" / filtre "À traiter" (admin).
+ * Seul un admin peut marquer une rencontre réalisée (c'est ce qui débite le
+ * crédit). Processus complet : docs/PROCESSUS-RENCONTRES.md.
  *
- * Le délai laisse aux participants le temps de confirmer ou d'annuler
- * eux-mêmes : sans lui, la relance pouvait partir pendant la rencontre.
+ * - Rencontre "terminée" : sa fin (début + durée) est passée. L'admin peut
+ *   dès lors la marquer réalisée ou l'annuler.
+ * - Rencontre "en retard" : terminée depuis plus de MEETING_CHECK_GRACE_HOURS
+ *   et toujours PROPOSED/CONFIRMED. Les admins sont relancés (job
+ *   meeting-check-reminder) et elle apparaît dans le filtre "À traiter".
  */
 export const MEETING_CHECK_GRACE_HOURS = 24;
 
@@ -17,14 +18,28 @@ export function meetingEnd(scheduledDate: Date | string, durationMinutes: number
   return new Date(new Date(scheduledDate).getTime() + durationMinutes * 60 * 1000);
 }
 
-export function isMeetingOverdue(
-  meeting: { status: string; scheduledDate: Date | string; durationMinutes: number },
-  now: Date = new Date()
-): boolean {
+type MeetingTiming = { status: string; scheduledDate: Date | string; durationMinutes: number };
+
+const isOpen = (meeting: MeetingTiming) => (OVERDUE_STATUSES as readonly string[]).includes(meeting.status);
+
+/** `now` is required on purpose: passing the function to Array.filter would feed it an index. */
+export function isMeetingEnded(meeting: MeetingTiming, now: Date): boolean {
+  return isOpen(meeting) && meetingEnd(meeting.scheduledDate, meeting.durationMinutes).getTime() <= now.getTime();
+}
+
+export function isMeetingOverdue(meeting: MeetingTiming, now: Date): boolean {
   return (
-    (OVERDUE_STATUSES as readonly string[]).includes(meeting.status) &&
+    isOpen(meeting) &&
     meetingEnd(meeting.scheduledDate, meeting.durationMinutes).getTime() + GRACE_MS <= now.getTime()
   );
+}
+
+/**
+ * "Prochaine rencontre" on dashboards: planned (PROPOSED/CONFIRMED) and not
+ * finished yet. Based on the end, so a meeting in progress still shows.
+ */
+export function isUpcomingOrOngoing(meeting: MeetingTiming, now: Date): boolean {
+  return isOpen(meeting) && meetingEnd(meeting.scheduledDate, meeting.durationMinutes).getTime() > now.getTime();
 }
 
 /**
@@ -32,6 +47,6 @@ export function isMeetingOverdue(
  * now - délai (la durée est positive). Sert à pré-filtrer en base avant
  * d'appliquer isMeetingOverdue, qui tient compte de la durée.
  */
-export function overdueStartBefore(now: Date = new Date()): Date {
+export function overdueStartBefore(now: Date): Date {
   return new Date(now.getTime() - GRACE_MS);
 }

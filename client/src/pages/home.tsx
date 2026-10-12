@@ -32,6 +32,8 @@ import { usePushNotifications } from "@/hooks/use-push";
 import { fmtTime, gpParts, MOIS_LONGS } from "@/lib/availability-format";
 import { CreditOffersCard } from "@/components/credit-offers-card";
 import { NpsPrompt } from "@/components/nps-prompt";
+import type { CreditBalanceResponse } from "@shared/credits";
+import { isUpcomingOrOngoing } from "@shared/meeting-check";
 
 type RelationWithUsers = Relation & { senior: UserType; junior: UserType; interventions?: Intervention[] };
 type MatchSuggestion = { user: UserType; commonCategories: string[]; isRecommended: boolean; isFavorite: boolean };
@@ -66,13 +68,13 @@ function useDashboardCounts(relations?: RelationWithUsers[], pendingFB?: Interve
     }));
   });
 
-  const now = Date.now();
+  const now = new Date();
   const allUpcoming = activeRelations.flatMap((r) => {
     const partner = r.seniorId === user?.id ? r.junior : r.senior;
-    return (r.interventions || []).filter((i) => i.status === "CONFIRMED" || i.status === "PROPOSED").map((i) => ({
+    return (r.interventions || []).filter((i) => isUpcomingOrOngoing(i, now)).map((i) => ({
       ...i, partnerName: `${partner.firstName} ${partner.lastName}`, relationId: r.id,
     }));
-  }).filter((i) => new Date(i.scheduledDate).getTime() >= now)
+  })
     .sort((a, b) => new Date(a.scheduledDate).getTime() - new Date(b.scheduledDate).getTime());
 
   const nextIntervention = allUpcoming[0] || null;
@@ -125,7 +127,7 @@ export default function Home() {
 
   const { data: relations, isLoading: relLoading } = useQuery<RelationWithUsers[]>({ queryKey: ["/api/relations"] });
   const { data: pendingFB } = useQuery<Intervention[]>({ queryKey: ["/api/interventions/pending-feedback"] });
-  const { data: creditData } = useQuery<{ balance: number }>({
+  const { data: creditData } = useQuery<CreditBalanceResponse>({
     queryKey: ["/api/credits/balance"],
     enabled: user?.role === "SENIOR",
   });
@@ -245,7 +247,7 @@ export default function Home() {
         })}
       </div>
 
-      {activeTab === "dashboard" && <DashboardTab counts={counts} isLoading={relLoading} user={user} onSwitchTab={setActiveTab} creditBalance={creditData?.balance} onOpenAteliers={() => setLocation("/mes-ateliers")} />}
+      {activeTab === "dashboard" && <DashboardTab counts={counts} isLoading={relLoading} user={user} onSwitchTab={setActiveTab} creditAvailable={creditData?.available} onOpenAteliers={() => setLocation("/mes-ateliers")} />}
       {activeTab === "rencontres" && <RencontresTab relations={relations} isLoading={relLoading} user={user} onOpenMessage={(relationId) => { setOpenRelationId(relationId); setActiveTab("messages"); }} />}
       {activeTab === "disponibilites" && user?.role === "JUNIOR" && <DisponibilitesTab />}
       {activeTab === "messages" && <MessagesTab user={user} openRelationId={openRelationId} />}
@@ -279,7 +281,7 @@ function DashboardCard({ icon: Icon, count, label, detail, onClick, highlight, t
   );
 }
 
-function DashboardTab({ counts, isLoading, user, onSwitchTab, creditBalance, onOpenAteliers }: { counts: DashboardCounts; isLoading: boolean; user: AuthUser | null; onSwitchTab: (tab: string) => void; creditBalance?: number; onOpenAteliers: () => void }) {
+function DashboardTab({ counts, isLoading, user, onSwitchTab, creditAvailable, onOpenAteliers }: { counts: DashboardCounts; isLoading: boolean; user: AuthUser | null; onSwitchTab: (tab: string) => void; creditAvailable?: number; onOpenAteliers: () => void }) {
   const isJunior = user?.role === "JUNIOR";
 
   if (isLoading) {
@@ -299,13 +301,14 @@ function DashboardTab({ counts, isLoading, user, onSwitchTab, creditBalance, onO
     ? `${nextDate}${nextPartner ? `\navec ${nextPartner}` : ""}${nextLocation ? ` · ${nextLocation}` : ""}`
     : "Aucune prévue";
 
-  const actionsCount = counts.pendingDemandes.length + counts.feedbackCount;
-  const actionsDetail = actionsCount === 0
-    ? "Rien à faire"
-    : [
-        counts.pendingDemandes.length > 0 ? `${counts.pendingDemandes.length} demande${counts.pendingDemandes.length > 1 ? "s" : ""}` : null,
-        counts.feedbackCount > 0 ? `${counts.feedbackCount} feedback${counts.feedbackCount > 1 ? "s" : ""}` : null,
-      ].filter(Boolean).join(" · ");
+  // For a senior, pending requests are ones they SENT: they wait on the junior,
+  // so they are shown for information but are not an action to take.
+  const sentRequests = counts.pendingDemandes.length;
+  const actionsCount = counts.feedbackCount;
+  const actionsDetail = [
+    actionsCount > 0 ? `${actionsCount} feedback${actionsCount > 1 ? "s" : ""} à donner` : "Rien à faire",
+    sentRequests > 0 ? `${sentRequests} demande${sentRequests > 1 ? "s" : ""} en attente` : null,
+  ].filter(Boolean).join(" · ");
 
   const proposedDetail = counts.proposedInterventions.length > 0
     ? counts.proposedInterventions.length === 1
@@ -356,6 +359,15 @@ function DashboardTab({ counts, isLoading, user, onSwitchTab, creditBalance, onO
               highlight="purple"
               testId="card-relations-actives"
             />
+            <DashboardCard
+              icon={AlertTriangle}
+              count={counts.feedbackCount}
+              label="Feedback à donner"
+              detail={counts.feedbackCount > 0 ? "Donnez votre avis sur vos rencontres" : "Rien à faire"}
+              onClick={() => onSwitchTab("rencontres")}
+              highlight={counts.feedbackCount > 0 ? "orange" : undefined}
+              testId="card-feedback-junior"
+            />
           </>
         ) : (
           <>
@@ -364,7 +376,7 @@ function DashboardTab({ counts, isLoading, user, onSwitchTab, creditBalance, onO
               count={actionsCount}
               label="Actions à faire"
               detail={actionsDetail}
-              onClick={() => onSwitchTab(counts.feedbackCount > 0 ? "rencontres" : counts.pendingDemandes.length > 0 ? "demandes" : "rencontres")}
+              onClick={() => onSwitchTab(actionsCount === 0 && sentRequests > 0 ? "demandes" : "rencontres")}
               highlight={actionsCount > 0 ? "orange" : undefined}
               testId="card-actions"
             />
@@ -391,9 +403,16 @@ function DashboardTab({ counts, isLoading, user, onSwitchTab, creditBalance, onO
         {user?.role === "SENIOR" && (
           <DashboardCard
             icon={BookOpen}
-            count={creditBalance ?? "--"}
+            // Available = balance minus meetings already booked; never shown below 0.
+            count={creditAvailable !== undefined ? Math.max(creditAvailable, 0) : "--"}
             label="Ateliers restants"
-            detail={creditBalance !== undefined ? `atelier${creditBalance > 1 ? "s" : ""} disponible${creditBalance > 1 ? "s" : ""}` : "Voir le détail"}
+            detail={
+              creditAvailable === undefined
+                ? "Voir le détail"
+                : creditAvailable <= 0
+                  ? "Achetez des ateliers pour réserver"
+                  : `atelier${creditAvailable > 1 ? "s" : ""} disponible${creditAvailable > 1 ? "s" : ""}`
+            }
             onClick={onOpenAteliers}
             highlight="purple"
             testId="card-ateliers"

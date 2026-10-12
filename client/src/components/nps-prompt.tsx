@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Heart } from "lucide-react";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { apiRequest, apiErrorMessage, queryClient } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent } from "@/components/ui/card";
@@ -51,6 +51,10 @@ export function NpsPrompt({ className }: { className?: string }) {
     queryKey: eligibilityKey,
     queryFn: async () => (await apiRequest("GET", "/api/nps/eligibility")).json(),
     enabled: !!user,
+    // Eligibility changes when an admin closes a meeting, on another device:
+    // re-check on each dashboard visit instead of caching forever.
+    staleTime: 0,
+    refetchOnWindowFocus: true,
   });
   const [open, setOpen] = useState(false);
   // Read from localStorage on each render so it always follows the current
@@ -73,7 +77,14 @@ export function NpsPrompt({ className }: { className?: string }) {
       setReason("");
       toast({ title: "Merci pour votre avis !" });
     },
-    onError: () => toast({ title: "Impossible d'enregistrer votre avis", variant: "destructive" }),
+    // 409 (already answered, e.g. from another device) and 403 carry a
+    // readable reason: show it instead of a generic technical error.
+    onError: (err) =>
+      toast({
+        title: "Impossible d'enregistrer votre avis",
+        description: apiErrorMessage(err, "Veuillez réessayer plus tard."),
+        variant: "destructive",
+      }),
     // Success or not, the server is the source of truth for "can still answer".
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/nps/eligibility"] });

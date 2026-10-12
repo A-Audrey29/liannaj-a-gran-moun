@@ -22,6 +22,12 @@ import { getBaseUrl } from "../env";
  * Valeur arbitraire mais stable : elle doit seulement être unique parmi les
  * verrous consultatifs de l'application.
  */
+/**
+ * Au-delà, un rappel dont tous les envois échouent est abandonné (marqué) :
+ * le rappel part 3 jours après la rencontre, on retente donc ~4 jours.
+ */
+const RAPPEL_ABANDON_APRES_MS = 7 * 24 * 60 * 60 * 1000;
+
 const FEEDBACK_REMINDER_LOCK_ID = 4_812_357;
 
 export async function checkAndSendFeedbackReminders() {
@@ -57,11 +63,11 @@ export async function checkAndSendFeedbackReminders() {
       const feedbackUrl = `${baseUrl}/relations/${intervention.relationId}`;
       const subject = `Rappel : donnez votre avis - ${PLATFORM_NAME}`;
 
-      // Destinataires attendus pour cette rencontre. Le rappel n'est marqué
-      // comme envoyé que si TOUS ont été servis : sinon, un échec Brevo sur
-      // l'un des deux était masqué par le succès de l'autre, et la personne en
-      // échec ne recevait jamais de rappel (l'intervention étant marquée
-      // traitée, elle ne repassait plus dans la sélection).
+      // Une seule tentative par destinataire servi (décision du 2026-10-12) :
+      // dès qu'un e-mail est passé, la rencontre est marquée relancée, même si
+      // l'autre a échoué — rejouer renvoyait le rappel toutes les 6h à celui
+      // qui l'avait reçu. Si TOUS ont échoué (panne Brevo), personne n'a rien
+      // reçu : on retente à la passe suivante.
       const destinataires: { role: string; email: string; prenom: string }[] = [];
       if (intervention.seniorRating === null) {
         destinataires.push({
@@ -92,12 +98,21 @@ export async function checkAndSendFeedbackReminders() {
         }
       }
 
+      // Retried for a few days only: a permanently invalid address (the only
+      // recipient left) would otherwise be retried every 6h forever.
+      const retryUntil = intervention.scheduledDate.getTime() + RAPPEL_ABANDON_APRES_MS;
+      if (destinataires.length > 0 && echecs === destinataires.length && Date.now() < retryUntil) {
+        console.warn(
+          `[FEEDBACK-REMINDER] Intervention ${intervention.id} : tous les envois en échec — ` +
+            `nouvelle tentative à la prochaine passe.`
+        );
+        continue;
+      }
       if (echecs > 0) {
         console.warn(
           `[FEEDBACK-REMINDER] Intervention ${intervention.id} : ${echecs}/${destinataires.length} ` +
-            `envoi(s) en échec — non marquée comme relancée, nouvelle tentative à la prochaine passe.`
+            `envoi(s) en échec — non rejoué (une seule tentative par destinataire servi).`
         );
-        continue;
       }
 
       await storage.updateInterventionFeedbackReminderSent(intervention.id);

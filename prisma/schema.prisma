@@ -225,6 +225,10 @@ model Intervention {
   // shared/meeting-check.ts — meme logique d'idempotence que
   // feedbackReminderSentAt.
   meetingCheckReminderSentAt DateTime?
+  // Rencontre gratuite (1ère rencontre de la relation, <= 30 min) : décidé
+  // une fois à la création et mémorisé, pour que la réservation et le débit
+  // ne dépendent pas de l'ordre de clôture. Règle : isFreeMeeting (storage.ts).
+  isFree          Boolean            @default(false)
 
   createdAt       DateTime           @default(now())
 

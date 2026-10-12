@@ -43,7 +43,7 @@ const STATUS_FILTERS = [
 ];
 
 /** Terminée depuis plus de 24h et jamais clôturée : à traiter par un admin. */
-const isOverdue = (entry: MeetingHistoryEntry) => isMeetingOverdue(entry);
+const isOverdue = (entry: MeetingHistoryEntry) => isMeetingOverdue(entry, new Date());
 
 /** 135 → "2h15", 120 → "2h", 45 → "45 min". */
 export function fmtDuration(minutes: number): string {
@@ -96,12 +96,15 @@ export default function MeetingHistory({
   const entries = data?.entries ?? [];
   const summary = data?.summary;
   const overdueCount = entries.filter(isOverdue).length;
+  // The "À traiter" chip disappears once nothing is overdue: fall back to all
+  // instead of leaving an empty list with no highlighted chip.
+  const activeFilter = filter === "OVERDUE" && overdueCount === 0 ? "all" : filter;
   const filtered =
-    filter === "all"
+    activeFilter === "all"
       ? entries
-      : filter === "OVERDUE"
+      : activeFilter === "OVERDUE"
         ? entries.filter(isOverdue)
-        : entries.filter((e) => e.status === filter);
+        : entries.filter((e) => e.status === activeFilter);
 
   function exportCSV() {
     const header = [
@@ -187,7 +190,7 @@ export default function MeetingHistory({
               key={f.id}
               onClick={() => setFilter(f.id)}
               className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
-                filter === f.id
+                activeFilter === f.id
                   ? "bg-[#dc4256] text-white"
                   : "bg-white text-muted-foreground hover:bg-muted border"
               }`}
@@ -200,7 +203,7 @@ export default function MeetingHistory({
             <button
               onClick={() => setFilter("OVERDUE")}
               className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
-                filter === "OVERDUE"
+                activeFilter === "OVERDUE"
                   ? "bg-red-600 text-white"
                   : "bg-red-50 text-red-700 hover:bg-red-100 border border-red-200"
               }`}
@@ -303,7 +306,8 @@ function MeetingRow({
               )}
             </div>
             <div className="flex items-center gap-2 shrink-0">
-              {isOverdue(entry) && (
+              {/* Admin-only: participants cannot close a meeting themselves. */}
+              {viewerRole === "ADMIN" && isOverdue(entry) && (
                 <Badge
                   variant="outline"
                   className="text-xs font-medium bg-red-100 text-red-800 border-red-200"

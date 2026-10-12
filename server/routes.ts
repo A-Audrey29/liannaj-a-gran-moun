@@ -22,8 +22,11 @@ import {
   getNewReportEmailHtml,
   getCreditPurchaseConfirmedEmailHtml,
   getNegativeCreditBalanceEmailHtml,
+  escapeHtml,
 } from "./lib/email-templates";
-import { insertUserSchema, createRelationSchema, insertInterventionSchema, feedbackSchema, createPaymentSchema, checkoutSchema, changePasswordSchema, createAdminSchema, insertReportSchema, createAvailabilitySchema, createRecurringAvailabilitiesSchema, createDateExceptionSchema, updateUserCategoriesSchema, meetingHistoryQuerySchema, npsSchema, npsQuerySchema, COMPLETED_STATUSES } from "../shared/schema";
+import { insertUserSchema, createRelationSchema, insertInterventionSchema, feedbackSchema, createPaymentSchema, checkoutSchema, changePasswordSchema, createAdminSchema, insertReportSchema, createAvailabilitySchema, createRecurringAvailabilitiesSchema, createDateExceptionSchema, updateUserCategoriesSchema, meetingHistoryQuerySchema, npsSchema, npsQuerySchema, creditsQuerySchema, checkoutStatusQuerySchema, COMPLETED_STATUSES } from "../shared/schema";
+import { creditOwnerId } from "../shared/credits";
+import type { CreditBalanceResponse, CreditHistoryEntry, CheckoutStatusResponse } from "../shared/credits";
 import type { MeetingHistoryEntry, MeetingHistoryResponse, MeetingHistorySummary, Role } from "../shared/schema";
 import { buildNpsReport, npsCategory } from "../shared/nps";
 import type { NpsEligibilityResponse, NpsReport, NpsResponseEntry, NpsSegment } from "../shared/nps";
@@ -339,43 +342,28 @@ async function validateSlot(
 
 const SLOT_CONFLICT_MESSAGE = "Une autre rencontre est déjà prévue sur ce créneau.";
 const LOCK_CONTENTION_MESSAGE = "Une autre action est en cours sur ce créneau, veuillez réessayer dans un instant.";
-const NO_CREDITS_MESSAGE = "Le solde de crédits du senior est épuisé. Veuillez acheter un nouveau pack pour continuer.";
-const FREE_FIRST_MEETING_MAX_MINUTES = 30;
-
-/**
- * La toute première rencontre d'une relation est gratuite tant qu'elle ne
- * dépasse pas 30 minutes prévues — au-delà, elle consomme un crédit comme
- * n'importe quelle rencontre suivante. Seule la durée prévue à la création
- * compte, pas une durée réelle mesurée après coup.
- */
-function isFreeFirstMeeting(relationStatus: string, durationMinutes: number): boolean {
-  return relationStatus === "PENDING_FIRST_MEETING" && durationMinutes <= FREE_FIRST_MEETING_MAX_MINUTES;
-}
-
+const NO_CREDITS_MESSAGE = "Plus de crédit disponible pour un nouvel atelier : les crédits restants sont déjà réservés pour les ateliers prévus. Achetez un pack pour continuer.";
 /**
  * Crée la rencontre via createInterventionSafe (verrou + re-check du conflit
  * dans la transaction), pour fermer la fenêtre de course entre validateSlot()
  * et l'insertion : deux requêtes concurrentes sur le même jeune ne peuvent
  * plus toutes les deux passer la vérification.
  *
- * Vérifie aussi le solde de crédits du Senior avant création, sauf pour la
- * première rencontre gratuite (cf isFreeFirstMeeting) — un seul point d'entrée
- * pour ce contrôle, partagé par les trois chemins de création.
+ * Vérifie aussi, dans la même transaction et sous verrou par senior, qu'il
+ * reste un crédit disponible (solde moins ateliers payants déjà prévus), sauf
+ * pour la rencontre gratuite (cf isFreeMeeting dans storage.ts). Seul point de
+ * création d'une rencontre.
  */
 async function createInterventionOrConflict(
   juniorId: string,
   seniorId: string,
-  relationStatus: string,
   data: { relationId: string; scheduledDate: Date; durationMinutes: number; location?: string; tasks?: string[] }
 ) {
-  if (!isFreeFirstMeeting(relationStatus, data.durationMinutes)) {
-    const balance = await storage.getCreditBalance(seniorId);
-    if (balance <= 0) {
-      return { noCredits: true as const };
-    }
-  }
-  return storage.createInterventionSafe(juniorId, data, (tx) =>
-    hasInterventionConflict(juniorId, data.scheduledDate, data.durationMinutes, tx)
+  return storage.createInterventionSafe(
+    juniorId,
+    data,
+    (tx) => hasInterventionConflict(juniorId, data.scheduledDate, data.durationMinutes, tx),
+    seniorId
   );
 }
 
@@ -586,12 +574,15 @@ export async function registerRoutes(
       if (!parsed.success) {
         return res.status(400).json({ message: "Données invalides", errors: parsed.error.flatten() });
       }
-      await storage.deleteUserCategories(req.user!.id);
-      for (const categoryId of parsed.data.categoryIds) {
-        await storage.createUserCategory(req.user!.id, categoryId);
+      // One transaction: a failure can no longer leave the user with a
+      // partial or empty list of ateliers.
+      const ok = await storage.replaceUserCategories(req.user!.id, parsed.data.categoryIds);
+      if (!ok) {
+        return res.status(400).json({ message: "Atelier inconnu" });
       }
-      res.json({ categoryIds: parsed.data.categoryIds });
+      res.json({ categoryIds: [...new Set(parsed.data.categoryIds)] });
     } catch (err) {
+      console.error("[UPDATE_MY_CATEGORIES] Error:", err);
       res.status(500).json({ message: "Erreur lors de la mise à jour des ateliers" });
     }
   });
@@ -1132,7 +1123,7 @@ export async function registerRoutes(
         return res.status(400).json({ message: slotError });
       }
 
-      const result = await createInterventionOrConflict(relation.juniorId, relation.seniorId, relation.status, {
+      const result = await createInterventionOrConflict(relation.juniorId, relation.seniorId, {
         relationId: parsed.data.relationId,
         scheduledDate,
         durationMinutes: parsed.data.durationMinutes,
@@ -1190,7 +1181,10 @@ export async function registerRoutes(
         return res.status(400).json({ message: "Cette intervention ne peut plus être confirmée" });
       }
 
-      const updated = await storage.updateIntervention(intervention.id, { status: "CONFIRMED" });
+      const updated = await storage.confirmIntervention(intervention.id);
+      if (!updated) {
+        return res.status(409).json({ message: "Cette rencontre a déjà été traitée" });
+      }
 
       await storage.createNotification({
         user: { connect: { id: intervention.relation.seniorId } },
@@ -1228,12 +1222,15 @@ export async function registerRoutes(
         return res.status(400).json({ message: "L'intervention doit être confirmée avant d'être marquée comme réalisée" });
       }
 
-      const updated = await storage.completeIntervention(
+      const completion = await storage.completeIntervention(
         intervention.id,
         intervention.relation.seniorId,
-        req.user!.id,
-        isFreeFirstMeeting(intervention.relation.status, intervention.durationMinutes),
+        req.user!.id
       );
+      if (!completion) {
+        return res.status(409).json({ message: "Cette rencontre a déjà été traitée" });
+      }
+      const updated = completion.intervention;
 
       if (intervention.relation.status === "PENDING_FIRST_MEETING") {
         await storage.updateRelationStatus(intervention.relationId, "ACTIVE");
@@ -1335,19 +1332,25 @@ export async function registerRoutes(
         return res.status(400).json({ message: "Cette intervention ne peut plus être annulée" });
       }
 
-      const updated = await storage.updateIntervention(intervention.id, { status: "CANCELLED" });
+      const updated = await storage.cancelIntervention(intervention.id);
+      if (!updated) {
+        return res.status(409).json({ message: "Cette rencontre a déjà été traitée" });
+      }
 
-      const otherId = intervention.relation.seniorId === user.id
-        ? intervention.relation.juniorId
-        : intervention.relation.seniorId;
+      // Senior who cancels: the junior is told. Admin who cancels: both are.
+      const recipients = intervention.relation.seniorId === user.id
+        ? [intervention.relation.juniorId]
+        : [intervention.relation.seniorId, intervention.relation.juniorId];
 
-      await storage.createNotification({
-        user: { connect: { id: otherId } },
-        type: "SYSTEM",
-        title: "Intervention annulée",
-        message: `L'intervention du ${fmtDayNumeric(intervention.scheduledDate)} a été annulée.`,
-        link: `/relations/${intervention.relationId}`,
-      });
+      for (const recipientId of recipients) {
+        await storage.createNotification({
+          user: { connect: { id: recipientId } },
+          type: "SYSTEM",
+          title: "Intervention annulée",
+          message: `L'intervention du ${fmtDayNumeric(intervention.scheduledDate)} a été annulée.`,
+          link: `/relations/${intervention.relationId}`,
+        });
+      }
 
       res.json(updated);
     } catch (err) {
@@ -1478,7 +1481,11 @@ export async function registerRoutes(
         if (!isSenior && intervention.juniorRating !== null) return false;
         return true;
       });
-      res.json(needsFeedback);
+      // The other party's feedback must not reach the caller before (or after)
+      // they give their own.
+      res.json(
+        needsFeedback.map((i) => scopeInterventionFeedback(i, req.user!.role as Role, req.user!.id, i.relation.seniorId))
+      );
     } catch (err) {
       console.error("[PENDING_FEEDBACK] Error:", err);
       res.status(500).json({ message: "Erreur" });
@@ -1546,7 +1553,8 @@ export async function registerRoutes(
         link: `/relations/${intervention.relationId}`,
       });
 
-      res.json(updated);
+      // The other party may already have rated: never echo it back.
+      res.json(scopeInterventionFeedback(updated, req.user!.role as Role, req.user!.id, intervention.relation.seniorId));
     } catch (err) {
       console.error("[FEEDBACK] Error:", err);
       res.status(500).json({ message: "Erreur lors de l'enregistrement du feedback" });
@@ -1690,10 +1698,12 @@ export async function registerRoutes(
         scope = { kind: "user", userId: user.id };
       }
 
+      // Day boundaries are Guadeloupe days (server runs in UTC), end inclusive:
+      // a meeting on the 10th at 21:00 GP is stored as the 11th at 01:00 UTC.
       const interventions = await storage.getMeetingHistory(scope, {
         status,
-        from: from ? new Date(`${from}T00:00:00.000Z`) : undefined,
-        to: to ? new Date(`${to}T23:59:59.999Z`) : undefined,
+        from: from ? gpDateTimeToUtc(from, 0, 0) : undefined,
+        to: to ? new Date(gpDateTimeToUtc(addDaysISO(to, 1), 0, 0).getTime() - 1) : undefined,
       });
 
       const entries = interventions
@@ -1942,11 +1952,8 @@ export async function registerRoutes(
 
       let creditSeniorId: string | null = null;
       if (parsed.data.credits) {
-        if (user.role === "SENIOR") {
-          creditSeniorId = user.id;
-        } else if (user.role === "REFERENT_SENIOR" && user.linkedSeniorId) {
-          creditSeniorId = user.linkedSeniorId;
-        } else {
+        creditSeniorId = creditOwnerId(user);
+        if (!creditSeniorId) {
           return res.status(400).json({
             message: "Impossible d'attribuer des crédits : cet utilisateur n'est ni un senior, ni un référent lié à un senior",
           });
@@ -2468,7 +2475,7 @@ export async function registerRoutes(
         sendEmail({
           to: admin.email,
           subject: `${PLATFORM_NAME} — Note professeur de ${teacherName} sur ${studentName}`,
-          htmlContent: `<h2 style="color:#16a34a">Nouvelle note professeur</h2><p><strong>Professeur :</strong> ${teacherName} (${teacher.email})</p><p><strong>Élève :</strong> ${studentName}</p><hr><p>${parsed.data.content.replace(/\n/g, "<br>")}</p><hr><p><a href="${baseUrl}/admin">Voir dans l'espace admin → onglet "Notes profs"</a></p>`,
+          htmlContent: `<h2 style="color:#16a34a">Nouvelle note professeur</h2><p><strong>Professeur :</strong> ${escapeHtml(teacherName)} (${escapeHtml(teacher.email)})</p><p><strong>Élève :</strong> ${escapeHtml(studentName)}</p><hr><p>${escapeHtml(parsed.data.content).replace(/\n/g, "<br>")}</p><hr><p><a href="${escapeHtml(baseUrl)}/admin">Voir dans l'espace admin → onglet "Notes profs"</a></p>`,
         }).catch(console.error);
       }
 
@@ -2624,6 +2631,10 @@ export async function registerRoutes(
         ...r,
         senior: sanitizeUserPublic(r.senior),
         junior: sanitizeUserPublic(r.junior),
+        // A referent sees the senior's feedback, never the junior's.
+        interventions: r.interventions.map((i) =>
+          scopeInterventionFeedback(i, "REFERENT_SENIOR", req.user!.id, r.seniorId)
+        ),
       })));
     } catch (err) {
       console.error("[REFERENT_RELATIONS] Error:", err);
@@ -2657,7 +2668,7 @@ export async function registerRoutes(
         return res.status(400).json({ message: slotError });
       }
 
-      const result = await createInterventionOrConflict(relation.juniorId, relation.seniorId, relation.status, {
+      const result = await createInterventionOrConflict(relation.juniorId, relation.seniorId, {
         relationId: parsed.data.relationId,
         scheduledDate,
         durationMinutes: parsed.data.durationMinutes,
@@ -2693,21 +2704,40 @@ export async function registerRoutes(
     }
   });
 
+  /**
+   * Senior whose credits the caller may read: their own (senior), their linked
+   * senior (referent), or ?seniorId= for an admin (404 if not a senior).
+   * Sends the error response itself and returns null when it cannot resolve.
+   */
+  async function resolveCreditSenior(req: Request, res: Response): Promise<string | null> {
+    const parsed = creditsQuerySchema.safeParse(req.query);
+    if (!parsed.success) {
+      res.status(400).json({ message: "Paramètres invalides", errors: parsed.error.flatten().fieldErrors });
+      return null;
+    }
+    const user = req.user!;
+    if (user.role === "ADMIN") {
+      const senior = parsed.data.seniorId ? await storage.getUser(parsed.data.seniorId) : null;
+      if (!senior || senior.role !== "SENIOR") {
+        res.status(404).json({ message: "Sénior introuvable" });
+        return null;
+      }
+      return senior.id;
+    }
+    const ownerId = creditOwnerId(user);
+    if (!ownerId) {
+      res.status(403).json({ message: "Ce profil n'a pas de solde de crédits" });
+      return null;
+    }
+    return ownerId;
+  }
+
   app.get("/api/credits/balance", requireAuth, async (req, res) => {
     try {
-      const user = req.user as any;
-      let seniorId: string;
-      if (user.role === "SENIOR") {
-        seniorId = user.id;
-      } else if (user.role === "REFERENT_SENIOR" && user.linkedSeniorId) {
-        seniorId = user.linkedSeniorId;
-      } else if (user.role === "ADMIN" && typeof req.query.seniorId === "string") {
-        seniorId = req.query.seniorId;
-      } else {
-        return res.status(400).json({ message: "Impossible de déterminer le solde de crédits pour cet utilisateur" });
-      }
-      const balance = await storage.getCreditBalance(seniorId);
-      res.json({ balance });
+      const seniorId = await resolveCreditSenior(req, res);
+      if (!seniorId) return;
+      const response: CreditBalanceResponse = await storage.getCredits(seniorId);
+      res.json(response);
     } catch (err) {
       console.error("[CREDITS_BALANCE] Error:", err);
       res.status(500).json({ message: "Erreur" });
@@ -2716,21 +2746,40 @@ export async function registerRoutes(
 
   app.get("/api/credits/history", requireAuth, async (req, res) => {
     try {
-      const user = req.user as any;
-      let seniorId: string;
-      if (user.role === "SENIOR") {
-        seniorId = user.id;
-      } else if (user.role === "REFERENT_SENIOR" && user.linkedSeniorId) {
-        seniorId = user.linkedSeniorId;
-      } else if (user.role === "ADMIN" && typeof req.query.seniorId === "string") {
-        seniorId = req.query.seniorId;
-      } else {
-        return res.status(400).json({ message: "Impossible de déterminer l'historique de crédits pour cet utilisateur" });
-      }
-      const history = await storage.getCreditLedger(seniorId);
+      const seniorId = await resolveCreditSenior(req, res);
+      if (!seniorId) return;
+      const ledger = await storage.getCreditLedger(seniorId);
+      // Internal ids (admin who triggered it, payment, intervention) stay server-side.
+      const history: CreditHistoryEntry[] = ledger.map((entry) => ({
+        id: entry.id,
+        type: entry.type,
+        amount: entry.amount,
+        reason: entry.reason,
+        createdAt: entry.createdAt.toISOString(),
+      }));
       res.json(history);
     } catch (err) {
       console.error("[CREDITS_HISTORY] Error:", err);
+      res.status(500).json({ message: "Erreur" });
+    }
+  });
+
+  /**
+   * Has the Stripe webhook credited this checkout yet? Polled by the success
+   * page: Stripe redirects the browser before (or while) the webhook runs.
+   * Only the purchaser can see their own session.
+   */
+  app.get("/api/credits/checkout-status", requireAuth, async (req, res) => {
+    try {
+      const parsed = checkoutStatusQuerySchema.safeParse(req.query);
+      if (!parsed.success) {
+        return res.status(400).json({ message: "Paramètres invalides", errors: parsed.error.flatten().fieldErrors });
+      }
+      const payment = await storage.getPaymentByStripeSessionId(parsed.data.sessionId);
+      const response: CheckoutStatusResponse = { credited: !!payment && payment.userId === req.user!.id };
+      res.json(response);
+    } catch (err) {
+      console.error("[CREDITS_CHECKOUT_STATUS] Error:", err);
       res.status(500).json({ message: "Erreur" });
     }
   });
@@ -2750,13 +2799,9 @@ export async function registerRoutes(
         return res.status(400).json({ message: "Offre invalide" });
       }
 
-      const user = req.user as any;
-      let seniorId: string;
-      if (user.role === "SENIOR") {
-        seniorId = user.id;
-      } else if (user.role === "REFERENT_SENIOR" && user.linkedSeniorId) {
-        seniorId = user.linkedSeniorId;
-      } else {
+      const user = req.user!;
+      const seniorId = creditOwnerId(user);
+      if (!seniorId) {
         return res.status(400).json({ message: "Seul un sénior ou un référent lié à un sénior peut acheter des crédits" });
       }
 
@@ -2789,9 +2834,11 @@ export async function registerRoutes(
       return res.status(400).send("Webhook invalide");
     }
 
-    // Événement valide à partir d'ici : toujours 200, même en cas d'erreur
-    // métier, pour éviter que le prestataire ne réessaie indéfiniment un
-    // événement qu'on ne pourra jamais traiter différemment.
+    // Événement valide à partir d'ici. 200 pour ce qui est déjà traité ou ne le
+    // sera jamais (doublon, offre inconnue, compte supprimé) ; 500 pour une
+    // erreur passagère (base injoignable, timeout) afin que Stripe réessaie —
+    // sinon le client est débité sans recevoir ses crédits. Rejouer est sans
+    // risque : stripeSessionId est unique.
     try {
       const existing = await storage.getPaymentByStripeSessionId(event.externalSessionId);
       if (existing) {
@@ -2806,15 +2853,30 @@ export async function registerRoutes(
 
       const { seniorId, purchasedByUserId } = event.metadata;
 
-      await storage.createPayment({
-        userId: purchasedByUserId,
-        amount: event.amountPaidEuros,
-        label: `Achat en ligne — ${offer.label}`,
-        credits: offer.credits,
-        creditSeniorId: seniorId,
-        triggeredById: purchasedByUserId,
-        stripeSessionId: event.externalSessionId,
-      });
+      try {
+        await storage.createPayment({
+          userId: purchasedByUserId,
+          amount: event.amountPaidEuros,
+          label: `Achat en ligne — ${offer.label}`,
+          credits: offer.credits,
+          creditSeniorId: seniorId,
+          triggeredById: purchasedByUserId,
+          stripeSessionId: event.externalSessionId,
+        });
+      } catch (err: any) {
+        // Livraison concurrente du même événement : l'autre l'a enregistré.
+        if (err?.code === "P2002") return res.status(200).send();
+        // Payeur ou senior supprimé entre le paiement et le webhook : rejouer
+        // n'y changera rien, un admin doit rembourser à la main.
+        if (err?.code === "P2003" || err?.code === "P2025") {
+          console.error(
+            `[PAYMENT_WEBHOOK] Paiement ${event.externalSessionId} non crédité : compte introuvable ` +
+              `(senior ${seniorId}, payeur ${purchasedByUserId}). Remboursement manuel nécessaire.`
+          );
+          return res.status(200).send();
+        }
+        throw err;
+      }
 
       try {
         const senior = await storage.getUser(seniorId);
@@ -2842,8 +2904,8 @@ export async function registerRoutes(
 
       res.status(200).send();
     } catch (err) {
-      console.error("[PAYMENT_WEBHOOK] Erreur de traitement:", err);
-      res.status(200).send();
+      console.error("[PAYMENT_WEBHOOK] Erreur passagère, Stripe va réessayer:", err);
+      res.status(500).send();
     }
   });
 
@@ -2871,7 +2933,7 @@ export async function registerRoutes(
         sendEmail({
           to: admin.email,
           subject: `${PLATFORM_NAME} — Message du référent sénior ${senderName} : ${subject}`,
-          htmlContent: `<h2 style="color:#8b5cf6">Message du référent sénior</h2><p><strong>De :</strong> ${senderName} (${user.email})</p><p><strong>Sujet :</strong> ${subject}</p><hr><p>${message.replace(/\n/g, "<br>")}</p><hr><p><a href="${baseUrl}/admin">Voir dans l'espace admin</a></p>`,
+          htmlContent: `<h2 style="color:#8b5cf6">Message du référent sénior</h2><p><strong>De :</strong> ${escapeHtml(senderName)} (${escapeHtml(user.email)})</p><p><strong>Sujet :</strong> ${escapeHtml(subject)}</p><hr><p>${escapeHtml(message).replace(/\n/g, "<br>")}</p><hr><p><a href="${escapeHtml(baseUrl)}/admin">Voir dans l'espace admin</a></p>`,
         }).catch(console.error);
       }
 

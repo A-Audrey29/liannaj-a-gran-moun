@@ -1,9 +1,9 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { getPhotoUrl } from "@/lib/photo-url";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { queryClient, apiRequest } from "@/lib/queryClient";
+import { queryClient, apiRequest, apiErrorMessage } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { useLocation } from "wouter";
+import { useLocation, useSearch } from "wouter";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -75,7 +75,8 @@ import {
 import { useAuth } from "@/hooks/use-auth";
 import type { User, Relation, Intervention, PaymentRecord, Notification } from "@shared/schema";
 import { ATELIERS } from "@shared/ateliers";
-import { isMeetingOverdue } from "@shared/meeting-check";
+import { isMeetingEnded } from "@shared/meeting-check";
+import { creditOwnerId, type CreditBalanceResponse } from "@shared/credits";
 import { CREDIT_OFFERS } from "@shared/credit-offers";
 import MessagerieAdminTab from "@/components/admin-messages-tab";
 import SatisfactionTab from "@/components/admin-satisfaction-tab";
@@ -750,8 +751,8 @@ function CadrageTab() {
       setFormData({ scheduledDate: "", durationMinutes: 30, location: "", tasks: [] });
       toast({ title: "1ère rencontre organisée" });
     },
-    onError: () => {
-      toast({ title: "Erreur", description: "Impossible de créer l'intervention", variant: "destructive" });
+    onError: (err) => {
+      toast({ title: "Erreur", description: apiErrorMessage(err, "Impossible de créer l'intervention"), variant: "destructive" });
     },
   });
 
@@ -905,10 +906,11 @@ function CadrageTab() {
 // ==================== FICHE PROFIL DIALOG ====================
 
 function ProfileDialog({ user, open, onOpenChange }: { user: SafeUser | null; open: boolean; onOpenChange: (v: boolean) => void }) {
-  const creditSeniorId = user?.role === "SENIOR" ? user.id : user?.role === "REFERENT_SENIOR" ? user.linkedSeniorId : null;
-  const { data: creditData } = useQuery<{ balance: number }>({
+  const creditSeniorId = user ? creditOwnerId(user) : null;
+  const { data: creditData } = useQuery<CreditBalanceResponse>({
     queryKey: ["/api/credits/balance", creditSeniorId],
-    queryFn: () => apiRequest("GET", `/api/credits/balance?seniorId=${creditSeniorId}`).then((res) => res.json()),
+    queryFn: () =>
+      apiRequest("GET", `/api/credits/balance?seniorId=${encodeURIComponent(creditSeniorId!)}`).then((res) => res.json()),
     enabled: open && !!creditSeniorId,
   });
 
@@ -932,7 +934,7 @@ function ProfileDialog({ user, open, onOpenChange }: { user: SafeUser | null; op
     { label: "Personne de confiance", value: user.trustedPersonName },
     { label: "Email personne de confiance", value: user.trustedPersonEmail },
     { label: "Abonnement", value: user.subscriptionActive ? "Actif" : "Inactif" },
-    { label: "Solde de crédits", value: creditData ? `${creditData.balance} crédit(s)` : null, show: !!creditSeniorId },
+    { label: "Solde de crédits", value: creditData ? `${creditData.balance} crédit(s), dont ${Math.max(creditData.available, 0)} disponible(s)` : null, show: !!creditSeniorId },
     { label: "Inscrit le", value: formatDate(user.createdAt) },
   ];
 
@@ -1144,7 +1146,9 @@ function RencontresTab() {
         viewerRole="ADMIN"
         emptyLabel="Aucune rencontre trouvée"
         renderActions={(entry) => {
-          if (!isMeetingOverdue(entry)) return null;
+          // Available as soon as the meeting has ended (e.g. after a phone
+          // call), not only once the 24h reminder delay has passed.
+          if (!isMeetingEnded(entry, new Date())) return null;
           return (
             <div className="flex gap-2">
               <Button
@@ -2122,6 +2126,8 @@ function CreerProfesseurForm() {
     onSuccess: () => {
       setForm({ email: "", password: "", firstName: "", lastName: "", phone: "" });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/teachers"] });
+      // The Users tab lists teachers from /api/admin/users.
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
       toast({ title: "Professeur créé", description: "Le compte professeur a été créé avec succès." });
     },
     onError: async (err: any) => {
@@ -2177,14 +2183,27 @@ function CreerProfesseurForm() {
 // ==================== MAIN ADMIN PAGE ====================
 
 export default function Admin() {
-  const [activeTab, setActiveTabState] = useState<string>(() => {
-    return sessionStorage.getItem("feves_admin_tab") ?? "utilisateurs";
-  });
+  const [activeTab, setActiveTabState] = useState<string>(
+    () => sessionStorage.getItem("feves_admin_tab") ?? "utilisateurs"
+  );
 
   function setActiveTab(tab: string) {
     setActiveTabState(tab);
     sessionStorage.setItem("feves_admin_tab", tab);
   }
+
+  // ?tab=rencontres comes from the "Rencontres à clôturer" notification and
+  // e-mail. Applied on every URL change (the page does not remount when the
+  // admin is already on /admin), then removed so a reload keeps the last tab.
+  const search = useSearch();
+  useEffect(() => {
+    const tab = new URLSearchParams(search).get("tab");
+    if (!tab || !ADMIN_TABS.some((t) => t.id === tab)) return;
+    setActiveTab(tab);
+    const url = new URL(window.location.href);
+    url.searchParams.delete("tab");
+    window.history.replaceState(window.history.state, "", url.pathname + url.search + url.hash);
+  }, [search]);
 
   const { data: pendingMeetings = [] } = useQuery<RelationWithUsers[]>({
     queryKey: ["/api/admin/relations/pending-meeting"],

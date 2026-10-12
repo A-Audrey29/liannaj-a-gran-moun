@@ -7,6 +7,28 @@ async function throwIfResNotOk(res: Response) {
   }
 }
 
+/** JSON body of an apiRequest error ("402: {...}"), or null. */
+function apiErrorBody(err: unknown): { message?: string; code?: string } | null {
+  if (!(err instanceof Error)) return null;
+  const sep = err.message.indexOf(": ");
+  if (sep === -1) return null;
+  try {
+    return JSON.parse(err.message.slice(sep + 2));
+  } catch {
+    return null;
+  }
+}
+
+/** The server's user-facing message for a failed apiRequest, else `fallback`. */
+export function apiErrorMessage(err: unknown, fallback: string): string {
+  return apiErrorBody(err)?.message || fallback;
+}
+
+/** Machine-readable error code sent by the server (e.g. INSUFFICIENT_CREDITS). */
+export function apiErrorCode(err: unknown): string | undefined {
+  return apiErrorBody(err)?.code;
+}
+
 export async function apiRequest(
   method: string,
   url: string,

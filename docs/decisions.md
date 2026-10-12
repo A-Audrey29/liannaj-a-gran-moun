@@ -3,6 +3,87 @@
 Journal des choix d'architecture et de leurs raisons. Une entrée par décision,
 la plus récente en haut.
 
+## 2026-10-12 — Relance des rencontres non clôturées : aux admins, une seule fois
+
+**Contexte.** Les rencontres `PROPOSED`/`CONFIRMED` dont la date est passée
+restaient bloquées (blocker #4). La première version de la relance écrivait
+au sénior et au jeune « confirmez ou annulez », mais **seul un admin peut
+marquer une rencontre réalisée** (`PATCH /api/interventions/:id/done` est
+`requireAdmin`, et c'est elle qui débite le crédit) : les participants
+recevaient une demande sans pouvoir y répondre.
+
+**Décision — on relance les admins.** Pas de nouveau droit pour les
+participants : laisser un sénior déclencher lui-même le débit de son crédit
+est une décision métier sensible, non retenue. Une passe (toutes les 6h)
+envoie à chaque admin actif **une** notification et **un** e-mail
+récapitulatif (date, sénior, jeune), lien `/admin?tab=rencontres`.
+
+**Décision — quand.** « En retard » = toujours `PROPOSED`/`CONFIRMED` **24h
+après la fin** (début + durée), règle unique `shared/meeting-check.ts`
+(`isMeetingOverdue`) utilisée par le job, le badge et le filtre « À traiter ».
+Les boutons admin, eux, apparaissent dès la fin (`isMeetingEnded`) : le délai
+de 24h ne concerne que la relance. Badge réservé aux admins.
+
+**Décision — e-mails en une seule tentative.** Relance des rencontres : la
+notification dans l'appli est la garantie (créée avec le marquage, dans une
+transaction), l'e-mail est best effort. Rappel de feedback (e-mail seul) :
+la rencontre est marquée dès qu'un destinataire a été servi ; si **tous**
+les envois échouent (panne Brevo), personne n'a rien reçu et on retente à la
+passe suivante, jusqu'à 7 jours après la rencontre (au-delà, abandon
+journalisé : sinon une adresse définitivement invalide serait retentée sans
+fin). Avant, un échec empêchait le marquage et le destinataire
+servi recevait le même e-mail toutes les 6h, sans fin si l'autre adresse
+était invalide.
+
+**Processus côté équipe** : `docs/PROCESSUS-RENCONTRES.md`, à transmettre aux
+administrateurs FEVES.
+
+## 2026-10-12 — Crédits : réservation à la réservation, une seule rencontre gratuite
+
+**Contexte.** Review avant mise en prod. Le contrôle à la création ne
+vérifiait que `solde > 0` : avec 1 crédit, un senior pouvait prévoir 5
+ateliers et finir à -4. La « première rencontre gratuite » était décidée par
+le seul statut de la relation : deux rencontres courtes créées avant la
+première validation passaient toutes deux sans contrôle. Enfin, deux
+validations simultanées d'une même rencontre (double clic, deux admins)
+débitaient deux crédits.
+
+**Décision — les ateliers prévus réservent un crédit.** Crédits disponibles =
+solde du `CreditLedger` − ateliers payants `PROPOSED`/`CONFIRMED`. Une
+création exige au moins 1 crédit disponible. Le **débit reste à la
+complétion** (règle du 2026-09-07 inchangée) ; annuler un atelier libère sa
+réservation. Pas de nouvelle table : la réservation se déduit des rencontres
+prévues, comme le solde se déduit du ledger. Le contrôle tourne dans la
+transaction de création, sous un verrou advisory par senior
+(`credits:<seniorId>`) : sans lui, des réservations simultanées sur des
+jeunes différents consommaient le même dernier crédit (reproduit en test).
+
+**Décision — une seule rencontre gratuite par relation, décidée à la
+création et mémorisée.** Gratuite si la relation attend sa première
+rencontre, si elle dure 30 min ou moins **et** s'il n'existe encore aucune
+rencontre non annulée sur la relation (`isFreeMeeting`, `server/storage.ts`).
+Le résultat est stocké dans `Intervention.isFree` (migration
+`20261012120000_add_intervention_is_free`) : la réservation compte les
+rencontres prévues non gratuites, le débit à la complétion lit le drapeau.
+Recalculer à la complétion dépendait de l'ordre de clôture (une payante
+clôturée avant la gratuite faisait passer la relation ACTIVE, et la gratuite
+était débitée à son tour). Si la rencontre gratuite est annulée, le
+drapeau passe à la plus ancienne rencontre courte encore prévue sur la
+relation (`cancelIntervention`, même transaction), qui libère ainsi son
+crédit réservé.
+
+**Décision — clôture idempotente.** `completeIntervention` ne passe à
+`COMPLETED_PENDING_FEEDBACK` que si la rencontre est encore `CONFIRMED`, et
+`cancelIntervention` ne passe à `CANCELLED` que si elle est encore
+`PROPOSED`/`CONFIRMED`, et `confirmIntervention` ne confirme qu'une rencontre
+encore `PROPOSED` (mises à jour conditionnelles) ; sinon 409. Une rencontre
+ne peut donc être ni débitée deux fois, ni annulée après débit, ni
+reconfirmée après annulation.
+
+**Conséquence.** Le solde négatif ne peut plus venir que d'un ajustement
+admin après réservation ; l'alerte « Solde de crédits négatif » est conservée
+pour ce cas.
+
 ## 2026-10-08 — NPS (recommandation du service) pour le financeur
 
 **Contexte.** Le dossier SORTIR + (annexe 1) impose de systématiser le Net

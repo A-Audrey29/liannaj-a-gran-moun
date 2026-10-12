@@ -73,6 +73,8 @@ export interface Intervention {
   juniorRating: number | null;
   juniorComment: string | null;
   feedbackReminderSentAt: Date | null;
+  /** Free first meeting of the relation: no credit reserved nor debited. */
+  isFree: boolean;
   createdAt: Date;
 }
 
@@ -271,13 +273,23 @@ export const createDateExceptionSchema = z
   .refine(
     (data) => (data.startTime === undefined) === (data.endTime === undefined),
     { message: "startTime et endTime doivent être fournis ensemble ou omis tous les deux", path: ["endTime"] }
-  );
+  )
+  .refine((data) => !data.startTime || !data.endTime || data.endTime > data.startTime, {
+    message: "L'heure de fin doit être après l'heure de début",
+    path: ["endTime"],
+  });
 
-export const recurringSlotSchema = z.object({
-  dayOfWeek: z.number().min(0).max(6),
-  startTime: timeHHMM,
-  endTime: timeHHMM,
-});
+// HH:MM strings compare correctly as text.
+export const recurringSlotSchema = z
+  .object({
+    dayOfWeek: z.number().int().min(0).max(6),
+    startTime: timeHHMM,
+    endTime: timeHHMM,
+  })
+  .refine((slot) => slot.endTime > slot.startTime, {
+    message: "L'heure de fin doit être après l'heure de début",
+    path: ["endTime"],
+  });
 
 const MAX_RECURRING_RANGE_DAYS = 90;
 
@@ -304,7 +316,7 @@ export const createRelationSchema = z.object({
 });
 
 export const updateUserCategoriesSchema = z.object({
-  categoryIds: z.array(z.string()),
+  categoryIds: z.array(z.string().min(1)).max(100),
 });
 
 export type UpdateUserCategoriesInput = z.infer<typeof updateUserCategoriesSchema>;
@@ -467,6 +479,16 @@ export const meetingHistoryQuerySchema = z.object({
 });
 
 export type MeetingHistoryQuery = z.infer<typeof meetingHistoryQuerySchema>;
+
+/** Admins pass ?seniorId= to read a given senior's credits; others ignore it. */
+export const creditsQuerySchema = z.object({
+  seniorId: z.string().min(1).max(64).optional(),
+});
+
+/** Stripe Checkout session id, appended by Stripe to the success URL. */
+export const checkoutStatusQuerySchema = z.object({
+  sessionId: z.string().regex(/^cs_[A-Za-z0-9_]+$/, "Identifiant de session invalide").max(255),
+});
 
 export const npsQuerySchema = z
   .object({

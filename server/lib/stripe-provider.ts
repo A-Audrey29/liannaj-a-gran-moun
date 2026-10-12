@@ -29,7 +29,9 @@ export const stripeProvider: PaymentProvider = {
         offerId: params.offerId,
         purchasedByUserId: params.purchasedByUserId,
       },
-      success_url: params.successUrl,
+      // Stripe fills {CHECKOUT_SESSION_ID}: the success page polls
+      // /api/credits/checkout-status with it until the webhook has credited.
+      success_url: `${params.successUrl}?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: params.cancelUrl,
     });
     if (!session.url) throw new Error("Stripe n'a pas renvoyé d'URL de paiement");

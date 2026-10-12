@@ -1,12 +1,16 @@
 import { storage } from "../storage";
 import { addDaysISO, partsFromISO, gpDateTimeToUtc } from "../../shared/dates";
 import type { CreateRecurringAvailabilitiesInput, CreateDateExceptionInput } from "../../shared/schema";
-import { overlaps, isSlotCovered } from "../../shared/availability";
+import { overlaps, contains, isSlotCovered } from "../../shared/availability";
 import type { Prisma } from "../../generated/prisma/client.ts";
 
 export { overlaps };
 
-function confirmedIntervals(interventions: { scheduledDate: Date; durationMinutes: number }[]) {
+/** Longest meeting accepted by the creation schemas (durationMinutes max). */
+const MAX_MEETING_MINUTES = 480;
+
+/** Intervalles occupés par des rencontres (début, début + durée). */
+function meetingIntervals(interventions: { scheduledDate: Date; durationMinutes: number }[]) {
   return interventions.map((i) => ({
     start: i.scheduledDate,
     end: new Date(i.scheduledDate.getTime() + i.durationMinutes * 60_000),
@@ -14,25 +18,24 @@ function confirmedIntervals(interventions: { scheduledDate: Date; durationMinute
 }
 
 /**
- * Remplace les disponibilités AVAILABLE du Junior par le planning récurrent fourni.
- * Purge d'abord tout ce qui n'est pas protégé par une intervention CONFIRMED,
- * la fenêtre [from, to] devient la source de vérité pour les jours cochés.
+ * Remplace, sur la fenêtre [from, to] seulement, les disponibilités AVAILABLE
+ * du Junior par le planning récurrent fourni. Les créneaux hors fenêtre sont
+ * conservés (l'écran annonce « vos N prochaines semaines »). Un créneau qui
+ * porte une rencontre prévue (PROPOSED ou CONFIRMED) n'est purgé que si un
+ * nouveau créneau le couvre entièrement : la rencontre reste dans les
+ * disponibilités, et réenregistrer le même planning ne crée pas de doublon.
  */
 export async function createRecurringAvailabilities(
   userId: string,
   input: CreateRecurringAvailabilitiesInput
 ): Promise<{ created: number; deleted: number }> {
-  const [existing, confirmed] = await Promise.all([
+  const windowStart = gpDateTimeToUtc(input.from, 0, 0);
+  const windowEnd = gpDateTimeToUtc(addDaysISO(input.to, 1), 0, 0);
+  const [existing, planned] = await Promise.all([
     storage.getAvailabilitiesByUser(userId),
-    storage.getConfirmedInterventionsForUser(userId),
+    storage.getActiveInterventionsForUser(userId),
   ]);
-  const protectedIntervals = confirmedIntervals(confirmed);
-
-  const toDelete = existing.filter(
-    (a) =>
-      a.kind === "AVAILABLE" &&
-      !protectedIntervals.some((p) => overlaps(a.startAt, a.endAt, p.start, p.end))
-  );
+  const protectedIntervals = meetingIntervals(planned);
 
   const toCreate: { userId: string; startAt: Date; endAt: Date; kind: "AVAILABLE" }[] = [];
   let dayISO = input.from;
@@ -51,6 +54,14 @@ export async function createRecurringAvailabilities(
     }
     dayISO = addDaysISO(dayISO, 1);
   }
+
+  const toDelete = existing.filter(
+    (a) =>
+      a.kind === "AVAILABLE" &&
+      overlaps(a.startAt, a.endAt, windowStart, windowEnd) &&
+      (!protectedIntervals.some((p) => overlaps(a.startAt, a.endAt, p.start, p.end)) ||
+        toCreate.some((n) => contains(n.startAt, n.endAt, a.startAt, a.endAt)))
+  );
 
   return storage.deleteAndCreateAvailabilities(toDelete.map((a) => a.id), toCreate);
 }
@@ -74,11 +85,15 @@ export async function createDateException(
   const toReinsert: { startAt: Date; endAt: Date }[] = [];
 
   if (input.kind === "UNAVAILABLE") {
-    const [existing, confirmed] = await Promise.all([
+    // PROPOSED too: removing the slot behind a proposal let the junior confirm
+    // a meeting outside their availability. They should decline it instead.
+    const [existing, planned] = await Promise.all([
       storage.getAvailabilitiesInRange(userId, rangeStart, rangeEnd),
-      storage.getConfirmedInterventionsForUser(userId, rangeStart, rangeEnd),
+      // A meeting that started before the range can still run into it: look
+      // back by the longest possible meeting, the overlap test does the rest.
+      storage.getActiveInterventionsForUser(userId, new Date(rangeStart.getTime() - MAX_MEETING_MINUTES * 60_000), rangeEnd),
     ]);
-    const protectedIntervals = confirmedIntervals(confirmed);
+    const protectedIntervals = meetingIntervals(planned);
 
     const toDelete = existing.filter(
       (a) =>
