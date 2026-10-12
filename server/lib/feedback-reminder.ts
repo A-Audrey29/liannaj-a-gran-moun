@@ -57,10 +57,11 @@ export async function checkAndSendFeedbackReminders() {
       const feedbackUrl = `${baseUrl}/relations/${intervention.relationId}`;
       const subject = `Rappel : donnez votre avis - ${PLATFORM_NAME}`;
 
-      // Une seule tentative par destinataire (décision du 2026-10-12) : la
-      // rencontre est marquée relancée même si un e-mail échoue. Rejouer
-      // renvoyait le rappel toutes les 6h à celui dont l'e-mail était passé,
-      // sans fin si l'autre adresse était invalide. L'échec est journalisé.
+      // Une seule tentative par destinataire servi (décision du 2026-10-12) :
+      // dès qu'un e-mail est passé, la rencontre est marquée relancée, même si
+      // l'autre a échoué — rejouer renvoyait le rappel toutes les 6h à celui
+      // qui l'avait reçu. Si TOUS ont échoué (panne Brevo), personne n'a rien
+      // reçu : on retente à la passe suivante.
       const destinataires: { role: string; email: string; prenom: string }[] = [];
       if (intervention.seniorRating === null) {
         destinataires.push({
@@ -91,10 +92,17 @@ export async function checkAndSendFeedbackReminders() {
         }
       }
 
+      if (destinataires.length > 0 && echecs === destinataires.length) {
+        console.warn(
+          `[FEEDBACK-REMINDER] Intervention ${intervention.id} : tous les envois en échec — ` +
+            `nouvelle tentative à la prochaine passe.`
+        );
+        continue;
+      }
       if (echecs > 0) {
         console.warn(
           `[FEEDBACK-REMINDER] Intervention ${intervention.id} : ${echecs}/${destinataires.length} ` +
-            `envoi(s) en échec — non rejoué (une seule tentative).`
+            `envoi(s) en échec — non rejoué (une seule tentative par destinataire servi).`
         );
       }
 

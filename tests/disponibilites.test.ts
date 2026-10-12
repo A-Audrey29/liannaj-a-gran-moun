@@ -113,3 +113,41 @@ describe("POST /api/availabilities/exception", () => {
     expect(await prisma.availability.count()).toBe(0);
   });
 });
+
+describe("planning reenregistre avec une rencontre prevue", () => {
+  it("ne cree pas de doublon a chaque enregistrement du meme planning", async () => {
+    const junior = await createUser("JUNIOR");
+    const senior = await createUser("SENIOR");
+    const relation = await createRelation(senior.id, junior.id);
+    const agent = await loginAs(junior);
+    await agent.post("/api/availabilities/recurring").send(PLANNING_NOVEMBRE);
+    // Lundi 2 novembre 09:00-12:00 GP = 13:00-16:00 UTC ; rencontre proposee a 14:00 UTC.
+    await prisma.intervention.create({
+      data: { relationId: relation.id, status: "PROPOSED", scheduledDate: new Date("2026-11-02T14:00:00Z"), durationMinutes: 60 },
+    });
+
+    await agent.post("/api/availabilities/recurring").send(PLANNING_NOVEMBRE);
+    await agent.post("/api/availabilities/recurring").send(PLANNING_NOVEMBRE);
+
+    expect(await prisma.availability.count({ where: { userId: junior.id, deletedAt: null } })).toBe(2);
+  });
+});
+
+describe("exception sur une rencontre proposee", () => {
+  it("ne retire pas le creneau qui porte une rencontre PROPOSED", async () => {
+    const junior = await createUser("JUNIOR");
+    const senior = await createUser("SENIOR");
+    const relation = await createRelation(senior.id, junior.id);
+    const occupe = await creneau(junior.id, DANS_LA_FENETRE);
+    await prisma.intervention.create({
+      data: { relationId: relation.id, status: "PROPOSED", scheduledDate: new Date("2026-11-04T14:00:00Z"), durationMinutes: 60 },
+    });
+
+    const res = await (await loginAs(junior))
+      .post("/api/availabilities/exception")
+      .send({ date: "2026-11-04", kind: "UNAVAILABLE" });
+
+    expect(res.status).toBeLessThan(300);
+    expect(await actif(occupe.id)).toBe(true);
+  });
+});

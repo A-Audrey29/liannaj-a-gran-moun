@@ -71,17 +71,21 @@ export async function checkAndSendMeetingCheckReminders() {
     const n = overdue.length;
     const adminUrl = `${getBaseUrl()}${MEETING_CHECK_ADMIN_PATH}`;
 
-    for (const admin of admins) {
-      await storage.createNotification({
-        user: { connect: { id: admin.id } },
-        type: "MEETING_CHECK",
+    // Notifications + marking in one transaction first: they are the
+    // guarantee. E-mails follow, best effort, one attempt each.
+    await storage.recordMeetingCheckReminder(
+      admins.map((a) => a.id),
+      {
         title: "Rencontres à clôturer",
         message:
           `${n} rencontre${n > 1 ? "s" : ""} terminée${n > 1 ? "s" : ""} depuis plus de ` +
           `${MEETING_CHECK_GRACE_HOURS}h ${n > 1 ? "attendent" : "attend"} d'être marquée${n > 1 ? "s" : ""} réalisée${n > 1 ? "s" : ""} ou annulée${n > 1 ? "s" : ""}.`,
         link: MEETING_CHECK_ADMIN_PATH,
-      });
+      },
+      overdue.map((i) => i.id)
+    );
 
+    for (const admin of admins) {
       if (!admin.email) continue;
       try {
         await sendEmail({
@@ -94,7 +98,6 @@ export async function checkAndSendMeetingCheckReminders() {
       }
     }
 
-    await storage.markMeetingCheckReminderSent(overdue.map((i) => i.id));
     console.log(`[MEETING-CHECK] ${n} rencontre(s) signalée(s) à ${admins.length} admin(s)`);
   } catch (error) {
     console.error("[MEETING-CHECK] Erreur lors de la vérification:", error);

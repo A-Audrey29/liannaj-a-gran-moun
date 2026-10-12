@@ -90,3 +90,31 @@ describe("rappel de feedback : une seule tentative", () => {
     expect(errorSpy).toHaveBeenCalled();
   });
 });
+
+describe("rappel de feedback : panne totale", () => {
+  it("si tous les e-mails echouent, la rencontre n'est pas marquee et le rappel repart", async () => {
+    const senior = await createUser("SENIOR");
+    const junior = await createUser("JUNIOR");
+    const relation = await createRelation(senior.id, junior.id);
+    const rencontre = await prisma.intervention.create({
+      data: {
+        relationId: relation.id,
+        status: "COMPLETED_PENDING_FEEDBACK",
+        scheduledDate: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000),
+      },
+    });
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    vi.mocked(sendEmail).mockRejectedValue(new Error("Brevo error (503)"));
+
+    await checkAndSendFeedbackReminders();
+    const apresPanne = await prisma.intervention.findUniqueOrThrow({ where: { id: rencontre.id } });
+    expect(apresPanne.feedbackReminderSentAt).toBeNull();
+
+    vi.mocked(sendEmail).mockResolvedValue(null);
+    await checkAndSendFeedbackReminders();
+    const apresRetour = await prisma.intervention.findUniqueOrThrow({ where: { id: rencontre.id } });
+    expect(apresRetour.feedbackReminderSentAt).not.toBeNull();
+  });
+});

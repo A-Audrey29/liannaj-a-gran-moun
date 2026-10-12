@@ -1,13 +1,13 @@
 import { storage } from "../storage";
 import { addDaysISO, partsFromISO, gpDateTimeToUtc } from "../../shared/dates";
 import type { CreateRecurringAvailabilitiesInput, CreateDateExceptionInput } from "../../shared/schema";
-import { overlaps, isSlotCovered } from "../../shared/availability";
+import { overlaps, contains, isSlotCovered } from "../../shared/availability";
 import type { Prisma } from "../../generated/prisma/client.ts";
 
 export { overlaps };
 
 /** Intervalles occupés par des rencontres (début, début + durée). */
-function confirmedIntervals(interventions: { scheduledDate: Date; durationMinutes: number }[]) {
+function meetingIntervals(interventions: { scheduledDate: Date; durationMinutes: number }[]) {
   return interventions.map((i) => ({
     start: i.scheduledDate,
     end: new Date(i.scheduledDate.getTime() + i.durationMinutes * 60_000),
@@ -17,9 +17,10 @@ function confirmedIntervals(interventions: { scheduledDate: Date; durationMinute
 /**
  * Remplace, sur la fenêtre [from, to] seulement, les disponibilités AVAILABLE
  * du Junior par le planning récurrent fourni. Les créneaux hors fenêtre sont
- * conservés (l'écran annonce « vos N prochaines semaines »), et un créneau
- * qui porte une rencontre prévue (PROPOSED ou CONFIRMED) n'est jamais purgé :
- * sinon le jeune pouvait confirmer une rencontre hors de ses disponibilités.
+ * conservés (l'écran annonce « vos N prochaines semaines »). Un créneau qui
+ * porte une rencontre prévue (PROPOSED ou CONFIRMED) n'est purgé que si un
+ * nouveau créneau le couvre entièrement : la rencontre reste dans les
+ * disponibilités, et réenregistrer le même planning ne crée pas de doublon.
  */
 export async function createRecurringAvailabilities(
   userId: string,
@@ -31,14 +32,7 @@ export async function createRecurringAvailabilities(
     storage.getAvailabilitiesByUser(userId),
     storage.getActiveInterventionsForUser(userId),
   ]);
-  const protectedIntervals = confirmedIntervals(planned);
-
-  const toDelete = existing.filter(
-    (a) =>
-      a.kind === "AVAILABLE" &&
-      overlaps(a.startAt, a.endAt, windowStart, windowEnd) &&
-      !protectedIntervals.some((p) => overlaps(a.startAt, a.endAt, p.start, p.end))
-  );
+  const protectedIntervals = meetingIntervals(planned);
 
   const toCreate: { userId: string; startAt: Date; endAt: Date; kind: "AVAILABLE" }[] = [];
   let dayISO = input.from;
@@ -57,6 +51,14 @@ export async function createRecurringAvailabilities(
     }
     dayISO = addDaysISO(dayISO, 1);
   }
+
+  const toDelete = existing.filter(
+    (a) =>
+      a.kind === "AVAILABLE" &&
+      overlaps(a.startAt, a.endAt, windowStart, windowEnd) &&
+      (!protectedIntervals.some((p) => overlaps(a.startAt, a.endAt, p.start, p.end)) ||
+        toCreate.some((n) => contains(n.startAt, n.endAt, a.startAt, a.endAt)))
+  );
 
   return storage.deleteAndCreateAvailabilities(toDelete.map((a) => a.id), toCreate);
 }
@@ -80,11 +82,13 @@ export async function createDateException(
   const toReinsert: { startAt: Date; endAt: Date }[] = [];
 
   if (input.kind === "UNAVAILABLE") {
-    const [existing, confirmed] = await Promise.all([
+    // PROPOSED too: removing the slot behind a proposal let the junior confirm
+    // a meeting outside their availability. They should decline it instead.
+    const [existing, planned] = await Promise.all([
       storage.getAvailabilitiesInRange(userId, rangeStart, rangeEnd),
-      storage.getConfirmedInterventionsForUser(userId, rangeStart, rangeEnd),
+      storage.getActiveInterventionsForUser(userId, rangeStart, rangeEnd),
     ]);
-    const protectedIntervals = confirmedIntervals(confirmed);
+    const protectedIntervals = meetingIntervals(planned);
 
     const toDelete = existing.filter(
       (a) =>

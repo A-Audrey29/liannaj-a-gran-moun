@@ -1,9 +1,9 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { getPhotoUrl } from "@/lib/photo-url";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest, apiErrorMessage } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { useLocation } from "wouter";
+import { useLocation, useSearch } from "wouter";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -2183,17 +2183,25 @@ function CreerProfesseurForm() {
 // ==================== MAIN ADMIN PAGE ====================
 
 export default function Admin() {
-  const [activeTab, setActiveTabState] = useState<string>(() => {
-    // ?tab=rencontres: link from the "Rencontres à clôturer" reminder.
-    const fromUrl = new URLSearchParams(window.location.search).get("tab");
-    if (fromUrl && ADMIN_TABS.some((t) => t.id === fromUrl)) return fromUrl;
-    return sessionStorage.getItem("feves_admin_tab") ?? "utilisateurs";
-  });
+  const [activeTab, setActiveTabState] = useState<string>(
+    () => sessionStorage.getItem("feves_admin_tab") ?? "utilisateurs"
+  );
 
   function setActiveTab(tab: string) {
     setActiveTabState(tab);
     sessionStorage.setItem("feves_admin_tab", tab);
   }
+
+  // ?tab=rencontres comes from the "Rencontres à clôturer" notification and
+  // e-mail. Applied on every URL change (the page does not remount when the
+  // admin is already on /admin), then removed so a reload keeps the last tab.
+  const search = useSearch();
+  useEffect(() => {
+    const tab = new URLSearchParams(search).get("tab");
+    if (!tab || !ADMIN_TABS.some((t) => t.id === tab)) return;
+    setActiveTab(tab);
+    window.history.replaceState(null, "", window.location.pathname);
+  }, [search]);
 
   const { data: pendingMeetings = [] } = useQuery<RelationWithUsers[]>({
     queryKey: ["/api/admin/relations/pending-meeting"],
