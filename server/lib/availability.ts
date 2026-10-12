@@ -6,6 +6,7 @@ import type { Prisma } from "../../generated/prisma/client.ts";
 
 export { overlaps };
 
+/** Intervalles occupés par des rencontres (début, début + durée). */
 function confirmedIntervals(interventions: { scheduledDate: Date; durationMinutes: number }[]) {
   return interventions.map((i) => ({
     start: i.scheduledDate,
@@ -14,23 +15,28 @@ function confirmedIntervals(interventions: { scheduledDate: Date; durationMinute
 }
 
 /**
- * Remplace les disponibilités AVAILABLE du Junior par le planning récurrent fourni.
- * Purge d'abord tout ce qui n'est pas protégé par une intervention CONFIRMED,
- * la fenêtre [from, to] devient la source de vérité pour les jours cochés.
+ * Remplace, sur la fenêtre [from, to] seulement, les disponibilités AVAILABLE
+ * du Junior par le planning récurrent fourni. Les créneaux hors fenêtre sont
+ * conservés (l'écran annonce « vos N prochaines semaines »), et un créneau
+ * qui porte une rencontre prévue (PROPOSED ou CONFIRMED) n'est jamais purgé :
+ * sinon le jeune pouvait confirmer une rencontre hors de ses disponibilités.
  */
 export async function createRecurringAvailabilities(
   userId: string,
   input: CreateRecurringAvailabilitiesInput
 ): Promise<{ created: number; deleted: number }> {
-  const [existing, confirmed] = await Promise.all([
+  const windowStart = gpDateTimeToUtc(input.from, 0, 0);
+  const windowEnd = gpDateTimeToUtc(addDaysISO(input.to, 1), 0, 0);
+  const [existing, planned] = await Promise.all([
     storage.getAvailabilitiesByUser(userId),
-    storage.getConfirmedInterventionsForUser(userId),
+    storage.getActiveInterventionsForUser(userId),
   ]);
-  const protectedIntervals = confirmedIntervals(confirmed);
+  const protectedIntervals = confirmedIntervals(planned);
 
   const toDelete = existing.filter(
     (a) =>
       a.kind === "AVAILABLE" &&
+      overlaps(a.startAt, a.endAt, windowStart, windowEnd) &&
       !protectedIntervals.some((p) => overlaps(a.startAt, a.endAt, p.start, p.end))
   );
 

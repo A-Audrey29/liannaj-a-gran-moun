@@ -271,13 +271,23 @@ export const createDateExceptionSchema = z
   .refine(
     (data) => (data.startTime === undefined) === (data.endTime === undefined),
     { message: "startTime et endTime doivent être fournis ensemble ou omis tous les deux", path: ["endTime"] }
-  );
+  )
+  .refine((data) => !data.startTime || !data.endTime || data.endTime > data.startTime, {
+    message: "L'heure de fin doit être après l'heure de début",
+    path: ["endTime"],
+  });
 
-export const recurringSlotSchema = z.object({
-  dayOfWeek: z.number().min(0).max(6),
-  startTime: timeHHMM,
-  endTime: timeHHMM,
-});
+// HH:MM strings compare correctly as text.
+export const recurringSlotSchema = z
+  .object({
+    dayOfWeek: z.number().int().min(0).max(6),
+    startTime: timeHHMM,
+    endTime: timeHHMM,
+  })
+  .refine((slot) => slot.endTime > slot.startTime, {
+    message: "L'heure de fin doit être après l'heure de début",
+    path: ["endTime"],
+  });
 
 const MAX_RECURRING_RANGE_DAYS = 90;
 
