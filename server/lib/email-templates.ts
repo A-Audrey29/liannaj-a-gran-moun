@@ -1,12 +1,26 @@
 import { PLATFORM_NAME, PLATFORM_TAGLINE, PLATFORM_ATTRIBUTION } from "../../shared/branding";
 
+/**
+ * Every value inserted into an email goes through this: names, comments and
+ * messages are typed by users, and an unescaped `<a href=...>` in a first name
+ * would become a working link inside a Lyannaj-branded email (phishing).
+ */
+export function escapeHtml(value: string | number | null | undefined): string {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 export function getValidationEmailHtml(
   validatorName: string | null,
   userName: string,
   validationUrl: string
 ): string {
   const greeting = validatorName
-    ? `Bonjour ${validatorName},`
+    ? `Bonjour ${escapeHtml(validatorName)},`
     : "Bonjour,";
 
   return `<!DOCTYPE html>
@@ -34,7 +48,7 @@ export function getValidationEmailHtml(
                 Une nouvelle inscription est en attente de votre validation.
               </p>
               <p style="margin:0 0 18px;color:#1f1f1f;font-size:15px;line-height:1.6;">
-                <strong>${userName}</strong> souhaite rejoindre ${PLATFORM_NAME} et vous a d&eacute;sign&eacute;(e) comme r&eacute;f&eacute;rent(e).
+                <strong>${escapeHtml(userName)}</strong> souhaite rejoindre ${PLATFORM_NAME} et vous a d&eacute;sign&eacute;(e) comme r&eacute;f&eacute;rent(e).
               </p>
               <p style="margin:0 0 24px;color:#1f1f1f;font-size:15px;line-height:1.6;">
                 Cliquez sur le bouton ci-dessous pour valider son inscription&nbsp;:
@@ -42,7 +56,7 @@ export function getValidationEmailHtml(
               <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 auto 28px;">
                 <tr>
                   <td align="center" style="border-radius:6px;background:linear-gradient(135deg,#e91e8c,#7c3aed);">
-                    <a href="${validationUrl}" target="_blank" style="display:inline-block;padding:14px 36px;color:#ffffff;font-size:15px;font-weight:600;text-decoration:none;border-radius:6px;">
+                    <a href="${escapeHtml(validationUrl)}" target="_blank" style="display:inline-block;padding:14px 36px;color:#ffffff;font-size:15px;font-weight:600;text-decoration:none;border-radius:6px;">
                       Valider l'inscription
                     </a>
                   </td>
@@ -52,7 +66,7 @@ export function getValidationEmailHtml(
                 Si le bouton ne fonctionne pas, copiez-collez le lien suivant dans votre navigateur&nbsp;:
               </p>
               <p style="margin:0 0 24px;word-break:break-all;color:#7c3aed;font-size:13px;line-height:1.5;">
-                ${validationUrl}
+                ${escapeHtml(validationUrl)}
               </p>
               <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 18px;border-top:1px solid #e5e7eb;">
                 <tr><td style="height:18px;"></td></tr>
@@ -82,7 +96,7 @@ function emailWrapper(title: string, bodyContent: string): string {
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>${title}</title>
+  <title>${escapeHtml(title)}</title>
 </head>
 <body style="margin:0;padding:0;background-color:#f8f4fc;font-family:Arial,Helvetica,sans-serif;">
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f8f4fc;padding:32px 16px;">
@@ -123,9 +137,9 @@ export function getRelationAcceptedEmailHtml(
   relationUrl: string
 ): string {
   const body = `
-    <p style="margin:0 0 18px;color:#1f1f1f;font-size:15px;line-height:1.6;">Bonjour ${seniorName},</p>
+    <p style="margin:0 0 18px;color:#1f1f1f;font-size:15px;line-height:1.6;">Bonjour ${escapeHtml(seniorName)},</p>
     <p style="margin:0 0 18px;color:#1f1f1f;font-size:15px;line-height:1.6;">
-      Bonne nouvelle ! Votre demande de relation avec <strong>${juniorName}</strong> a &eacute;t&eacute; accept&eacute;e.
+      Bonne nouvelle ! Votre demande de relation avec <strong>${escapeHtml(juniorName)}</strong> a &eacute;t&eacute; accept&eacute;e.
     </p>
     <p style="margin:0 0 18px;color:#1f1f1f;font-size:15px;line-height:1.6;">
       Vous pouvez d&egrave;s maintenant planifier des interventions ensemble sur la plateforme ${PLATFORM_NAME}.
@@ -133,7 +147,7 @@ export function getRelationAcceptedEmailHtml(
     <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 auto 28px;">
       <tr>
         <td align="center" style="border-radius:6px;background:linear-gradient(135deg,#e91e8c,#7c3aed);">
-          <a href="${relationUrl}" target="_blank" style="display:inline-block;padding:14px 36px;color:#ffffff;font-size:15px;font-weight:600;text-decoration:none;border-radius:6px;">
+          <a href="${escapeHtml(relationUrl)}" target="_blank" style="display:inline-block;padding:14px 36px;color:#ffffff;font-size:15px;font-weight:600;text-decoration:none;border-radius:6px;">
             Voir ma relation
           </a>
         </td>
@@ -149,7 +163,7 @@ export function getInterventionProposedEmailHtml(
   relationUrl: string
 ): string {
   const body = `
-    <p style="margin:0 0 18px;color:#1f1f1f;font-size:15px;line-height:1.6;">Bonjour ${userName},</p>
+    <p style="margin:0 0 18px;color:#1f1f1f;font-size:15px;line-height:1.6;">Bonjour ${escapeHtml(userName)},</p>
     <p style="margin:0 0 18px;color:#1f1f1f;font-size:15px;line-height:1.6;">
       Une nouvelle intervention vous a &eacute;t&eacute; propos&eacute;e :
     </p>
@@ -157,13 +171,13 @@ export function getInterventionProposedEmailHtml(
       <tr>
         <td style="padding:8px 16px;">
           <p style="margin:0 0 8px;color:#7c3aed;font-size:13px;font-weight:600;text-transform:uppercase;">Date</p>
-          <p style="margin:0;color:#1f1f1f;font-size:15px;font-weight:600;">${date}</p>
+          <p style="margin:0;color:#1f1f1f;font-size:15px;font-weight:600;">${escapeHtml(date)}</p>
         </td>
       </tr>
       <tr>
         <td style="padding:8px 16px;">
           <p style="margin:0 0 8px;color:#7c3aed;font-size:13px;font-weight:600;text-transform:uppercase;">Lieu</p>
-          <p style="margin:0;color:#1f1f1f;font-size:15px;font-weight:600;">${location}</p>
+          <p style="margin:0;color:#1f1f1f;font-size:15px;font-weight:600;">${escapeHtml(location)}</p>
         </td>
       </tr>
     </table>
@@ -173,7 +187,7 @@ export function getInterventionProposedEmailHtml(
     <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 auto 28px;">
       <tr>
         <td align="center" style="border-radius:6px;background:linear-gradient(135deg,#e91e8c,#7c3aed);">
-          <a href="${relationUrl}" target="_blank" style="display:inline-block;padding:14px 36px;color:#ffffff;font-size:15px;font-weight:600;text-decoration:none;border-radius:6px;">
+          <a href="${escapeHtml(relationUrl)}" target="_blank" style="display:inline-block;padding:14px 36px;color:#ffffff;font-size:15px;font-weight:600;text-decoration:none;border-radius:6px;">
             Voir l'intervention
           </a>
         </td>
@@ -188,9 +202,9 @@ export function getInterventionConfirmedEmailHtml(
   relationUrl: string
 ): string {
   const body = `
-    <p style="margin:0 0 18px;color:#1f1f1f;font-size:15px;line-height:1.6;">Bonjour ${userName},</p>
+    <p style="margin:0 0 18px;color:#1f1f1f;font-size:15px;line-height:1.6;">Bonjour ${escapeHtml(userName)},</p>
     <p style="margin:0 0 18px;color:#1f1f1f;font-size:15px;line-height:1.6;">
-      L'intervention pr&eacute;vue le <strong>${date}</strong> a &eacute;t&eacute; confirm&eacute;e.
+      L'intervention pr&eacute;vue le <strong>${escapeHtml(date)}</strong> a &eacute;t&eacute; confirm&eacute;e.
     </p>
     <p style="margin:0 0 18px;color:#1f1f1f;font-size:15px;line-height:1.6;">
       Tout est en ordre ! Rendez-vous le jour J.
@@ -198,7 +212,7 @@ export function getInterventionConfirmedEmailHtml(
     <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 auto 28px;">
       <tr>
         <td align="center" style="border-radius:6px;background:linear-gradient(135deg,#e91e8c,#7c3aed);">
-          <a href="${relationUrl}" target="_blank" style="display:inline-block;padding:14px 36px;color:#ffffff;font-size:15px;font-weight:600;text-decoration:none;border-radius:6px;">
+          <a href="${escapeHtml(relationUrl)}" target="_blank" style="display:inline-block;padding:14px 36px;color:#ffffff;font-size:15px;font-weight:600;text-decoration:none;border-radius:6px;">
             Voir les d&eacute;tails
           </a>
         </td>
@@ -213,9 +227,9 @@ export function getNegativeCreditBalanceEmailHtml(
   balance: number
 ): string {
   const body = `
-    <p style="margin:0 0 18px;color:#1f1f1f;font-size:15px;line-height:1.6;">Bonjour ${userName},</p>
+    <p style="margin:0 0 18px;color:#1f1f1f;font-size:15px;line-height:1.6;">Bonjour ${escapeHtml(userName)},</p>
     <p style="margin:0 0 18px;color:#1f1f1f;font-size:15px;line-height:1.6;">
-      Le solde de cr&eacute;dits de <strong>${seniorName}</strong> est n&eacute;gatif
+      Le solde de cr&eacute;dits de <strong>${escapeHtml(seniorName)}</strong> est n&eacute;gatif
       (<strong>${balance}</strong>) suite &agrave; une rencontre r&eacute;alis&eacute;e.
     </p>
     <p style="margin:0 0 18px;color:#1f1f1f;font-size:15px;line-height:1.6;">
@@ -232,9 +246,9 @@ export function getCreditPurchaseConfirmedEmailHtml(
   newBalance: number
 ): string {
   const body = `
-    <p style="margin:0 0 18px;color:#1f1f1f;font-size:15px;line-height:1.6;">Bonjour ${userName},</p>
+    <p style="margin:0 0 18px;color:#1f1f1f;font-size:15px;line-height:1.6;">Bonjour ${escapeHtml(userName)},</p>
     <p style="margin:0 0 18px;color:#1f1f1f;font-size:15px;line-height:1.6;">
-      Votre achat <strong>${offerLabel}</strong> a &eacute;t&eacute; confirm&eacute;.
+      Votre achat <strong>${escapeHtml(offerLabel)}</strong> a &eacute;t&eacute; confirm&eacute;.
     </p>
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 24px;background-color:#f8f4fc;border-radius:6px;">
       <tr>
@@ -255,9 +269,9 @@ export function getFeedbackReminderEmailHtml(
   feedbackUrl?: string
 ): string {
   const body = `
-    <p style="margin:0 0 18px;color:#1f1f1f;font-size:15px;line-height:1.6;">Bonjour ${userName},</p>
+    <p style="margin:0 0 18px;color:#1f1f1f;font-size:15px;line-height:1.6;">Bonjour ${escapeHtml(userName)},</p>
     <p style="margin:0 0 18px;color:#1f1f1f;font-size:15px;line-height:1.6;">
-      L'intervention du <strong>${interventionDate}</strong> s'est termin&eacute;e il y a quelques jours.
+      L'intervention du <strong>${escapeHtml(interventionDate)}</strong> s'est termin&eacute;e il y a quelques jours.
     </p>
     <p style="margin:0 0 18px;color:#1f1f1f;font-size:15px;line-height:1.6;">
       Votre avis est pr&eacute;cieux ! Prenez quelques instants pour laisser un retour sur cette exp&eacute;rience.
@@ -265,7 +279,7 @@ export function getFeedbackReminderEmailHtml(
     <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 auto 28px;">
       <tr>
         <td align="center" style="border-radius:6px;background:linear-gradient(135deg,#e91e8c,#7c3aed);">
-          <a href="${feedbackUrl || '#'}" target="_blank" style="display:inline-block;padding:14px 36px;color:#ffffff;font-size:15px;font-weight:600;text-decoration:none;border-radius:6px;">
+          <a href="${escapeHtml(feedbackUrl || '#')}" target="_blank" style="display:inline-block;padding:14px 36px;color:#ffffff;font-size:15px;font-weight:600;text-decoration:none;border-radius:6px;">
             Donner mon avis
           </a>
         </td>
@@ -284,9 +298,9 @@ export function getMeetingCheckEmailHtml(
   relationUrl?: string
 ): string {
   const body = `
-    <p style="margin:0 0 18px;color:#1f1f1f;font-size:15px;line-height:1.6;">Bonjour ${userName},</p>
+    <p style="margin:0 0 18px;color:#1f1f1f;font-size:15px;line-height:1.6;">Bonjour ${escapeHtml(userName)},</p>
     <p style="margin:0 0 18px;color:#1f1f1f;font-size:15px;line-height:1.6;">
-      La rencontre pr&eacute;vue le <strong>${interventionDate}</strong> avec ${partnerName} est pass&eacute;e,
+      La rencontre pr&eacute;vue le <strong>${escapeHtml(interventionDate)}</strong> avec ${escapeHtml(partnerName)} est pass&eacute;e,
       mais rien ne nous indique si elle a bien eu lieu.
     </p>
     <p style="margin:0 0 18px;color:#1f1f1f;font-size:15px;line-height:1.6;">
@@ -295,7 +309,7 @@ export function getMeetingCheckEmailHtml(
     <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 auto 28px;">
       <tr>
         <td align="center" style="border-radius:6px;background:linear-gradient(135deg,#e91e8c,#7c3aed);">
-          <a href="${relationUrl || '#'}" target="_blank" style="display:inline-block;padding:14px 36px;color:#ffffff;font-size:15px;font-weight:600;text-decoration:none;border-radius:6px;">
+          <a href="${escapeHtml(relationUrl || '#')}" target="_blank" style="display:inline-block;padding:14px 36px;color:#ffffff;font-size:15px;font-weight:600;text-decoration:none;border-radius:6px;">
             Voir la rencontre
           </a>
         </td>
@@ -304,7 +318,7 @@ export function getMeetingCheckEmailHtml(
     <p style="margin:0 0 18px;color:#6b7280;font-size:13px;line-height:1.5;">
       Si vous ne faites rien, un administrateur ${PLATFORM_NAME} pourra traiter cette rencontre pour vous.
     </p>`;
-  return emailWrapper(`La rencontre du ${interventionDate} a-t-elle eu lieu ? - ${PLATFORM_NAME}`, body);
+  return emailWrapper(`La rencontre du ${escapeHtml(interventionDate)} a-t-elle eu lieu ? - ${PLATFORM_NAME}`, body);
 }
 
 export function getNewReportEmailHtml(
@@ -322,10 +336,10 @@ export function getNewReportEmailHtml(
   const reasonLabel = reasonLabels[reason] ?? reason;
   const messageSection = message
     ? `<p style="margin:0 0 8px;color:#7c3aed;font-size:13px;font-weight:600;text-transform:uppercase;">Message</p>
-       <p style="margin:0;color:#1f1f1f;font-size:15px;font-style:italic;">"${message}"</p>`
+       <p style="margin:0;color:#1f1f1f;font-size:15px;font-style:italic;">"${escapeHtml(message)}"</p>`
     : "";
   const body = `
-    <p style="margin:0 0 18px;color:#1f1f1f;font-size:15px;line-height:1.6;">Bonjour ${adminName},</p>
+    <p style="margin:0 0 18px;color:#1f1f1f;font-size:15px;line-height:1.6;">Bonjour ${escapeHtml(adminName)},</p>
     <p style="margin:0 0 18px;color:#1f1f1f;font-size:15px;line-height:1.6;">
       Un utilisateur vient d&rsquo;envoyer un signalement via l&rsquo;onglet Aide.
     </p>
@@ -333,9 +347,9 @@ export function getNewReportEmailHtml(
       <tr>
         <td style="padding:16px;">
           <p style="margin:0 0 8px;color:#dc4256;font-size:13px;font-weight:600;text-transform:uppercase;">Expéditeur</p>
-          <p style="margin:0 0 16px;color:#1f1f1f;font-size:15px;font-weight:600;">${reporterName}</p>
+          <p style="margin:0 0 16px;color:#1f1f1f;font-size:15px;font-weight:600;">${escapeHtml(reporterName)}</p>
           <p style="margin:0 0 8px;color:#dc4256;font-size:13px;font-weight:600;text-transform:uppercase;">Type</p>
-          <p style="margin:0 0 16px;color:#1f1f1f;font-size:15px;">${reasonLabel}</p>
+          <p style="margin:0 0 16px;color:#1f1f1f;font-size:15px;">${escapeHtml(reasonLabel)}</p>
           ${messageSection}
         </td>
       </tr>
@@ -343,7 +357,7 @@ export function getNewReportEmailHtml(
     <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 auto 28px;">
       <tr>
         <td align="center" style="border-radius:6px;background:linear-gradient(135deg,#dc4256,#8b5cf6);">
-          <a href="${adminUrl || '#'}" target="_blank" style="display:inline-block;padding:14px 36px;color:#ffffff;font-size:15px;font-weight:600;text-decoration:none;border-radius:6px;">
+          <a href="${escapeHtml(adminUrl || '#')}" target="_blank" style="display:inline-block;padding:14px 36px;color:#ffffff;font-size:15px;font-weight:600;text-decoration:none;border-radius:6px;">
             Voir les signalements
           </a>
         </td>
@@ -359,7 +373,7 @@ export function getNewAdminNotificationEmailHtml(
   adminUrl?: string
 ): string {
   const body = `
-    <p style="margin:0 0 18px;color:#1f1f1f;font-size:15px;line-height:1.6;">Bonjour ${adminName},</p>
+    <p style="margin:0 0 18px;color:#1f1f1f;font-size:15px;line-height:1.6;">Bonjour ${escapeHtml(adminName)},</p>
     <p style="margin:0 0 18px;color:#1f1f1f;font-size:15px;line-height:1.6;">
       Un nouvel &eacute;v&eacute;nement n&eacute;cessite votre attention :
     </p>
@@ -367,16 +381,16 @@ export function getNewAdminNotificationEmailHtml(
       <tr>
         <td style="padding:16px;">
           <p style="margin:0 0 8px;color:#7c3aed;font-size:13px;font-weight:600;text-transform:uppercase;">Utilisateur</p>
-          <p style="margin:0 0 16px;color:#1f1f1f;font-size:15px;font-weight:600;">${userName}</p>
+          <p style="margin:0 0 16px;color:#1f1f1f;font-size:15px;font-weight:600;">${escapeHtml(userName)}</p>
           <p style="margin:0 0 8px;color:#7c3aed;font-size:13px;font-weight:600;text-transform:uppercase;">&Eacute;v&eacute;nement</p>
-          <p style="margin:0;color:#1f1f1f;font-size:15px;">${eventDescription}</p>
+          <p style="margin:0;color:#1f1f1f;font-size:15px;">${escapeHtml(eventDescription)}</p>
         </td>
       </tr>
     </table>
     <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 auto 28px;">
       <tr>
         <td align="center" style="border-radius:6px;background:linear-gradient(135deg,#e91e8c,#7c3aed);">
-          <a href="${adminUrl || '#'}" target="_blank" style="display:inline-block;padding:14px 36px;color:#ffffff;font-size:15px;font-weight:600;text-decoration:none;border-radius:6px;">
+          <a href="${escapeHtml(adminUrl || '#')}" target="_blank" style="display:inline-block;padding:14px 36px;color:#ffffff;font-size:15px;font-weight:600;text-decoration:none;border-radius:6px;">
             Acc&eacute;der au tableau de bord
           </a>
         </td>

@@ -22,6 +22,7 @@ import {
   getNewReportEmailHtml,
   getCreditPurchaseConfirmedEmailHtml,
   getNegativeCreditBalanceEmailHtml,
+  escapeHtml,
 } from "./lib/email-templates";
 import { insertUserSchema, createRelationSchema, insertInterventionSchema, feedbackSchema, createPaymentSchema, checkoutSchema, changePasswordSchema, createAdminSchema, insertReportSchema, createAvailabilitySchema, createRecurringAvailabilitiesSchema, createDateExceptionSchema, updateUserCategoriesSchema, meetingHistoryQuerySchema, npsSchema, npsQuerySchema, COMPLETED_STATUSES } from "../shared/schema";
 import type { MeetingHistoryEntry, MeetingHistoryResponse, MeetingHistorySummary, Role } from "../shared/schema";
@@ -2461,7 +2462,7 @@ export async function registerRoutes(
         sendEmail({
           to: admin.email,
           subject: `${PLATFORM_NAME} — Note professeur de ${teacherName} sur ${studentName}`,
-          htmlContent: `<h2 style="color:#16a34a">Nouvelle note professeur</h2><p><strong>Professeur :</strong> ${teacherName} (${teacher.email})</p><p><strong>Élève :</strong> ${studentName}</p><hr><p>${parsed.data.content.replace(/\n/g, "<br>")}</p><hr><p><a href="${baseUrl}/admin">Voir dans l'espace admin → onglet "Notes profs"</a></p>`,
+          htmlContent: `<h2 style="color:#16a34a">Nouvelle note professeur</h2><p><strong>Professeur :</strong> ${escapeHtml(teacherName)} (${escapeHtml(teacher.email)})</p><p><strong>Élève :</strong> ${escapeHtml(studentName)}</p><hr><p>${escapeHtml(parsed.data.content).replace(/\n/g, "<br>")}</p><hr><p><a href="${escapeHtml(baseUrl)}/admin">Voir dans l'espace admin → onglet "Notes profs"</a></p>`,
         }).catch(console.error);
       }
 
@@ -2885,7 +2886,7 @@ export async function registerRoutes(
         sendEmail({
           to: admin.email,
           subject: `${PLATFORM_NAME} — Message du référent sénior ${senderName} : ${subject}`,
-          htmlContent: `<h2 style="color:#8b5cf6">Message du référent sénior</h2><p><strong>De :</strong> ${senderName} (${user.email})</p><p><strong>Sujet :</strong> ${subject}</p><hr><p>${message.replace(/\n/g, "<br>")}</p><hr><p><a href="${baseUrl}/admin">Voir dans l'espace admin</a></p>`,
+          htmlContent: `<h2 style="color:#8b5cf6">Message du référent sénior</h2><p><strong>De :</strong> ${escapeHtml(senderName)} (${escapeHtml(user.email)})</p><p><strong>Sujet :</strong> ${escapeHtml(subject)}</p><hr><p>${escapeHtml(message).replace(/\n/g, "<br>")}</p><hr><p><a href="${escapeHtml(baseUrl)}/admin">Voir dans l'espace admin</a></p>`,
         }).catch(console.error);
       }
 
