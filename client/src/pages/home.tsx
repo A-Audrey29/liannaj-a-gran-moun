@@ -176,7 +176,8 @@ export default function Home() {
               className="px-3 py-1 rounded-full text-sm font-medium bg-[#dc4256]/10 text-[#dc4256]"
               data-testid="badge-credit-balance"
             >
-              {creditData.balance} atelier{creditData.balance > 1 ? "s" : ""}
+              {/* Same figure as the "Ateliers restants" card: booked meetings set aside. */}
+              {Math.max(creditData.available, 0)} atelier{creditData.available > 1 ? "s" : ""}
             </span>
           )}
         </div>
