@@ -1,25 +1,38 @@
 /**
  * Utilitaires partages par les tests d'integration.
  *
- * L'app est montee en memoire (aucun port ouvert) et les sessions sont
- * conservees par un agent supertest, ce qui reproduit fidelement le parcours
- * d'un vrai navigateur : cookie de session, passport, permissions.
+ * L'app ecoute sur un port local unique et les sessions sont conservees par
+ * un agent supertest, ce qui reproduit fidelement le parcours d'un vrai
+ * navigateur : cookie de session, passport, permissions.
  */
-import { createServer } from "http";
-import type { Express } from "express";
+import { createServer, type Server } from "http";
 import request from "supertest";
 import bcrypt from "bcryptjs";
 import { createApp } from "../server/app";
 import { prisma } from "../server/prisma";
 
-let appPromise: Promise<Express> | null = null;
+let serverPromise: Promise<Server> | null = null;
 
-/** App Express partagee par toute la suite (sa construction coute ~1 s). */
-export async function getApp(): Promise<Express> {
-  if (!appPromise) {
-    appPromise = createApp(createServer());
+/**
+ * Serveur HTTP partage par tout le fichier de test (la construction de l'app
+ * coute ~1 s), deja en ecoute sur 127.0.0.1.
+ *
+ * Ne pas passer l'app Express brute a supertest : il ouvrirait et fermerait
+ * alors un serveur sur un port ephemere a chaque requete. Une connexion
+ * keep-alive peut ensuite viser un port deja repris par un autre processus de
+ * la machine, d'ou des 404/400 vides et des sessions perdues aleatoires.
+ */
+export async function getApp(): Promise<Server> {
+  if (!serverPromise) {
+    serverPromise = (async () => {
+      const httpServer = createServer();
+      const app = await createApp(httpServer);
+      httpServer.on("request", app);
+      await new Promise<void>((resolve) => httpServer.listen(0, "127.0.0.1", resolve));
+      return httpServer;
+    })();
   }
-  return appPromise;
+  return serverPromise;
 }
 
 /**
