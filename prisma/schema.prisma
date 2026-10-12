@@ -117,6 +117,7 @@ model User {
 
   notifications       Notification[]
   pushSubscriptions   PushSubscription[]
+  npsResponses        NpsResponse[]
 
   favoriteSeniors     Favorite[] @relation("SeniorFavorites")
   favoriteJuniors     Favorite[] @relation("JuniorFavorites")
@@ -345,6 +346,27 @@ model Notification {
   createdAt DateTime         @default(now())
 
   @@index([userId, isRead])
+  @@index([createdAt])
+}
+
+// Net Promoter Score : "Recommanderiez-vous Lyannaj a votre entourage ?" (0-10)
+// + "pourquoi cette note ?". Table separee d'Intervention : le NPS mesure le
+// service, pas une rencontre, et une colonne sur Intervention serait
+// serialisee par les routes a masquage de feedback. Seule la note brute est
+// stockee : categorie (promoteur/passif/detracteur) et score se calculent
+// (shared/nps.ts).
+model NpsResponse {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  // Role au moment de la reponse (SENIOR ou REFERENT_SENIOR) : sert a
+  // segmenter les resultats sans dependre d'un changement de role ulterieur.
+  role      Role
+  score     Int      @db.SmallInt
+  reason    String?
+  createdAt DateTime @default(now())
+
+  @@index([userId, createdAt])
   @@index([createdAt])
 }
 

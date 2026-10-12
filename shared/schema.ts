@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { NPS_MIN_SCORE, NPS_MAX_SCORE } from "./nps";
 
 export type Role = "ADMIN" | "SENIOR" | "JUNIOR" | "REFERENT_SENIOR" | "TEACHER";
 export type UserStatus = "PENDING_VALIDATION" | "ACTIVE" | "SUSPENDED" | "BANNED";
@@ -236,6 +237,16 @@ export const feedbackSchema = z.object({
   comment: z.string().max(1000).optional(),
 });
 
+// Not feedbackSchema: its min(1) would reject a score of 0, which is valid for NPS.
+export const npsSchema = z.object({
+  score: z
+    .number({ invalid_type_error: "La note doit être un nombre" })
+    .int("La note doit être un entier")
+    .min(NPS_MIN_SCORE, `La note minimale est ${NPS_MIN_SCORE}`)
+    .max(NPS_MAX_SCORE, `La note maximale est ${NPS_MAX_SCORE}`),
+  reason: z.string().trim().max(1000).nullish(),
+});
+
 export const createAvailabilitySchema = z
   .object({
     startAt: z.string().min(1),
@@ -457,6 +468,18 @@ export const meetingHistoryQuerySchema = z.object({
 
 export type MeetingHistoryQuery = z.infer<typeof meetingHistoryQuerySchema>;
 
+export const npsQuerySchema = z
+  .object({
+    from: isoDate.optional(),
+    to: isoDate.optional(),
+  })
+  // ISO dates compare correctly as strings. Without this, an inverted range
+  // returns an empty report that reads as "no data".
+  .refine((q) => !q.from || !q.to || q.from <= q.to, {
+    message: "La date de début doit précéder la date de fin",
+    path: ["to"],
+  });
+
 export type ReportReason = "PERSON" | "QUESTION" | "OTHER";
 export type ReportStatus = "OPEN" | "HANDLED";
 
@@ -483,6 +506,7 @@ export type LoginInput = z.infer<typeof loginSchema>;
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type InsertIntervention = z.infer<typeof insertInterventionSchema>;
 export type FeedbackInput = z.infer<typeof feedbackSchema>;
+export type NpsInput = z.infer<typeof npsSchema>;
 export type CreateAvailabilityInput = z.infer<typeof createAvailabilitySchema>;
 export type CreateDateExceptionInput = z.infer<typeof createDateExceptionSchema>;
 export type CreateRecurringAvailabilitiesInput = z.infer<typeof createRecurringAvailabilitiesSchema>;
