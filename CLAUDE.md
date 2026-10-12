@@ -45,11 +45,11 @@ docs/              # ARCHITECTURE, API, DATABASE, DEPLOYMENT, SECURITY, decision
 
 Alias TS : `@/*` → `client/src/*`, `@shared/*` → `shared/*`.
 
-## Modèle de données (Prisma — 17 modèles)
+## Modèle de données (Prisma — 19 modèles)
 
 User, ProfilePhoto, Category, UserCategory, Relation, Intervention,
 Availability, AdminRecommendation, PaymentRecord, CreditLedger, Report,
-Notification, Favorite, Conversation, Message, PushSubscription,
+Notification, NpsResponse, Favorite, Conversation, Message, PushSubscription,
 TeacherStudent, TeacherComment.
 
 Le fichier `replit.md` à la racine décrit une version antérieure (Sprint 9,
@@ -102,6 +102,12 @@ npm run db:push    # prisma db push — NE PAS utiliser sur la base Neon avec do
   (impl : `stripe-provider.ts`). Webhook (`/api/webhooks/payment`) vérifie la
   signature sur `req.rawBody` (capturé dans `server/app.ts`), jamais le body
   JSON déjà parsé. Détail complet dans `docs/decisions.md`.
+- **NPS** (exigence du financeur): réponses dans `NpsResponse`, **jamais** en
+  colonne d'`Intervention` (les routes à masquage de feedback la
+  sérialiseraient). Éligibilité décidée côté serveur seulement (rôle senior /
+  référent, rencontre tenue, 90 jours). Note 0 valide : ne jamais tester
+  `score === 0` / `!score`. L'export CSV pour le financeur ne contient aucun
+  nom ni e-mail. Détail dans `docs/decisions.md`.
 
 ## Skills — maintenir CLAUDE.md et la mémoire projet à jour
 
