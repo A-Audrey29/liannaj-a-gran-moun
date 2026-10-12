@@ -1329,7 +1329,10 @@ export async function registerRoutes(
         return res.status(400).json({ message: "Cette intervention ne peut plus être annulée" });
       }
 
-      const updated = await storage.updateIntervention(intervention.id, { status: "CANCELLED" });
+      const updated = await storage.cancelIntervention(intervention.id);
+      if (!updated) {
+        return res.status(409).json({ message: "Cette rencontre a déjà été traitée" });
+      }
 
       // Senior who cancels: the junior is told. Admin who cancels: both are.
       const recipients = intervention.relation.seniorId === user.id
@@ -2730,11 +2733,7 @@ export async function registerRoutes(
     try {
       const seniorId = await resolveCreditSenior(req, res);
       if (!seniorId) return;
-      const [balance, available] = await Promise.all([
-        storage.getCreditBalance(seniorId),
-        storage.getAvailableCredits(seniorId),
-      ]);
-      const response: CreditBalanceResponse = { balance, available };
+      const response: CreditBalanceResponse = await storage.getCredits(seniorId);
       res.json(response);
     } catch (err) {
       console.error("[CREDITS_BALANCE] Error:", err);

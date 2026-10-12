@@ -187,3 +187,54 @@ describe("validation d'une rencontre realisee", () => {
     expect(await consommations(senior.id)).toBe(1);
   });
 });
+
+describe("gratuite memorisee a la creation", () => {
+  it("cloturer la rencontre payante avant la gratuite ne fait pas perdre la gratuite", async () => {
+    const senior = await createUser("SENIOR");
+    const junior = await createUser("JUNIOR");
+    const admin = await createUser("ADMIN");
+    const relation = await createRelation(senior.id, junior.id, "PENDING_FIRST_MEETING");
+    await disponible(junior.id);
+    await crediterSenior(senior.id, 1);
+    const adminAgent = await loginAs(admin);
+    const juniorAgent = await loginAs(junior);
+
+    // A : gratuite (creee en premier, 30 min). B : payante, prevue plus tot.
+    const a = await adminAgent.post(`/api/relations/${relation.id}/interventions`).send(rencontre(16, 30));
+    const b = await adminAgent.post(`/api/relations/${relation.id}/interventions`).send(rencontre(10, 60));
+    expect([a.status, b.status]).toEqual([201, 201]);
+    await juniorAgent.patch(`/api/interventions/${a.body.id}/confirm`);
+    await juniorAgent.patch(`/api/interventions/${b.body.id}/confirm`);
+
+    // B est cloturee d'abord : la relation passe ACTIVE.
+    expect((await adminAgent.patch(`/api/interventions/${b.body.id}/done`)).status).toBe(200);
+    expect((await adminAgent.patch(`/api/interventions/${a.body.id}/done`)).status).toBe(200);
+
+    expect(await consommations(senior.id)).toBe(1);
+  });
+});
+
+describe("annulation et validation simultanees", () => {
+  it("une rencontre n'est jamais a la fois annulee et debitee", async () => {
+    for (let essai = 0; essai < 5; essai++) {
+      await resetDatabase();
+      const senior = await createUser("SENIOR");
+      const { junior, relation } = await relationActive(senior.id);
+      const admin = await createUser("ADMIN");
+      await crediterSenior(senior.id, 3);
+      const creee = await (await loginAs(senior)).post(`/api/relations/${relation.id}/interventions`).send(rencontre(10));
+      await (await loginAs(junior)).patch(`/api/interventions/${creee.body.id}/confirm`);
+      const adminAgent = await loginAs(admin);
+
+      await Promise.all([
+        adminAgent.patch(`/api/interventions/${creee.body.id}/done`),
+        adminAgent.patch(`/api/interventions/${creee.body.id}/cancel`),
+      ]);
+
+      const finale = await prisma.intervention.findUniqueOrThrow({ where: { id: creee.body.id } });
+      const debits = await consommations(senior.id);
+      if (finale.status === "CANCELLED") expect(debits).toBe(0);
+      else expect([finale.status, debits]).toEqual(["COMPLETED_PENDING_FEEDBACK", 1]);
+    }
+  });
+});

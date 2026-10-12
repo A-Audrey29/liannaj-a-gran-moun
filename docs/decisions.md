@@ -24,11 +24,14 @@ après la fin** (début + durée), règle unique `shared/meeting-check.ts`
 Les boutons admin, eux, apparaissent dès la fin (`isMeetingEnded`) : le délai
 de 24h ne concerne que la relance. Badge réservé aux admins.
 
-**Décision — e-mails en une seule tentative** (relance des rencontres et
-rappel de feedback). La notification dans l'appli est la garantie ; un
-e-mail en échec est journalisé, pas rejoué. Avant, un échec empêchait le
-marquage et le destinataire servi recevait le même e-mail toutes les 6h,
-sans fin si l'autre adresse était invalide.
+**Décision — e-mails en une seule tentative.** Relance des rencontres : la
+notification dans l'appli est la garantie (créée avec le marquage, dans une
+transaction), l'e-mail est best effort. Rappel de feedback (e-mail seul) :
+la rencontre est marquée dès qu'un destinataire a été servi ; si **tous**
+les envois échouent (panne Brevo), personne n'a rien reçu et on retente à la
+passe suivante. Avant, un échec empêchait le marquage et le destinataire
+servi recevait le même e-mail toutes les 6h, sans fin si l'autre adresse
+était invalide.
 
 **Processus côté équipe** : `docs/PROCESSUS-RENCONTRES.md`, à transmettre aux
 administrateurs FEVES.
@@ -53,16 +56,23 @@ transaction de création, sous un verrou advisory par senior
 (`credits:<seniorId>`) : sans lui, des réservations simultanées sur des
 jeunes différents consommaient le même dernier crédit (reproduit en test).
 
-**Décision — une seule rencontre gratuite par relation.** Gratuite si la
-relation attend sa première rencontre, si elle dure 30 min ou moins **et**
-s'il n'existe aucune rencontre antérieure non annulée sur la relation
-(`isFreeMeeting`, `server/storage.ts`). Même règle à la création et à la
-complétion. Si la rencontre gratuite est annulée, la suivante redevient
-gratuite.
+**Décision — une seule rencontre gratuite par relation, décidée à la
+création et mémorisée.** Gratuite si la relation attend sa première
+rencontre, si elle dure 30 min ou moins **et** s'il n'existe encore aucune
+rencontre non annulée sur la relation (`isFreeMeeting`, `server/storage.ts`).
+Le résultat est stocké dans `Intervention.isFree` (migration
+`20261012120000_add_intervention_is_free`) : la réservation compte les
+rencontres prévues non gratuites, le débit à la complétion lit le drapeau.
+Recalculer à la complétion dépendait de l'ordre de clôture (une payante
+clôturée avant la gratuite faisait passer la relation ACTIVE, et la gratuite
+était débitée à son tour). Si la rencontre gratuite est annulée, la suivante
+redevient gratuite.
 
-**Décision — validation idempotente.** `completeIntervention` ne passe à
-`COMPLETED_PENDING_FEEDBACK` que si la rencontre est encore `CONFIRMED`
-(mise à jour conditionnelle dans la transaction) ; sinon 409 et aucun débit.
+**Décision — clôture idempotente.** `completeIntervention` ne passe à
+`COMPLETED_PENDING_FEEDBACK` que si la rencontre est encore `CONFIRMED`, et
+`cancelIntervention` ne passe à `CANCELLED` que si elle est encore
+`PROPOSED`/`CONFIRMED` (mises à jour conditionnelles) ; sinon 409. Une
+rencontre ne peut donc être ni débitée deux fois, ni annulée après débit.
 
 **Conséquence.** Le solde négatif ne peut plus venir que d'un ajustement
 admin après réservation ; l'alerte « Solde de crédits négatif » est conservée

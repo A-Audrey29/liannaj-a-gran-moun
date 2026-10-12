@@ -73,6 +73,8 @@ export interface Intervention {
   juniorRating: number | null;
   juniorComment: string | null;
   feedbackReminderSentAt: Date | null;
+  /** Free first meeting of the relation: no credit reserved nor debited. */
+  isFree: boolean;
   createdAt: Date;
 }
 

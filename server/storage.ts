@@ -70,48 +70,37 @@ const RESERVING_STATUSES = ["PROPOSED", "CONFIRMED"] as const;
 type CreditsDb = Prisma.TransactionClient | typeof prisma;
 
 /**
- * The single free meeting of a relation: the relation still waits for its
- * first meeting, the meeting lasts 30 minutes or less, and no earlier
- * non-cancelled meeting exists on the relation. Same rule at creation and at
- * completion, so a second short meeting can never slip through as free.
+ * Is a meeting about to be created the single free meeting of its relation?
+ * The relation still waits for its first meeting, the meeting lasts 30
+ * minutes or less, and no non-cancelled meeting exists on the relation yet.
+ * Decided once at creation and stored in Intervention.isFree: recomputing it
+ * at completion depended on the order meetings were closed in.
  */
-async function isFreeMeeting(
-  db: CreditsDb,
-  meeting: { id?: string; relationId: string; durationMinutes: number; createdAt?: Date }
-): Promise<boolean> {
+async function isFreeMeeting(db: CreditsDb, meeting: { relationId: string; durationMinutes: number }): Promise<boolean> {
   if (meeting.durationMinutes > FREE_FIRST_MEETING_MAX_MINUTES) return false;
   const relation = await db.relation.findUnique({ where: { id: meeting.relationId }, select: { status: true } });
   if (relation?.status !== "PENDING_FIRST_MEETING") return false;
-  const earlier = await db.intervention.findFirst({
-    where: {
-      relationId: meeting.relationId,
-      status: { not: "CANCELLED" },
-      ...(meeting.id && { id: { not: meeting.id } }),
-      ...(meeting.createdAt && { createdAt: { lt: meeting.createdAt } }),
-    },
+  const existing = await db.intervention.findFirst({
+    where: { relationId: meeting.relationId, status: { not: "CANCELLED" } },
     select: { id: true },
   });
-  return !earlier;
+  return !existing;
 }
 
 /**
- * Credits a senior can still commit: ledger balance minus the paid meetings
- * already planned (PROPOSED/CONFIRMED). The debit itself still happens at
- * completion; this only stops booking more meetings than credits.
+ * Ledger balance, and credits still available: balance minus the paid
+ * meetings already planned (PROPOSED/CONFIRMED, not free). The debit itself
+ * still happens at completion; this only stops booking more than one has.
  */
-async function computeAvailableCredits(db: CreditsDb, seniorId: string): Promise<number> {
-  const [ledger, planned] = await Promise.all([
+async function computeCredits(db: CreditsDb, seniorId: string): Promise<{ balance: number; available: number }> {
+  const [ledger, reserved] = await Promise.all([
     db.creditLedger.aggregate({ where: { seniorId }, _sum: { amount: true } }),
-    db.intervention.findMany({
-      where: { status: { in: [...RESERVING_STATUSES] }, relation: { seniorId } },
-      select: { id: true, relationId: true, durationMinutes: true, createdAt: true },
+    db.intervention.count({
+      where: { status: { in: [...RESERVING_STATUSES] }, isFree: false, relation: { seniorId } },
     }),
   ]);
-  let reserved = 0;
-  for (const meeting of planned) {
-    if (!(await isFreeMeeting(db, meeting))) reserved++;
-  }
-  return (ledger._sum.amount ?? 0) - reserved;
+  const balance = ledger._sum.amount ?? 0;
+  return { balance, available: balance - reserved };
 }
 
 export interface IStorage {
@@ -163,12 +152,27 @@ export interface IStorage {
    * admins): nothing is debited twice.
    */
   completeIntervention(interventionId: string, seniorId: string, triggeredById: string): Promise<{ intervention: Intervention; free: boolean } | null>;
-  getAvailableCredits(seniorId: string): Promise<number>;
+  getCredits(seniorId: string): Promise<{ balance: number; available: number }>;
+  /**
+   * PROPOSED/CONFIRMED -> CANCELLED, conditionally: returns null if the
+   * meeting was closed meanwhile (e.g. marked done by another admin), so a
+   * debited meeting can never end up CANCELLED.
+   */
+  cancelIntervention(id: string): Promise<Intervention | null>;
   getPendingFeedbackInterventions(userId: string): Promise<(Intervention & { relation: Relation })[]>;
   getPendingFeedbackForReminder(): Promise<(Intervention & { relation: Relation & { senior: User; junior: User } })[]>;
   updateInterventionFeedbackReminderSent(id: string): Promise<Intervention>;
   getOverdueInterventionsForReminder(now?: Date): Promise<(Intervention & { relation: Relation & { senior: User; junior: User } })[]>;
-  markMeetingCheckReminderSent(ids: string[]): Promise<void>;
+  /**
+   * One transaction: a notification per admin AND the meetings marked as
+   * reminded. A failure part-way can no longer notify some admins without
+   * marking, which re-notified them on every pass.
+   */
+  recordMeetingCheckReminder(
+    adminIds: string[],
+    notification: { title: string; message: string; link: string },
+    interventionIds: string[]
+  ): Promise<void>;
   /**
    * Historique des rencontres, périmètre décidé par l'appelant (jamais par un
    * paramètre client). Alimente /api/meetings/history pour tous les rôles.
@@ -184,7 +188,6 @@ export interface IStorage {
   createManyAvailabilities(data: { userId: string; startAt: Date; endAt: Date; kind: "AVAILABLE" | "UNAVAILABLE" }[]): Promise<number>;
   softDeleteAvailabilities(ids: string[]): Promise<number>;
   getAvailability(id: string): Promise<Availability | null>;
-  getConfirmedInterventionsForUser(userId: string, from?: Date, to?: Date): Promise<Intervention[]>;
   /** PROPOSED + CONFIRMED — pour détecter les conflits de créneau. */
   getActiveInterventionsForUser(
     userId: string,
@@ -439,7 +442,7 @@ class DatabaseStorage implements IStorage {
         // senior on different juniors cannot both use the last credit.
         await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`credits:${seniorId}`}))`;
         const free = await isFreeMeeting(tx, { relationId: data.relationId, durationMinutes: data.durationMinutes });
-        if (!free && (await computeAvailableCredits(tx, seniorId)) < 1) {
+        if (!free && (await computeCredits(tx, seniorId)).available < 1) {
           return { noCredits: true as const };
         }
 
@@ -451,6 +454,7 @@ class DatabaseStorage implements IStorage {
             location: data.location || null,
             tasks: data.tasks || [],
             status: "PROPOSED",
+            isFree: free,
           },
         });
         return { intervention };
@@ -516,11 +520,20 @@ class DatabaseStorage implements IStorage {
     return candidates.filter((intervention) => isMeetingOverdue(intervention, now));
   }
 
-  async markMeetingCheckReminderSent(ids: string[]): Promise<void> {
-    await prisma.intervention.updateMany({
-      where: { id: { in: ids } },
-      data: { meetingCheckReminderSentAt: new Date() },
-    });
+  async recordMeetingCheckReminder(
+    adminIds: string[],
+    notification: { title: string; message: string; link: string },
+    interventionIds: string[]
+  ): Promise<void> {
+    await prisma.$transaction([
+      prisma.notification.createMany({
+        data: adminIds.map((userId) => ({ userId, type: "MEETING_CHECK" as const, ...notification })),
+      }),
+      prisma.intervention.updateMany({
+        where: { id: { in: interventionIds } },
+        data: { meetingCheckReminderSentAt: new Date() },
+      }),
+    ]);
   }
 
   async getAvailabilitiesByUser(userId: string): Promise<Availability[]> {
@@ -561,18 +574,6 @@ class DatabaseStorage implements IStorage {
 
   async getAvailability(id: string): Promise<Availability | null> {
     return prisma.availability.findUnique({ where: { id } });
-  }
-
-  async getConfirmedInterventionsForUser(userId: string, from?: Date, to?: Date): Promise<Intervention[]> {
-    return prisma.intervention.findMany({
-      where: {
-        status: "CONFIRMED",
-        relation: { juniorId: userId },
-        ...(from || to
-          ? { scheduledDate: { ...(from ? { gte: from } : {}), ...(to ? { lte: to } : {}) } }
-          : {}),
-      },
-    });
   }
 
   async getActiveInterventionsForUser(
@@ -767,10 +768,10 @@ class DatabaseStorage implements IStorage {
           stripeSessionId: data.stripeSessionId ?? null,
         },
       });
-      // The senior who receives the credits is the one with an active
-      // subscription, not the referent who paid for them.
-      await tx.user.update({
-        where: { id: data.creditSeniorId ?? data.userId },
+      // Both the payer (admin Payments tab badge) and the senior who receives
+      // the credits (profile badge) show an active subscription.
+      await tx.user.updateMany({
+        where: { id: { in: [data.userId, ...(data.creditSeniorId ? [data.creditSeniorId] : [])] } },
         data: { subscriptionActive: true },
       });
       if (data.credits && data.creditSeniorId) {
@@ -823,8 +824,7 @@ class DatabaseStorage implements IStorage {
       if (count === 0) return null;
 
       const updated = await tx.intervention.findUniqueOrThrow({ where: { id: interventionId } });
-      // Decided before the relation turns ACTIVE (the route does that next).
-      const free = await isFreeMeeting(tx, updated);
+      const free = updated.isFree;
       if (!free) {
         await tx.creditLedger.create({
           data: {
@@ -841,8 +841,16 @@ class DatabaseStorage implements IStorage {
     });
   }
 
-  async getAvailableCredits(seniorId: string): Promise<number> {
-    return computeAvailableCredits(prisma, seniorId);
+  async getCredits(seniorId: string): Promise<{ balance: number; available: number }> {
+    return computeCredits(prisma, seniorId);
+  }
+
+  async cancelIntervention(id: string): Promise<Intervention | null> {
+    const { count } = await prisma.intervention.updateMany({
+      where: { id, status: { in: [...RESERVING_STATUSES] } },
+      data: { status: "CANCELLED" },
+    });
+    return count === 0 ? null : prisma.intervention.findUnique({ where: { id } });
   }
 
   async getPayments(): Promise<(PaymentRecord & { user: User })[]> {
