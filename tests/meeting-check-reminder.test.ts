@@ -19,7 +19,7 @@ import { prisma } from "../server/prisma";
 import { pool } from "../server/db";
 import { sendEmail } from "../server/lib/email";
 import { checkAndSendMeetingCheckReminders, MEETING_CHECK_ADMIN_PATH } from "../server/lib/meeting-check-reminder";
-import { isMeetingEnded, isMeetingOverdue } from "../shared/meeting-check";
+import { isMeetingEnded, isMeetingOverdue, isUpcomingOrOngoing } from "../shared/meeting-check";
 
 /** Doit rester egal a MEETING_CHECK_LOCK_ID dans meeting-check-reminder.ts. */
 const MEETING_CHECK_LOCK_ID = 4_812_358;
@@ -298,6 +298,14 @@ describe("regles partagees avec l'interface admin", () => {
     const enCours = new Date(debut.getTime() + 60 * 60 * 1000);
     expect(isMeetingEnded({ status: "CONFIRMED", scheduledDate: debut, durationMinutes: 120 }, finPlus1min)).toBe(true);
     expect(isMeetingEnded({ status: "CONFIRMED", scheduledDate: debut, durationMinutes: 120 }, enCours)).toBe(false);
+  });
+
+  it("prochaine rencontre : une rencontre en cours reste affichee, une rencontre terminee non", () => {
+    const enCours = new Date(debut.getTime() + 60 * 60 * 1000);
+    const finie = new Date(debut.getTime() + 121 * 60 * 1000);
+    expect(isUpcomingOrOngoing({ status: "CONFIRMED", scheduledDate: debut, durationMinutes: 120 }, enCours)).toBe(true);
+    expect(isUpcomingOrOngoing({ status: "CONFIRMED", scheduledDate: debut, durationMinutes: 120 }, finie)).toBe(false);
+    expect(isUpcomingOrOngoing({ status: "CANCELLED", scheduledDate: debut, durationMinutes: 120 }, enCours)).toBe(false);
   });
 
   it("accepte une date ISO (format des entrees d'historique cote client)", () => {

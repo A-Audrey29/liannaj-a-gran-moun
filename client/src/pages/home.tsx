@@ -33,6 +33,7 @@ import { fmtTime, gpParts, MOIS_LONGS } from "@/lib/availability-format";
 import { CreditOffersCard } from "@/components/credit-offers-card";
 import { NpsPrompt } from "@/components/nps-prompt";
 import type { CreditBalanceResponse } from "@shared/credits";
+import { isUpcomingOrOngoing } from "@shared/meeting-check";
 
 type RelationWithUsers = Relation & { senior: UserType; junior: UserType; interventions?: Intervention[] };
 type MatchSuggestion = { user: UserType; commonCategories: string[]; isRecommended: boolean; isFavorite: boolean };
@@ -67,13 +68,13 @@ function useDashboardCounts(relations?: RelationWithUsers[], pendingFB?: Interve
     }));
   });
 
-  const now = Date.now();
+  const now = new Date();
   const allUpcoming = activeRelations.flatMap((r) => {
     const partner = r.seniorId === user?.id ? r.junior : r.senior;
-    return (r.interventions || []).filter((i) => i.status === "CONFIRMED" || i.status === "PROPOSED").map((i) => ({
+    return (r.interventions || []).filter((i) => isUpcomingOrOngoing(i, now)).map((i) => ({
       ...i, partnerName: `${partner.firstName} ${partner.lastName}`, relationId: r.id,
     }));
-  }).filter((i) => new Date(i.scheduledDate).getTime() >= now)
+  })
     .sort((a, b) => new Date(a.scheduledDate).getTime() - new Date(b.scheduledDate).getTime());
 
   const nextIntervention = allUpcoming[0] || null;

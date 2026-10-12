@@ -35,6 +35,14 @@ export function isMeetingOverdue(meeting: MeetingTiming, now: Date): boolean {
 }
 
 /**
+ * "Prochaine rencontre" on dashboards: planned (PROPOSED/CONFIRMED) and not
+ * finished yet. Based on the end, so a meeting in progress still shows.
+ */
+export function isUpcomingOrOngoing(meeting: MeetingTiming, now: Date): boolean {
+  return isOpen(meeting) && meetingEnd(meeting.scheduledDate, meeting.durationMinutes).getTime() > now.getTime();
+}
+
+/**
  * Borne SQL : une rencontre en retard a forcément commencé avant
  * now - délai (la durée est positive). Sert à pré-filtrer en base avant
  * d'appliquer isMeetingOverdue, qui tient compte de la durée.

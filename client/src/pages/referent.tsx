@@ -27,6 +27,7 @@ import { fmtTime, fmtDayLongMonthYear } from "@/lib/availability-format";
 import { CreditOffersCard } from "@/components/credit-offers-card";
 import { NpsPrompt } from "@/components/nps-prompt";
 import type { CreditBalanceResponse } from "@shared/credits";
+import { isUpcomingOrOngoing } from "@shared/meeting-check";
 
 type RelationWithUsers = Relation & { senior: UserType; junior: UserType; interventions?: Intervention[] };
 
@@ -88,12 +89,11 @@ function DashboardTab({ senior, relations }: { senior: UserType | null; relation
   const activeRelations = relations.filter((r) => r.status === "ACTIVE");
   const pendingRelations = relations.filter((r) => r.status === "PENDING" || r.status === "PENDING_FIRST_MEETING");
 
-  const now = Date.now();
+  const now = new Date();
   const upcomingInterventions = activeRelations
     .flatMap((r) => (r.interventions || [])
-      .filter((i) => i.status === "CONFIRMED" || i.status === "PROPOSED")
+      .filter((i) => isUpcomingOrOngoing(i, now))
       .map((i) => ({ ...i, juniorName: `${r.junior.firstName} ${r.junior.lastName}` })))
-    .filter((i) => new Date(i.scheduledDate).getTime() >= now)
     .sort((a, b) => new Date(a.scheduledDate).getTime() - new Date(b.scheduledDate).getTime());
 
   const next = upcomingInterventions[0] || null;
