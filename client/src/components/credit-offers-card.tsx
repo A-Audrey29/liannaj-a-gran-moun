@@ -1,5 +1,5 @@
 import { useMutation } from "@tanstack/react-query";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, apiErrorMessage } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
@@ -15,11 +15,12 @@ export function OffersGrid() {
     onSuccess: (data) => {
       window.location.href = data.url;
     },
-    onError: () => {
+    onError: (err) => {
       toast({
         variant: "destructive",
         title: "Erreur",
-        description: "Impossible de lancer le paiement. Réessayez.",
+        // e.g. 503 "paiement en ligne indisponible": show why, not "réessayez".
+        description: apiErrorMessage(err, "Impossible de lancer le paiement. Réessayez."),
       });
     },
   });

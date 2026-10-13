@@ -470,7 +470,7 @@ function NewInterventionDialog({
     },
     onError: (err) =>
       toast({
-        title: apiErrorCode(err) === "INSUFFICIENT_CREDITS" ? "Plus de crédit disponible" : "Proposition refusée",
+        title: apiErrorCode(err) === "INSUFFICIENT_CREDITS" ? "Plus d'atelier disponible" : "Proposition refusée",
         description: apiErrorMessage(err, "Ce créneau n'est pas disponible."),
         variant: "destructive",
       }),
