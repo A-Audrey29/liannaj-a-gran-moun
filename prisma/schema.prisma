@@ -118,6 +118,7 @@ model User {
   notifications       Notification[]
   pushSubscriptions   PushSubscription[]
   npsResponses        NpsResponse[]
+  passwordResetTokens PasswordResetToken[]
 
   favoriteSeniors     Favorite[] @relation("SeniorFavorites")
   favoriteJuniors     Favorite[] @relation("JuniorFavorites")
@@ -452,4 +453,21 @@ model TeacherComment {
 
   @@index([teacherId])
   @@index([studentId])
+}
+
+// Jeton de reinitialisation de mot de passe ("mot de passe oublie").
+// Table separee plutot que colonnes sur User : les routes qui renvoient un
+// utilisateur retirent les champs sensibles un par un, une nouvelle colonne
+// y fuiterait. Seule l'empreinte SHA-256 du jeton est stockee : une fuite de
+// la base ne donne aucun lien utilisable.
+model PasswordResetToken {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
 }

@@ -3,6 +3,37 @@
 Journal des choix d'architecture et de leurs raisons. Une entrée par décision,
 la plus récente en haut.
 
+## 2026-10-13 — Mot de passe oublié par lien e-mail
+
+**Contexte.** Aucun parcours de réinitialisation n'existait : un sénior qui
+oublie son mot de passe dépendait de l'admin. Bloquant pour le lancement.
+
+**Choix.**
+- Table `PasswordResetToken` séparée, pas de colonnes sur `User` : les routes
+  qui renvoient un utilisateur retirent les champs sensibles un par un
+  (`password`, `validationToken`…), une nouvelle colonne y aurait fuité.
+- Seule l'empreinte SHA-256 du jeton est en base (jeton aléatoire 256 bits) :
+  une fuite de la base ne donne aucun lien utilisable. bcrypt est inutile ici,
+  le jeton n'est pas devinable comme un mot de passe.
+- Lien valable 1 h, usage unique (consommation conditionnelle : deux
+  soumissions simultanées, une seule passe), une nouvelle demande annule
+  l'ancienne.
+- Lien envoyé aux seuls comptes `ACTIVE` ; réponse identique dans tous les cas
+  pour ne pas révéler quels e-mails sont inscrits.
+- L'URL du lien vient de `BASE_URL` (`getBaseUrl` de `server/env.ts`), jamais
+  des en-têtes de la requête : un en-tête `Host` falsifié enverrait sinon le
+  jeton vers un site tiers (« reset poisoning »).
+- Après réinitialisation, toutes les sessions du compte sont supprimées.
+
+*Alternatives écartées* : mot de passe temporaire envoyé par e-mail (le mot de
+passe circule en clair et reste valable) ; réinitialisation par l'admin seul
+(charge manuelle, et l'admin connaîtrait le mot de passe).
+
+**Non traité.** Les autres e-mails (relation acceptée, rencontre proposée…)
+construisent encore leurs liens à partir des en-têtes de la requête
+(`getBaseUrl(req)` dans `server/routes.ts`). Sans jeton secret, l'impact est
+moindre, mais à aligner sur `BASE_URL`.
+
 ## 2026-10-13 — Un référent = un senior ; pas de recharge automatique ; plus d'abonnement
 
 Décisions d'Audrey (revue de #16 et #17, ticket bobby#48).

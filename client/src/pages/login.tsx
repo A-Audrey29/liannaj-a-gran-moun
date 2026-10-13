@@ -134,6 +134,16 @@ export default function LoginPage() {
                 )}
               />
 
+              <div className="text-right text-sm">
+                <Link
+                  href="/mot-de-passe-oublie"
+                  data-testid="link-forgot-password"
+                  className="text-primary underline underline-offset-4"
+                >
+                  Mot de passe oublié ?
+                </Link>
+              </div>
+
               <Button
                 data-testid="button-login"
                 type="submit"

@@ -30,6 +30,8 @@ const TeacherHome = lazy(() => import("@/pages/teacher"));
 const MentionsLegales = lazy(() => import("@/pages/mentions-legales"));
 const PolitiqueConfidentialite = lazy(() => import("@/pages/politique-confidentialite"));
 const CGU = lazy(() => import("@/pages/cgu"));
+const ForgotPassword = lazy(() => import("@/pages/forgot-password"));
+const ResetPassword = lazy(() => import("@/pages/reset-password"));
 const CreditsSuccess = lazy(() => import("@/pages/credits-success"));
 const CreditsCancel = lazy(() => import("@/pages/credits-cancel"));
 const MesAteliers = lazy(() => import("@/pages/mes-ateliers"));
@@ -65,6 +67,8 @@ function Router() {
         </Route>
         <Route path="/login" component={Login} />
         <Route path="/register" component={Register} />
+        <Route path="/mot-de-passe-oublie" component={ForgotPassword} />
+        <Route path="/reinitialiser-mot-de-passe" component={ResetPassword} />
         <Route path="/registration-pending" component={RegistrationPending} />
         <Route path="/validate" component={Validate} />
         <Route path="/validation-success" component={ValidationSuccess} />

@@ -376,6 +376,15 @@ export const changePasswordSchema = z.object({
   newPassword: z.string().min(6, "Le nouveau mot de passe doit faire au moins 6 caractères"),
 });
 
+export const forgotPasswordSchema = z.object({
+  email: z.string().trim().toLowerCase().email("Email invalide"),
+});
+
+export const resetPasswordSchema = z.object({
+  token: z.string().min(1, "Lien invalide").max(200, "Lien invalide"),
+  password: z.string().min(6, "Le mot de passe doit faire au moins 6 caractères").max(200),
+});
+
 export const createAdminSchema = z.object({
   email: z.string().email("Email invalide"),
   password: z.string().min(6, "Le mot de passe doit faire au moins 6 caractères"),
@@ -536,4 +545,6 @@ export type CreateRelationInput = z.infer<typeof createRelationSchema>;
 export type UpdateProfileInput = z.infer<typeof updateProfileSchema>;
 export type CreatePaymentInput = z.infer<typeof createPaymentSchema>;
 export type ChangePasswordInput = z.infer<typeof changePasswordSchema>;
+export type ForgotPasswordInput = z.infer<typeof forgotPasswordSchema>;
+export type ResetPasswordInput = z.infer<typeof resetPasswordSchema>;
 export type CreateAdminInput = z.infer<typeof createAdminSchema>;

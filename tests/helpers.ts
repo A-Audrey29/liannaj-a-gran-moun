@@ -47,7 +47,7 @@ export async function resetDatabase() {
     TRUNCATE TABLE
       "Report", "Favorite", "UserCategory", "AdminRecommendation",
       "Message", "Conversation", "CreditLedger", "Intervention", "Availability",
-      "Relation", "Notification", "NpsResponse", "PaymentRecord", "PushSubscription",
+      "Relation", "Notification", "NpsResponse", "PasswordResetToken", "PaymentRecord", "PushSubscription",
       "TeacherComment", "TeacherStudent", "Category", "User",
       "session"
     RESTART IDENTITY CASCADE
