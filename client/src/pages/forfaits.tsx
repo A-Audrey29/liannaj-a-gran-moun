@@ -49,10 +49,11 @@ export default function Forfaits() {
   const { user } = useAuth();
   const [, setLocation] = useLocation();
 
-  // Logged out: log in first. Senior or referent: the page that holds the
-  // purchase card. Any other account cannot buy: no buy button at all
-  // (/mes-ateliers would only say "Page non disponible").
-  const canBuy = !user || canBuyCredits(user.role);
+  // Logged out: log in first. Senior or referent linked to a senior: the page
+  // that holds the purchase card. Any other account (junior, admin, teacher,
+  // referent without a linked senior) cannot buy: no buy button and no
+  // sentence pointing to "Mes ateliers".
+  const canBuy = !user || canBuyCredits(user);
   const buyPath = user ? "/mes-ateliers" : "/login";
 
   return (
@@ -97,7 +98,7 @@ export default function Forfaits() {
       </div>
       {!canBuy && (
         <p className="mb-10 font-semibold" data-testid="text-forfaits-not-buyer">
-          Seuls les seniors et leurs référents achètent des forfaits.
+          Seuls les seniors et les référents liés à un senior achètent des forfaits.
         </p>
       )}
 
@@ -113,9 +114,11 @@ export default function Forfaits() {
 
       <h2 className="text-2xl font-bold mb-4">Payer</h2>
       <p className="mb-2">Le paiement se fait en ligne, par carte bancaire.</p>
-      <p className="mb-8">
-        Vous voyez vos crédits à tout moment dans la page « Mes ateliers ».
-      </p>
+      {canBuy && (
+        <p className="mb-8" data-testid="text-forfaits-mes-ateliers">
+          Vous voyez vos crédits à tout moment dans « Mes ateliers ».
+        </p>
+      )}
 
       {canBuy && (
         <Button

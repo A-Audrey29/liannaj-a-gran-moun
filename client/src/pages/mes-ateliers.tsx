@@ -21,7 +21,10 @@ const MOVEMENT_LABEL: Record<CreditHistoryEntry["type"], string> = {
 export default function MesAteliers() {
   const { user } = useAuth();
   const [, setLocation] = useLocation();
-  const isAllowed = canBuyCredits(user?.role);
+  const isAllowed = canBuyCredits(user);
+  // 1 referent = 1 senior (docs/decisions.md): without a linked senior there
+  // is no balance to show, so say why instead of a raw 403.
+  const isReferentWithoutSenior = user?.role === "REFERENT_SENIOR" && !user.linkedSeniorId;
   const homePath = user?.role === "REFERENT_SENIOR" ? "/espace-referent" : "/mon-espace";
 
   // Errors are shown as errors: a failed request must never read as "0
@@ -40,7 +43,13 @@ export default function MesAteliers() {
   if (!isAllowed) {
     return (
       <div className="max-w-4xl mx-auto px-4 py-8 text-center">
-        <p className="text-muted-foreground">Page non disponible pour ce compte.</p>
+        {isReferentWithoutSenior ? (
+          <p className="text-muted-foreground" data-testid="text-no-linked-senior">
+            Aucun senior n'est lié à votre compte. Contactez l'équipe Lyannaj pour qu'elle le relie.
+          </p>
+        ) : (
+          <p className="text-muted-foreground">Page non disponible pour ce compte.</p>
+        )}
         <Button variant="outline" className="mt-4" onClick={() => setLocation(homePath)}>Retour</Button>
       </div>
     );

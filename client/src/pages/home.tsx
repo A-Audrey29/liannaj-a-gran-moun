@@ -42,6 +42,8 @@ const ALL_TABS = [
   { id: "dashboard", label: "Tableau de bord", icon: LayoutGrid },
   { id: "rencontres", label: "Mes rencontres", icon: Calendar },
   { id: "disponibilites", label: "Mes disponibilités", icon: CalendarClock },
+  // Navigates to /mes-ateliers (see setActiveTab); senior only.
+  { id: "ateliers", label: "Mes ateliers", icon: BookOpen },
   { id: "messages", label: "Messagerie", icon: Mail },
   { id: "demandes", label: "Trouver un profil", icon: MessageCircle },
   { id: "profil", label: "Mes informations", icon: User },
@@ -90,16 +92,23 @@ export default function Home() {
   const [activeTab, setActiveTabState] = useState<string>("dashboard");
   const [openRelationId, setOpenRelationId] = useState<string | null>(null);
   const isNotAdmin = user?.role !== "ADMIN";
-  const tabs = user?.role === "ADMIN"
+  const tabs = (user?.role === "ADMIN"
     ? ALL_TABS.filter((t) => t.id !== "profil" && t.id !== "messages" && t.id !== "aide" && t.id !== "disponibilites")
     : user?.role === "JUNIOR"
     ? ALL_TABS.filter((t) => t.id !== "aide").map((t) =>
         t.id === "demandes" ? { ...t, label: "Demandes reçues" } : t
       )
-    : ALL_TABS.filter((t) => t.id !== "aide" && t.id !== "disponibilites");
+    : ALL_TABS.filter((t) => t.id !== "aide" && t.id !== "disponibilites")
+  ).filter((t) => t.id !== "ateliers" || user?.role === "SENIOR");
   const { toast } = useToast();
 
   function setActiveTab(tab: string) {
+    // "Mes ateliers" is a page of its own (shared with the referent space):
+    // the tab opens it instead of rendering inside this page.
+    if (tab === "ateliers") {
+      setLocation("/mes-ateliers");
+      return;
+    }
     setActiveTabState(tab);
     sessionStorage.setItem("feves_active_tab", tab);
   }
