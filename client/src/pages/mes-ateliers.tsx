@@ -65,7 +65,7 @@ export default function MesAteliers() {
         <ArrowLeft className="w-4 h-4" /> Retour
       </button>
 
-      <h1 className="text-2xl font-bold mb-6" data-testid="text-mes-ateliers-title">Mes ateliers</h1>
+      <h1 className="text-2xl font-bold mb-6" data-testid="text-mes-ateliers-title">Mes achats</h1>
 
       <Card className="rounded-2xl border-0 shadow-sm mb-6">
         <CardContent className="py-6">

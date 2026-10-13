@@ -1,6 +1,6 @@
 /**
  * canBuyCredits (shared/credits.ts) decides who sees the buy buttons on
- * /forfaits, the "Mes ateliers" purchase card and the "buy" action after a
+ * /forfaits, the "Mes achats" purchase card and the "buy" action after a
  * refused booking. It must be exactly creditOwnerId(user) !== null: a
  * referent without a linked senior has no balance, so cannot buy (#48 d).
  * Every role of the Prisma schema is checked, so a new role cannot silently
