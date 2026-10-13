@@ -43,7 +43,7 @@ const ALL_TABS = [
   { id: "rencontres", label: "Mes rencontres", icon: Calendar },
   { id: "disponibilites", label: "Mes disponibilités", icon: CalendarClock },
   // Navigates to /mes-ateliers (see setActiveTab); senior only.
-  { id: "ateliers", label: "Mes ateliers", icon: BookOpen },
+  { id: "ateliers", label: "Mes achats", icon: BookOpen },
   { id: "messages", label: "Messagerie", icon: Mail },
   { id: "demandes", label: "Trouver un profil", icon: MessageCircle },
   { id: "profil", label: "Mes informations", icon: User },
@@ -103,7 +103,7 @@ export default function Home() {
   const { toast } = useToast();
 
   function setActiveTab(tab: string) {
-    // "Mes ateliers" is a page of its own (shared with the referent space):
+    // "Mes achats" is a page of its own (shared with the referent space):
     // the tab opens it instead of rendering inside this page.
     if (tab === "ateliers") {
       setLocation("/mes-ateliers");
@@ -160,6 +160,8 @@ export default function Home() {
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-8">
+      {/* Feedback banner first on the senior dashboard (bobby#51); other tabs unchanged. */}
+      {user?.role === "SENIOR" && activeTab === "dashboard" && <NpsPrompt className="mb-4" />}
       {urgentAlerts.length > 0 && (
         <div className="space-y-2 mb-4">
           {urgentAlerts.map((alert, i) => (
@@ -346,7 +348,6 @@ function DashboardTab({ counts, isLoading, user, onSwitchTab, creditAvailable, o
 
   return (
     <div>
-      {user?.role === "SENIOR" && <NpsPrompt className="mb-6" />}
       <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-4" data-testid="text-resume">Résumé</h3>
       <div className="grid grid-cols-2 gap-3">
         {isJunior ? (

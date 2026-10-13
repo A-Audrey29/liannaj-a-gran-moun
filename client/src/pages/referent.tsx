@@ -77,7 +77,7 @@ const TABS = [
   { id: "suivi", label: "Suivi des prestations", icon: Calendar },
   { id: "prestation", label: "Demander une prestation", icon: Plus },
   // Navigates to /mes-ateliers (see selectTab), same page as the senior's tab.
-  { id: "ateliers", label: "Mes ateliers", icon: BookOpen },
+  { id: "ateliers", label: "Mes achats", icon: BookOpen },
   { id: "contact", label: "Contacter l'équipe", icon: Mail },
   { id: "profil", label: "Mon compte", icon: User },
 ] as const;
@@ -619,7 +619,7 @@ export default function ReferentHome() {
   const [activeTab, setActiveTab] = useState<TabId>("dashboard");
   const { toast } = useToast();
 
-  // "Mes ateliers" is a page of its own (shared with the senior space): the
+  // "Mes achats" is a page of its own (shared with the senior space): the
   // tab opens it instead of rendering inside this page.
   function selectTab(id: TabId) {
     if (id === "ateliers") {
