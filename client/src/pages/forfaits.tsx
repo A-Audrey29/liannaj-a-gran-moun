@@ -2,13 +2,15 @@ import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/use-auth";
 import { CREDIT_OFFERS } from "@shared/credit-offers";
+import { canBuyCredits } from "@shared/credits";
 
 /**
  * Public sales page for the credit offers, written for seniors: short
  * sentences, large text (>= 18 px), large buttons.
  *
  * Every sentence describing a credit rule must match the code (reservation
- * and debit: server/storage.ts; purchase by a referent: shared/credits.ts).
+ * and debit: server/storage.ts; cancellation: server/routes.ts; who may buy:
+ * shared/credits.ts).
  * Names and prices come from CREDIT_OFFERS only, never hard-coded here.
  */
 
@@ -23,7 +25,7 @@ const RULES: { title: string; text: string }[] = [
   },
   {
     title: "Plus de crédit libre",
-    text: "Si tous vos crédits sont déjà mis de côté, un nouvel atelier ne peut pas être prévu. Il faut d'abord acheter un forfait.",
+    text: "Si tous vos crédits sont déjà mis de côté, un nouvel atelier ne peut pas être prévu. Seule exception : la première rencontre offerte (voir plus bas). Sinon, il faut d'abord acheter un forfait.",
   },
   {
     title: "L'atelier a eu lieu",
@@ -31,11 +33,11 @@ const RULES: { title: string; text: string }[] = [
   },
   {
     title: "L'atelier est annulé",
-    text: "Si un atelier prévu est annulé, son crédit redevient libre. Vous pourrez l'utiliser pour un autre atelier.",
+    text: "Vous (ou l'équipe Lyannaj) pouvez annuler un atelier prévu. Son crédit redevient libre. Vous pourrez l'utiliser pour un autre atelier. Un atelier qui a déjà eu lieu ne peut plus être annulé.",
   },
   {
     title: "La première rencontre est offerte",
-    text: "Votre toute première rencontre avec un nouveau jeune est gratuite, si elle dure 30 minutes ou moins.",
+    text: "Avec chaque nouveau jeune, votre toute première rencontre est offerte si elle dure 30 minutes ou moins. Plus longue, elle utilise un crédit, comme un autre atelier.",
   },
   {
     title: "Votre référent peut payer pour vous",
@@ -47,7 +49,10 @@ export default function Forfaits() {
   const { user } = useAuth();
   const [, setLocation] = useLocation();
 
-  // Logged out: log in first. Logged in: the page that holds the purchase card.
+  // Logged out: log in first. Senior or referent: the page that holds the
+  // purchase card. Any other account cannot buy: no buy button at all
+  // (/mes-ateliers would only say "Page non disponible").
+  const canBuy = !user || canBuyCredits(user.role);
   const buyPath = user ? "/mes-ateliers" : "/login";
 
   return (
@@ -78,16 +83,23 @@ export default function Forfaits() {
                 soit {formatEuros(offer.priceEuros / offer.credits)} € l'atelier
               </p>
             )}
-            <Button
-              className="mt-auto h-14 text-lg bg-[#dc4256] hover:bg-[#c53a4d] text-white"
-              onClick={() => setLocation(buyPath)}
-              data-testid={`button-forfait-${offer.id}`}
-            >
-              Acheter
-            </Button>
+            {canBuy && (
+              <Button
+                className="mt-auto h-14 text-lg bg-[#dc4256] hover:bg-[#c53a4d] text-white"
+                onClick={() => setLocation(buyPath)}
+                data-testid={`button-forfait-${offer.id}`}
+              >
+                Acheter
+              </Button>
+            )}
           </div>
         ))}
       </div>
+      {!canBuy && (
+        <p className="mb-10 font-semibold" data-testid="text-forfaits-not-buyer">
+          Seuls les seniors et leurs référents achètent des forfaits.
+        </p>
+      )}
 
       <h2 className="text-2xl font-bold mb-4">Comment vos crédits sont utilisés</h2>
       <ol className="space-y-4 mb-10">
@@ -105,13 +117,15 @@ export default function Forfaits() {
         Vous voyez vos crédits à tout moment dans la page « Mes ateliers ».
       </p>
 
-      <Button
-        className="w-full md:w-auto h-14 px-8 text-lg bg-[#dc4256] hover:bg-[#c53a4d] text-white"
-        onClick={() => setLocation(buyPath)}
-        data-testid="button-forfaits-buy"
-      >
-        {user ? "Acheter un forfait" : "Me connecter pour acheter"}
-      </Button>
+      {canBuy && (
+        <Button
+          className="w-full md:w-auto h-14 px-8 text-lg bg-[#dc4256] hover:bg-[#c53a4d] text-white"
+          onClick={() => setLocation(buyPath)}
+          data-testid="button-forfaits-buy"
+        >
+          {user ? "Acheter un forfait" : "Me connecter pour acheter"}
+        </Button>
+      )}
     </div>
   );
 }
