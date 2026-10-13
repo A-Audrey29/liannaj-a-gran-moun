@@ -30,6 +30,7 @@ const TeacherHome = lazy(() => import("@/pages/teacher"));
 const MentionsLegales = lazy(() => import("@/pages/mentions-legales"));
 const PolitiqueConfidentialite = lazy(() => import("@/pages/politique-confidentialite"));
 const CGU = lazy(() => import("@/pages/cgu"));
+const CGV = lazy(() => import("@/pages/cgv"));
 const CreditsSuccess = lazy(() => import("@/pages/credits-success"));
 const CreditsCancel = lazy(() => import("@/pages/credits-cancel"));
 const MesAteliers = lazy(() => import("@/pages/mes-ateliers"));
@@ -95,6 +96,7 @@ function Router() {
         <Route path="/mentions-legales" component={MentionsLegales} />
         <Route path="/politique-confidentialite" component={PolitiqueConfidentialite} />
         <Route path="/cgu" component={CGU} />
+        <Route path="/cgv" component={CGV} />
         <Route path="/forfaits" component={Forfaits} />
         <Route component={NotFound} />
       </Switch>
