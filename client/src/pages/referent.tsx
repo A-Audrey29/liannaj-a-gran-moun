@@ -1,7 +1,8 @@
 import { useAuth } from "@/hooks/use-auth";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { apiRequest, apiErrorMessage, queryClient } from "@/lib/queryClient";
+import { apiRequest, apiErrorCode, apiErrorMessage, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { ToastAction } from "@/components/ui/toast";
 import { useLocation } from "wouter";
 import { getPhotoUrl } from "@/lib/photo-url";
 import { Card, CardContent } from "@/components/ui/card";
@@ -18,7 +19,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { referentInterventionSchema, referentContactSchema, type ReferentInterventionInput, type ReferentContactInput } from "@shared/schema";
 import type { User as UserType, Relation, Intervention } from "@shared/schema";
 import { ATELIERS } from "@shared/ateliers";
-import { LayoutGrid, Calendar, Plus, Mail, User, CheckCircle, Clock, Loader2, ChevronRight } from "lucide-react";
+import { LayoutGrid, Calendar, Plus, Mail, User, CheckCircle, Clock, Loader2, ChevronRight, BookOpen } from "lucide-react";
 import { useState } from "react";
 import { useSSE } from "@/hooks/use-sse";
 import { MobileTabsMenu } from "@/components/mobile-tabs-menu";
@@ -26,7 +27,7 @@ import MeetingHistory from "@/components/meeting-history";
 import { fmtTime, fmtDayLongMonthYear } from "@/lib/availability-format";
 import { CreditOffersCard } from "@/components/credit-offers-card";
 import { NpsPrompt } from "@/components/nps-prompt";
-import type { CreditBalanceResponse } from "@shared/credits";
+import { insufficientCreditsNotice, type CreditBalanceResponse } from "@shared/credits";
 import { isUpcomingOrOngoing } from "@shared/meeting-check";
 
 type RelationWithUsers = Relation & { senior: UserType; junior: UserType; interventions?: Intervention[] };
@@ -75,6 +76,8 @@ const TABS = [
   { id: "dashboard", label: "Tableau de bord", icon: LayoutGrid },
   { id: "suivi", label: "Suivi des prestations", icon: Calendar },
   { id: "prestation", label: "Demander une prestation", icon: Plus },
+  // Navigates to /mes-ateliers (see selectTab), same page as the senior's tab.
+  { id: "ateliers", label: "Mes ateliers", icon: BookOpen },
   { id: "contact", label: "Contacter l'équipe", icon: Mail },
   { id: "profil", label: "Mon compte", icon: User },
 ] as const;
@@ -294,6 +297,8 @@ const TASK_OPTIONS = ATELIERS;
 
 function PrestationTab({ relations }: { relations: RelationWithUsers[] }) {
   const { toast } = useToast();
+  const { user } = useAuth();
+  const [, setLocation] = useLocation();
   const [selectedTasks, setSelectedTasks] = useState<string[]>([]);
 
   const activeRelations = relations.filter((r) => r.status === "ACTIVE");
@@ -319,6 +324,25 @@ function PrestationTab({ relations }: { relations: RelationWithUsers[] }) {
       toast({ title: "Prestation demandée", description: "La demande a été transmise au jeune." });
     },
     onError: (err) => {
+      if (apiErrorCode(err) === "INSUFFICIENT_CREDITS") {
+        // Role-aware wording; "buy" only for who can buy (shared/credits.ts).
+        const notice = insufficientCreditsNotice(user);
+        toast({
+          title: notice.title,
+          description: notice.message,
+          variant: "destructive",
+          action: notice.canBuy ? (
+            <ToastAction
+              altText="Acheter des ateliers"
+              onClick={() => setLocation("/mes-ateliers")}
+              data-testid="button-toast-buy-ateliers"
+            >
+              Acheter des ateliers
+            </ToastAction>
+          ) : undefined,
+        });
+        return;
+      }
       toast({ title: "Erreur", description: apiErrorMessage(err, "Erreur lors de la demande"), variant: "destructive" });
     },
   });
@@ -595,6 +619,16 @@ export default function ReferentHome() {
   const [activeTab, setActiveTab] = useState<TabId>("dashboard");
   const { toast } = useToast();
 
+  // "Mes ateliers" is a page of its own (shared with the senior space): the
+  // tab opens it instead of rendering inside this page.
+  function selectTab(id: TabId) {
+    if (id === "ateliers") {
+      setLocation("/mes-ateliers");
+      return;
+    }
+    setActiveTab(id);
+  }
+
   useSSE(!!user);
 
   const { data: senior, isLoading: seniorLoading } = useQuery<UserType>({
@@ -644,7 +678,7 @@ export default function ReferentHome() {
         </Button>
       )}
 
-      <MobileTabsMenu tabs={TABS} activeTab={activeTab} onSelect={(id) => setActiveTab(id as TabId)} accentClassName="bg-[#8b5cf6] text-white" />
+      <MobileTabsMenu tabs={TABS} activeTab={activeTab} onSelect={(id) => selectTab(id as TabId)} accentClassName="bg-[#8b5cf6] text-white" />
 
       <div className="hidden md:flex flex-wrap gap-2 mb-8">
         {TABS.map((tab) => {
@@ -653,7 +687,7 @@ export default function ReferentHome() {
           return (
             <button
               key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
+              onClick={() => selectTab(tab.id)}
               className={`flex items-center gap-2 px-4 py-2.5 rounded-full text-sm font-medium whitespace-nowrap transition-colors ${
                 isActive ? "bg-[#8b5cf6] text-white" : "bg-white text-muted-foreground hover:bg-muted"
               }`}

@@ -383,9 +383,9 @@ Liste tous les paiements.
 - **Réponse 200** : `PaymentRecord[]` (avec `user`)
 
 ### `POST /api/admin/payments`
-Enregistre un paiement et active `subscriptionActive` de l'utilisateur.
+Enregistre un paiement (et, si `credits` est fourni, crédite le senior concerné). N'écrit plus `subscriptionActive` (champ inutilisé depuis le 2026-10-13, voir `docs/decisions.md`).
 - **Auth** : Admin
-- **Body** : `{ userId: string, amount: number, label: string, date?: string }`
+- **Body** : `{ userId: string, amount: number, label: string, date?: string, credits?: number }`
 - **Réponse 201** : `PaymentRecord`
 
 ---

@@ -2,6 +2,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, apiErrorCode, apiErrorMessage, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { ToastAction } from "@/components/ui/toast";
 import { useLocation, useParams, Link } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -22,6 +23,7 @@ import type { Relation, User as UserType, Intervention } from "@shared/schema";
 import AvailabilityWeekPicker, { type FreeSlot } from "@/components/availability-week-picker";
 import { fmtTime, fmtTimeRange, fmtDayLong, fmtDayShort } from "@/lib/availability-format";
 import { ATELIERS } from "@shared/ateliers";
+import { insufficientCreditsNotice } from "@shared/credits";
 
 type RelationDetail = Relation & { senior: UserType; junior: UserType; interventions: Intervention[] };
 
@@ -410,6 +412,8 @@ function NewInterventionDialog({
   onClose: () => void;
 }) {
   const { toast } = useToast();
+  const { user } = useAuth();
+  const [, navigate] = useLocation();
   const [startTime, setStartTime] = useState("");
   const [duration, setDuration] = useState("120");
   const [location, setLocation] = useState("");
@@ -468,12 +472,32 @@ function NewInterventionDialog({
       setTasks([]);
       onClose();
     },
-    onError: (err) =>
+    onError: (err) => {
+      if (apiErrorCode(err) === "INSUFFICIENT_CREDITS") {
+        // Role-aware wording; "buy" only for who can buy (shared/credits.ts).
+        const notice = insufficientCreditsNotice(user);
+        toast({
+          title: notice.title,
+          description: notice.message,
+          variant: "destructive",
+          action: notice.canBuy ? (
+            <ToastAction
+              altText="Acheter des ateliers"
+              onClick={() => navigate("/mes-ateliers")}
+              data-testid="button-toast-buy-ateliers"
+            >
+              Acheter des ateliers
+            </ToastAction>
+          ) : undefined,
+        });
+        return;
+      }
       toast({
-        title: apiErrorCode(err) === "INSUFFICIENT_CREDITS" ? "Plus d'atelier disponible" : "Proposition refusée",
+        title: "Proposition refusée",
         description: apiErrorMessage(err, "Ce créneau n'est pas disponible."),
         variant: "destructive",
-      }),
+      });
+    },
   });
 
   const durationNum = parseInt(duration) || 0;

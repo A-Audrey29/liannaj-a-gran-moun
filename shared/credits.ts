@@ -11,12 +11,33 @@ export function creditOwnerId(user: { id: string; role: string; linkedSeniorId?:
 }
 
 /**
- * Who may buy credit offers? A senior (for themselves) and a referent (for
- * their linked senior); every other role has no balance. Single source for
- * the /forfaits buy buttons and the /mes-ateliers page.
+ * Who may buy credit offers? Exactly the users who have a balance to act on
+ * (creditOwnerId !== null): a senior, and a referent *linked* to a senior.
+ * A referent without a linked senior, a junior, an admin or a teacher cannot
+ * buy. One rule only, so the buy buttons, /mes-ateliers and the server
+ * credit routes always agree. 1 referent = 1 senior (docs/decisions.md).
  */
-export function canBuyCredits(role: string | null | undefined): boolean {
-  return role === "SENIOR" || role === "REFERENT_SENIOR";
+export function canBuyCredits(
+  user: { id: string; role: string; linkedSeniorId?: string | null } | null | undefined,
+): boolean {
+  if (!user) return false;
+  return creditOwnerId(user) !== null;
+}
+
+/**
+ * What to tell a user whose booking was refused with INSUFFICIENT_CREDITS
+ * (HTTP 402). The server rule is unchanged; only the wording depends on who
+ * is asking. A junior never pays, so is never offered to buy; the "buy"
+ * action is offered only to users who can buy (canBuyCredits).
+ */
+export function insufficientCreditsNotice(
+  user: { id: string; role: string; linkedSeniorId?: string | null } | null | undefined,
+): { title: string; message: string; canBuy: boolean } {
+  const title = "Plus d'atelier disponible";
+  if (user?.role === "JUNIOR") {
+    return { title, message: "Le senior n'a plus d'atelier disponible.", canBuy: false };
+  }
+  return { title, message: "Vous n'avez plus d'atelier disponible.", canBuy: canBuyCredits(user) };
 }
 
 /** Balance as sent to the client: ledger total, and what is left once planned paid meetings are set aside. */

@@ -770,12 +770,9 @@ class DatabaseStorage implements IStorage {
           stripeSessionId: data.stripeSessionId ?? null,
         },
       });
-      // Both the payer (admin Payments tab badge) and the senior who receives
-      // the credits (profile badge) show an active subscription.
-      await tx.user.updateMany({
-        where: { id: { in: [data.userId, ...(data.creditSeniorId ? [data.creditSeniorId] : [])] } },
-        data: { subscriptionActive: true },
-      });
+      // No subscription in Lyannaj (credits only): User.subscriptionActive is
+      // no longer written nor shown; the column stays until a later migration
+      // (docs/decisions.md, 2026-10-13).
       if (data.credits && data.creditSeniorId) {
         await tx.creditLedger.create({
           data: {

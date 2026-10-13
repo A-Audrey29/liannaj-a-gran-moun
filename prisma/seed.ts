@@ -580,8 +580,8 @@ async function main() {
   await prisma.paymentRecord.create({
     data: {
       userId: senior3.id,
-      amount: 15.00,
-      label: "Abonnement mensuel mars 2026",
+      amount: 18.00,
+      label: "Découverte — 1 atelier (virement)",
       date: new Date(),
     },
   });

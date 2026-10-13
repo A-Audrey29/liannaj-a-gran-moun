@@ -3,6 +3,35 @@
 Journal des choix d'architecture et de leurs raisons. Une entrée par décision,
 la plus récente en haut.
 
+## 2026-10-13 — Un référent = un senior ; pas de recharge automatique ; plus d'abonnement
+
+Décisions d'Audrey (revue de #16 et #17, ticket bobby#48).
+
+**1 référent = 1 senior, pour l'instant.** Le modèle reste `User.linkedSeniorId`
+(un seul senior par référent). `canBuyCredits(user)` vaut exactement
+`creditOwnerId(user) !== null` (`shared/credits.ts`) : un référent sans senior
+lié ne voit ni bouton ni phrase d'achat, et « Mes ateliers » lui dit de
+contacter l'équipe. *Alternative écartée* : plusieurs seniors par référent
+(table de liaison + choix du senior à l'achat) ; à revoir après le lancement
+s'il y a de la demande.
+
+**Pas de recharge automatique au lancement.** Une réservation refusée faute de
+crédit (402 `INSUFFICIENT_CREDITS`, règle serveur inchangée) affiche « Vous
+n'avez plus d'atelier disponible. » et, seulement à qui peut acheter, une
+action « Acheter des ateliers » vers « Mes ateliers » ; au jeune : « Le senior
+n'a plus d'atelier disponible. », sans achat (`insufficientCreditsNotice`).
+*Alternative écartée* : recharge automatique (bobby#42, en attente).
+
+**`subscriptionActive` n'est plus utilisé.** Lyannaj vend des crédits, pas un
+abonnement : le champ n'est plus écrit (`createPayment`) ni affiché (admin). Il
+reste en base. *Alternative écartée* : le supprimer maintenant — c'est une
+migration, hors périmètre ; à faire dans une migration future réversible.
+
+**« Mes ateliers » dans le menu.** Onglet du senior (`/mon-espace`) et du
+référent (`/espace-referent`) qui ouvre la page existante `/mes-ateliers`
+(pas de copie du contenu dans l'onglet : une seule page, un seul bouton
+« Retour » vers l'espace d'origine).
+
 ## 2026-10-13 — Forfaits nommés et page de vente `/forfaits`
 
 **Décision.** `CreditOffer` gagne un champ `name` (Découverte, Essentiel,

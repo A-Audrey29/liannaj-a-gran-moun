@@ -118,8 +118,8 @@ describe("GET /api/credits/checkout-status", () => {
   });
 });
 
-describe("abonnement actif", () => {
-  it("un achat par le referent marque abonnes le senior (profil) et le referent payeur (onglet Paiements)", async () => {
+describe("pas d'abonnement (#48 b)", () => {
+  it("un paiement enregistre par l'admin n'ecrit plus subscriptionActive (ni senior ni referent payeur)", async () => {
     const senior = await createUser("SENIOR");
     const referent = await createUser("REFERENT_SENIOR", { linkedSeniorId: senior.id });
     const admin = await createUser("ADMIN");
@@ -129,7 +129,7 @@ describe("abonnement actif", () => {
       .send({ userId: referent.id, amount: 15, label: "Pack 1", credits: 1 });
 
     expect(res.status).toBe(201);
-    expect((await prisma.user.findUniqueOrThrow({ where: { id: senior.id } })).subscriptionActive).toBe(true);
-    expect((await prisma.user.findUniqueOrThrow({ where: { id: referent.id } })).subscriptionActive).toBe(true);
+    expect((await prisma.user.findUniqueOrThrow({ where: { id: senior.id } })).subscriptionActive).toBe(false);
+    expect((await prisma.user.findUniqueOrThrow({ where: { id: referent.id } })).subscriptionActive).toBe(false);
   });
 });

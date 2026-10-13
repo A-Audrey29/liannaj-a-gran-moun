@@ -97,7 +97,7 @@ client/
 - **Seniors (Les Abymes 97139)** :
   - senior@test.fr / password — Jean Dupont (ACTIVE, Jardinage)
   - senior2@test.fr / password — Madeleine Fontaine (ACTIVE, Cuisine, Lecture)
-  - senior3@test.fr / password — Georges Blanc (ACTIVE, Bricolage, Jardinage, subscriptionActive)
+  - senior3@test.fr / password — Georges Blanc (ACTIVE, Bricolage, Jardinage)
   - senior4@test.fr / password — Simone Rousseau (ACTIVE, Informatique, Promenade)
   - senior5@test.fr / password — René Moreau (ACTIVE, Cuisine, Promenade, Jardinage)
   - senior.pending@test.fr / password — Pierre Durand (PENDING_VALIDATION, Pointe-à-Pitre 97110)
@@ -161,7 +161,7 @@ client/
 - `DELETE /api/favorites/:juniorId` — retirer un favori (Senior only)
 - `GET /api/favorites` — liste des favoris du senior
 - `GET /api/admin/payments` — tous les paiements
-- `POST /api/admin/payments` — enregistrer un paiement (active subscriptionActive)
+- `POST /api/admin/payments` — enregistrer un paiement (crédite le senior si `credits` est fourni)
 - `GET /api/admin/notifications` — toutes les notifications avec user associé (requireAdmin)
 - `POST /api/admin/create-admin` — créer un compte administrateur (requireAdmin)
 - `GET /api/messages/stream` — SSE temps réel (événements: new_message, message_sent, messages_read, message_deleted)

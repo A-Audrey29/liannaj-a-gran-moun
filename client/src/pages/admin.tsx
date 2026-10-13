@@ -933,7 +933,6 @@ function ProfileDialog({ user, open, onOpenChange }: { user: SafeUser | null; op
     { label: "Email référent", value: user.referentEmail, show: user.role === "JUNIOR" },
     { label: "Personne de confiance", value: user.trustedPersonName },
     { label: "Email personne de confiance", value: user.trustedPersonEmail },
-    { label: "Abonnement", value: user.subscriptionActive ? "Actif" : "Inactif" },
     { label: "Solde de crédits", value: creditData ? `${creditData.balance} crédit(s), dont ${Math.max(creditData.available, 0)} disponible(s)` : null, show: !!creditSeniorId },
     { label: "Inscrit le", value: formatDate(user.createdAt) },
   ];
@@ -1339,7 +1338,7 @@ function PaiementsTab() {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
       setDialogOpen(false);
       setFormData({ userId: "", amount: "", label: "", date: new Date().toISOString().split("T")[0], credits: "" });
-      toast({ title: "Paiement enregistré", description: "L'abonnement a été activé." });
+      toast({ title: "Paiement enregistré" });
     },
     onError: () => {
       toast({ title: "Erreur", description: "Impossible d'enregistrer le paiement", variant: "destructive" });
@@ -1406,8 +1405,7 @@ function PaiementsTab() {
                 <th className="py-2 pr-4">Utilisateur</th>
                 <th className="py-2 pr-4">Montant</th>
                 <th className="py-2 pr-4">Libellé</th>
-                <th className="py-2 pr-4">Date</th>
-                <th className="py-2">Abonnement</th>
+                <th className="py-2">Date</th>
               </tr>
             </thead>
             <tbody>
@@ -1416,12 +1414,7 @@ function PaiementsTab() {
                   <td className="py-3 pr-4 font-medium">{p.user.firstName} {p.user.lastName}</td>
                   <td className="py-3 pr-4">{p.amount.toFixed(2)} €</td>
                   <td className="py-3 pr-4">{p.label}</td>
-                  <td className="py-3 pr-4">{formatDate(p.date)}</td>
-                  <td className="py-3">
-                    <Badge className={p.user.subscriptionActive ? "bg-green-100 text-green-800" : "bg-gray-100 text-gray-600"}>
-                      {p.user.subscriptionActive ? "Actif" : "Inactif"}
-                    </Badge>
-                  </td>
+                  <td className="py-3">{formatDate(p.date)}</td>
                 </tr>
               ))}
             </tbody>
@@ -1469,7 +1462,7 @@ function PaiementsTab() {
                 id="payment-label"
                 value={formData.label}
                 onChange={(e) => setFormData({ ...formData, label: e.target.value })}
-                placeholder="Ex: Abonnement mensuel mars 2026"
+                placeholder="Ex: Pack de 5 ateliers — virement"
                 required
                 data-testid="input-payment-label"
               />

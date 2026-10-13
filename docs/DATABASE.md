@@ -195,7 +195,7 @@ Utilisateur de la plateforme (Admin, Senior, ou Junior).
 | `trustedPersonName/Email` | String? | Personne de confiance du Senior |
 | `validatorEmail` | String? | Email du validateur (reçoit le lien de validation) |
 | `validationToken` | String? | Token UUID pour validation du compte |
-| `subscriptionActive` | Boolean | Abonnement actif (géré par l'admin) |
+| `subscriptionActive` | Boolean | **Inutilisé** depuis le 2026-10-13 (pas d'abonnement, crédits seuls) ; gardé en base, suppression = migration future |
 
 ### `Category`
 Catégorie d'intérêt ou de compétence (ex: Jardinage, Informatique).
