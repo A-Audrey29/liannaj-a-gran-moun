@@ -1370,10 +1370,10 @@ function PaiementsTab() {
           Lecture seule — ces prix sont fixés dans le code (<code>shared/credit-offers.ts</code>),
           pas modifiables depuis cet écran. Changer un montant nécessite un déploiement.
         </p>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           {CREDIT_OFFERS.map((offer) => (
             <div key={offer.id} className="rounded-xl border bg-background px-4 py-3" data-testid={`row-offer-${offer.id}`}>
-              <p className="text-sm font-medium">{offer.label}</p>
+              <p className="text-sm font-medium">{offer.name} — {offer.label}</p>
               <p className="text-xs text-muted-foreground mt-1">
                 {offer.credits} crédit{offer.credits > 1 ? "s" : ""} — {offer.priceEuros} €
               </p>

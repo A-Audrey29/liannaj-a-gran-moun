@@ -33,6 +33,7 @@ const CGU = lazy(() => import("@/pages/cgu"));
 const CreditsSuccess = lazy(() => import("@/pages/credits-success"));
 const CreditsCancel = lazy(() => import("@/pages/credits-cancel"));
 const MesAteliers = lazy(() => import("@/pages/mes-ateliers"));
+const Forfaits = lazy(() => import("@/pages/forfaits"));
 
 function AdminGuard({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
@@ -94,6 +95,7 @@ function Router() {
         <Route path="/mentions-legales" component={MentionsLegales} />
         <Route path="/politique-confidentialite" component={PolitiqueConfidentialite} />
         <Route path="/cgu" component={CGU} />
+        <Route path="/forfaits" component={Forfaits} />
         <Route component={NotFound} />
       </Switch>
       </Suspense>

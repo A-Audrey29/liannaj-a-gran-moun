@@ -3,6 +3,7 @@ import { apiRequest, apiErrorMessage } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
+import { Link } from "wouter";
 import { CREDIT_OFFERS } from "@shared/credit-offers";
 
 export function OffersGrid() {
@@ -30,7 +31,8 @@ export function OffersGrid() {
       {CREDIT_OFFERS.map((offer) => (
         <div key={offer.id} className="flex items-center justify-between gap-3">
           <div>
-            <p className="text-sm font-medium">{offer.label}</p>
+            <p className="text-sm font-semibold" data-testid={`text-offer-name-${offer.id}`}>{offer.name}</p>
+            <p className="text-sm">{offer.label}</p>
             <p className="text-xs text-muted-foreground">{offer.priceEuros} €</p>
           </div>
           <Button
@@ -53,6 +55,9 @@ export function CreditOffersCard() {
       <CardContent className="pt-6 space-y-3">
         <p className="font-semibold">Acheter des ateliers</p>
         <OffersGrid />
+        <Link href="/forfaits" className="inline-block text-sm underline text-[#dc4256]" data-testid="link-forfaits">
+          Comment fonctionnent les forfaits ?
+        </Link>
       </CardContent>
     </Card>
   );
