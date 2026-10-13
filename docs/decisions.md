@@ -3,6 +3,22 @@
 Journal des choix d'architecture et de leurs raisons. Une entrée par décision,
 la plus récente en haut.
 
+## 2026-10-13 — Forfaits nommés et page de vente `/forfaits`
+
+**Décision.** `CreditOffer` gagne un champ `name` (Découverte, Essentiel,
+Sérénité — provisoires). Trois offres : `pack-1` 18 €, `pack-5` 85 €,
+`pack-10` 160 €. `shared/credit-offers.ts` reste la seule source : carte
+d'achat, admin et page publique `/forfaits` lisent `CREDIT_OFFERS`.
+
+**Raison.** Les id `pack-1` et `pack-5` sont conservés : le webhook relit
+`metadata.offerId`, un id renommé ferait perdre les crédits d'un paiement en
+cours. La page de vente ne décrit que des règles présentes dans le code
+(`server/storage.ts`, `shared/credits.ts`) ; une règle ajoutée ou modifiée
+côté serveur impose de relire `client/src/pages/forfaits.tsx`.
+
+**Alternative écartée.** Prix et textes en base avec écran d'admin : inutile
+tant que les prix changent rarement (un redéploiement suffit).
+
 ## 2026-10-12 — Relance des rencontres non clôturées : aux admins, une seule fois
 
 **Contexte.** Les rencontres `PROPOSED`/`CONFIRMED` dont la date est passée

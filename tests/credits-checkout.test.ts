@@ -12,6 +12,7 @@ import Stripe from "stripe";
 import { resetDatabase, createUser, loginAs, getApp } from "./helpers";
 import { prisma } from "../server/prisma";
 import { storage } from "../server/storage";
+import { paymentProvider } from "../server/lib/payment-provider";
 import request from "supertest";
 
 beforeEach(async () => {
@@ -56,6 +57,24 @@ describe("POST /api/credits/checkout", () => {
     // on verifie que l'echec vient bien de l'appel au prestataire (500)
     // et non d'un rejet de validation (400/401/403).
     expect(res.status).toBe(500);
+  });
+
+  it("accepte le forfait pack-10 (Serenite) et transmet le prix serveur au prestataire", async () => {
+    const spy = vi
+      .spyOn(paymentProvider, "createCheckoutSession")
+      .mockResolvedValue({ url: "https://checkout.test/session" });
+    try {
+      const senior = await createUser("SENIOR");
+      const agent = await loginAs(senior);
+      // A client-supplied price must be ignored: only offerId is read.
+      const res = await agent.post("/api/credits/checkout").send({ offerId: "pack-10", priceEuros: 1 });
+      expect(res.status).toBe(200);
+      expect(res.body.url).toBe("https://checkout.test/session");
+      expect(spy).toHaveBeenCalledTimes(1);
+      expect(spy.mock.calls[0][0]).toMatchObject({ offerId: "pack-10", priceEuros: 160, seniorId: senior.id });
+    } finally {
+      spy.mockRestore();
+    }
   });
 });
 
@@ -108,7 +127,7 @@ describe("POST /api/webhooks/payment", () => {
       data: {
         object: {
           id: "cs_test_session_1",
-          amount_total: 6500,
+          amount_total: 8500,
           metadata: {
             seniorId: senior.id,
             offerId: "pack-5",
@@ -129,7 +148,7 @@ describe("POST /api/webhooks/payment", () => {
 
     const payment = await prisma.paymentRecord.findUnique({ where: { stripeSessionId: "cs_test_session_1" } });
     expect(payment).not.toBeNull();
-    expect(payment?.amount).toBe(65);
+    expect(payment?.amount).toBe(85);
 
     const ledger = await prisma.creditLedger.findFirst({ where: { seniorId: senior.id, type: "PURCHASE" } });
     expect(ledger?.amount).toBe(5);
