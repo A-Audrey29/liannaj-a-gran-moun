@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { AlertTriangle, ArrowLeft, BookOpen, ShoppingCart } from "lucide-react";
 import { OffersGrid } from "@/components/credit-offers-card";
-import type { CreditBalanceResponse, CreditHistoryEntry } from "@shared/credits";
+import { canBuyCredits, type CreditBalanceResponse, type CreditHistoryEntry } from "@shared/credits";
 
 function formatDate(d: string | Date) {
   return new Date(d).toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric" });
@@ -21,7 +21,7 @@ const MOVEMENT_LABEL: Record<CreditHistoryEntry["type"], string> = {
 export default function MesAteliers() {
   const { user } = useAuth();
   const [, setLocation] = useLocation();
-  const isAllowed = user?.role === "SENIOR" || user?.role === "REFERENT_SENIOR";
+  const isAllowed = canBuyCredits(user?.role);
   const homePath = user?.role === "REFERENT_SENIOR" ? "/espace-referent" : "/mon-espace";
 
   // Errors are shown as errors: a failed request must never read as "0
