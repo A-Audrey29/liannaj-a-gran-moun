@@ -56,7 +56,7 @@ export default function Landing() {
             </p>
             <Link href="/register">
               <Button size="lg" className="rounded-full bg-[#dc4256] hover:bg-[#c73848] text-white px-8 text-base" data-testid="button-hero-register">
-                CREER UN COMPTE
+                CRÉER UN COMPTE
               </Button>
             </Link>
           </div>
@@ -85,13 +85,17 @@ export default function Landing() {
             <p className="text-muted-foreground mb-4">
               Une confiance qui se construit et se partage
             </p>
-            <p className="text-muted-foreground">
-              Chaque relation LYANNAJ repose sur un cadre clair, encadré par un enseignant référent garant des échanges.
-              
-              Les jeunes suivent une formation qui développe l'écoute, le respect et l'attention à la personne. Leur posture est adaptée au rythme de l'aîné — sans jamais se substituer à un service de soins.
-              
-              La relation est réciproque : le jeune apporte énergie et regard neuf, l'aîné transmet expérience et présence. Chacun contribue à la qualité du lien.
-            </p>
+            <div className="space-y-3 text-muted-foreground">
+              <p>Chaque relation LYANNAJ repose sur un cadre clair, encadré par un enseignant référent garant des échanges.</p>
+              <p>
+                Les jeunes suivent une formation qui développe l'écoute, le respect et l'attention à la personne. Leur posture est
+                adaptée au rythme de l'aîné — sans jamais se substituer à un service de soins.
+              </p>
+              <p>
+                La relation est réciproque : le jeune apporte énergie et regard neuf, l'aîné transmet expérience et présence. Chacun
+                contribue à la qualité du lien.
+              </p>
+            </div>
           </div>
         </div>
       </section>
@@ -102,7 +106,7 @@ export default function Landing() {
             <h2 className="text-2xl md:text-4xl font-bold text-[#dc4256]" data-testid="text-section-pourqui">POUR QUI</h2>
             <Link href="/register">
               <Button variant="outline" className="rounded-full border-[#dc4256] text-[#dc4256] hover:bg-[#dc4256] hover:text-white" data-testid="button-pourqui-register">
-                CREER UN COMPTE
+                CRÉER UN COMPTE
               </Button>
             </Link>
           </div>
@@ -112,21 +116,24 @@ export default function Landing() {
                 <User className="w-8 h-8 text-[#8b5cf6]" />
               </div>
               <h3 className="text-xl font-bold mb-2">Senior</h3>
-              <p className="text-sm text-muted-foreground">Partagez votre experience et recevez un coup de main du quotidien.</p>
+              <p className="text-sm text-muted-foreground">Partagez votre expérience et recevez un coup de main au quotidien.</p>
             </div>
             <div className="bg-white rounded-2xl p-6 text-center shadow-sm">
               <div className="w-16 h-16 mx-auto mb-4 bg-[#e8d7fe] rounded-full flex items-center justify-center">
                 <GraduationCap className="w-8 h-8 text-[#8b5cf6]" />
               </div>
               <h3 className="text-xl font-bold mb-2">Jeune</h3>
-              <p className="text-sm text-muted-foreground">Apprenez, echangez et creez du lien avec vos aines.</p>
+              <p className="text-sm text-muted-foreground">Apprenez, échangez et créez du lien avec vos aînés.</p>
             </div>
             <div className="bg-white rounded-2xl p-6 text-center shadow-sm">
               <div className="w-16 h-16 mx-auto mb-4 bg-[#e8d7fe] rounded-full flex items-center justify-center">
                 <Heart className="w-8 h-8 text-[#8b5cf6]" />
               </div>
               <h3 className="text-xl font-bold mb-2">Aidant</h3>
-              <p className="text-sm text-muted-foreground">Trouvez du soutien et des moments de repit pres de chez vous.</p>
+              <p className="text-sm text-muted-foreground">
+                Vous accompagnez un proche ? Suivez ses rencontres, demandez un atelier pour lui, payez ses forfaits et
+                écrivez à l'équipe. Votre espace aidant est ouvert par l'équipe Lyannaj.
+              </p>
             </div>
           </div>
         </div>
@@ -144,12 +151,12 @@ export default function Landing() {
             <p className="text-muted-foreground mb-4">
               Prenez place — la première rencontre, c'est nous qui l'organisons.
             </p>
-            <p className="text-muted-foreground">
-              - Une première rencontre en présentiel, encadrée, dans un lieu neutre et sécurisant.
-              - Les rencontres suivantes sont programmées selon le rythme et les besoins de chacun.
-              - Pas de précipitation : le lien se construit à votre rythme, en toute tranquillité.
-              - Un référent présent à chaque étape, pour vous et pour votre famille.
-            </p>
+            <ul className="list-disc pl-5 space-y-2 text-muted-foreground">
+              <li>Une première rencontre en présentiel, encadrée, dans un lieu neutre et sécurisant.</li>
+              <li>Les rencontres suivantes sont programmées selon le rythme et les besoins de chacun.</li>
+              <li>Pas de précipitation : le lien se construit à votre rythme, en toute tranquillité.</li>
+              <li>Un référent présent à chaque étape, pour vous et pour votre famille.</li>
+            </ul>
           </div>
         </div>
       </section>
@@ -198,26 +205,26 @@ export default function Landing() {
             <p className="text-muted-foreground mb-4">
               Les mots font leur chemin — un espace pour échanger en confiance.
             </p>
-            <p className="text-muted-foreground">
-              Un espace personnel sur la plateforme, propre à chaque utilisateur.
-              L'aîné est accompagné par un aidant familial ou une personne de confiance.
-              Le jeune est suivi par son enseignant référent.
-              Un tuteur-modérateur assure la supervision, en ligne et en présentiel.
-            </p>
+            <ul className="list-disc pl-5 space-y-2 text-muted-foreground">
+              <li>Un espace personnel sur la plateforme, propre à chaque utilisateur.</li>
+              <li>L'aîné est accompagné par un aidant familial ou une personne de confiance.</li>
+              <li>Le jeune est suivi par son enseignant référent.</li>
+              <li>Un tuteur-modérateur assure la supervision, en ligne et en présentiel.</li>
+            </ul>
           </div>
         </div>
       </section>
 
       <section id="comment-ca-marche" className="scroll-mt-20 py-12 md:py-20 bg-white">
         <div className="max-w-4xl mx-auto px-4 text-center">
-          <h2 className="text-2xl md:text-4xl font-bold text-[#dc4256] mb-2" data-testid="text-section-comment">COMMENT CA MARCHE</h2>
-          <p className="text-muted-foreground mb-12">Quatre etapes simples pour creer un lien intergenerationnel durable.</p>
+          <h2 className="text-2xl md:text-4xl font-bold text-[#dc4256] mb-2" data-testid="text-section-comment">COMMENT ÇA MARCHE</h2>
+          <p className="text-muted-foreground mb-12">Quatre étapes simples pour créer un lien intergénérationnel durable.</p>
 
           <div className="space-y-6">
             {[
-              { num: "1", text: "Inscrivez-vous en tant que senior ou jeune." },
+              { num: "1", text: "Inscrivez-vous comme senior ou comme jeune. Le senior indique un proche de confiance (son aidant), qui valide son inscription." },
               { num: "2", text: "FEVES analyse les profils et propose des mises en relation compatibles." },
-              { num: "3", text: "Une premiere rencontre est organisee dans un lieu neutre et encadre." },
+              { num: "3", text: "Une première rencontre est organisée dans un lieu neutre et encadré." },
               { num: "4", text: "Si le courant passe, les rencontres deviennent autonomes." },
             ].map((step) => (
               <div key={step.num} className="flex items-center gap-6 text-left max-w-xl mx-auto">
