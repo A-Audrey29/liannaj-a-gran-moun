@@ -177,6 +177,24 @@ describe("POST /api/validate sans espace aidant (comportement existant)", () => 
     expect(await prisma.user.count({ where: { role: "REFERENT_SENIOR" } })).toBe(0);
   });
 
+  it("un ancien lien ne reactive pas un compte suspendu", async () => {
+    const { senior, token } = await seniorEnAttente({ status: "SUSPENDED" });
+    const agent = await anonymousAgent();
+    expect((await agent.post("/api/validate").send({ token })).status).toBe(404);
+    expect((await agent.post("/api/validate").send({ token, aidant })).status).toBe(404);
+    expect((await prisma.user.findUniqueOrThrow({ where: { id: senior.id } })).status).toBe("SUSPENDED");
+    expect(await prisma.user.count({ where: { role: "REFERENT_SENIOR" } })).toBe(0);
+  });
+
+  it("la suspension par l'admin efface le lien de validation", async () => {
+    const { senior } = await seniorEnAttente();
+    const admin = await loginAs(await createUser("ADMIN"));
+    expect((await admin.patch(`/api/admin/users/${senior.id}/suspend`)).status).toBe(200);
+    const apres = await prisma.user.findUniqueOrThrow({ where: { id: senior.id } });
+    expect(apres.status).toBe("SUSPENDED");
+    expect(apres.validationToken).toBeNull();
+  });
+
   it("refuse un token manquant", async () => {
     const res = await (await anonymousAgent()).post("/api/validate").send({});
     expect(res.status).toBe(400);

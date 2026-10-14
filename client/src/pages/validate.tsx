@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useQuery } from "@tanstack/react-query";
@@ -45,15 +45,18 @@ export default function Validate() {
   const token = new URLSearchParams(searchString).get("token") || "";
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // handleSubmit validates asynchronously before confirm() runs: a fast double
+  // click could send two POSTs, the second answering "lien invalide".
+  const inFlight = useRef(false);
 
-  const infoQuery = useQuery<ValidateInfo, Error & { reason?: string }>({
+  const infoQuery = useQuery<ValidateInfo, Error & { reason?: string; status?: number }>({
     queryKey: ["/api/validate/info", token],
     enabled: !!token,
     retry: false,
     queryFn: async () => {
       const res = await fetch(`/api/validate/info?token=${encodeURIComponent(token)}`);
       const body = await res.json().catch(() => ({}));
-      if (!res.ok) throw Object.assign(new Error(body.message || "Lien invalide"), { reason: body.reason });
+      if (!res.ok) throw Object.assign(new Error(body.message || "Lien invalide"), { reason: body.reason, status: res.status });
       return body;
     },
   });
@@ -68,6 +71,8 @@ export default function Validate() {
       navigate("/validation-error?reason=invalid");
       return;
     }
+    if (inFlight.current) return;
+    inFlight.current = true;
     setPending(true);
     setError(null);
     try {
@@ -91,13 +96,28 @@ export default function Validate() {
     } catch {
       navigate("/validation-error?reason=invalid");
     } finally {
+      inFlight.current = false;
       setPending(false);
     }
   }
 
-  if (!token || infoQuery.isError) {
-    const reason = infoQuery.error?.reason === "expired" ? "expired" : "invalid";
-    return <Redirect to={`/validation-error?reason=${reason}`} />;
+  if (!token) return <Redirect to="/validation-error?reason=invalid" />;
+
+  if (infoQuery.isError) {
+    const status = infoQuery.error?.status;
+    // Only a dead link goes to the error page; a server or network hiccup
+    // must not tell the user their valid link is invalid.
+    if (status === 404 || status === 410) {
+      return <Redirect to={`/validation-error?reason=${status === 410 ? "expired" : "invalid"}`} />;
+    }
+    return (
+      <div className="flex flex-col items-center justify-center min-h-screen p-4 gap-4 text-center text-lg">
+        <p data-testid="text-validate-retry">Un problème temporaire empêche d'afficher cette page.</p>
+        <Button onClick={() => infoQuery.refetch()} className="h-12 px-6 text-lg" data-testid="button-validate-retry">
+          Réessayer
+        </Button>
+      </div>
+    );
   }
 
   if (infoQuery.isLoading || !infoQuery.data) {

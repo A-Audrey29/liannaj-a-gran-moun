@@ -30,7 +30,8 @@ export default function Landing() {
   // A link such as "/#tarifs" opened from outside lands before React has
   // rendered the sections, so the browser finds no target: jump once mounted.
   useEffect(() => {
-    const id = decodeURIComponent(window.location.hash.slice(1));
+    // Section ids are plain ASCII: no decoding (a malformed "%" would throw).
+    const id = window.location.hash.slice(1);
     if (id) document.getElementById(id)?.scrollIntoView();
   }, []);
 

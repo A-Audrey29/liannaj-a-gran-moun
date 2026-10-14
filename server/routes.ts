@@ -852,11 +852,11 @@ export async function registerRoutes(
         return res.json({ message: "Compte validé, espace aidant créé", aidantCreated: true });
       }
 
-      await storage.updateUser(user.id, {
-        status: "ACTIVE",
-        validationToken: null,
-        validationExpiry: null,
-      });
+      // Only a pending account: a suspended or banned one must not be
+      // re-activated by an old link (atomic, like activateSeniorWithAidant).
+      if (!(await storage.activatePendingUser(user.id, token))) {
+        return res.status(404).json({ message: "Lien invalide ou déjà utilisé", reason: "invalid" });
+      }
 
       return res.json({ message: "Compte validé", aidantCreated: false });
     } catch (err: any) {
@@ -1851,7 +1851,8 @@ export async function registerRoutes(
       const user = await storage.getUser(getParam(req, "id"));
       if (!user) return res.status(404).json({ message: "Utilisateur non trouvé" });
       if (user.role === "ADMIN") return res.status(403).json({ message: "Impossible de suspendre un administrateur" });
-      const updated = await storage.updateUser(user.id, { status: "SUSPENDED" });
+      // Clearing the token: an old validation link must not undo the suspension.
+      const updated = await storage.updateUser(user.id, { status: "SUSPENDED", validationToken: null, validationExpiry: null });
       res.json(sanitizeUser(updated));
     } catch (err) {
       console.error("[ADMIN_SUSPEND] Error:", err);

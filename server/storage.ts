@@ -118,6 +118,8 @@ export interface IStorage {
     token: string,
     aidant: { email: string; password: string; firstName: string; lastName: string }
   ): Promise<User | null>;
+  /** PENDING_VALIDATION -> ACTIVE if the token still matches. False otherwise. */
+  activatePendingUser(userId: string, token: string): Promise<boolean>;
   createUser(data: Prisma.UserCreateInput): Promise<User>;
   updateUser(id: string, data: Prisma.UserUpdateInput): Promise<User>;
 
@@ -342,6 +344,14 @@ class DatabaseStorage implements IStorage {
         },
       });
     });
+  }
+
+  async activatePendingUser(userId: string, token: string): Promise<boolean> {
+    const activated = await prisma.user.updateMany({
+      where: { id: userId, validationToken: token, status: "PENDING_VALIDATION" },
+      data: { status: "ACTIVE", validationToken: null, validationExpiry: null },
+    });
+    return activated.count > 0;
   }
 
   async createUser(data: Prisma.UserCreateInput): Promise<User> {

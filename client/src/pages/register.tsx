@@ -130,9 +130,11 @@ export default function Register() {
       navigate(body.emailSent === false ? "/registration-pending?email=echec" : "/registration-pending");
     },
     onError: (error: Error) => {
-      const msg = error.message.includes("409")
+      const msg = error.message.startsWith("409")
         ? "Cette adresse email est déjà utilisée"
-        : error.message.includes("400")
+        : error.message.startsWith("429")
+        ? "Trop d'inscriptions depuis cette connexion. Réessayez dans une heure."
+        : error.message.startsWith("400")
         ? "Veuillez vérifier les champs du formulaire"
         : "Une erreur est survenue lors de l'inscription";
       toast({ title: "Erreur", description: msg, variant: "destructive" });
