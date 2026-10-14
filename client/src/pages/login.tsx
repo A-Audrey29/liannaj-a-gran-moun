@@ -8,6 +8,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { PLATFORM_NAME } from "@shared/branding";
 import {
   Form,
   FormControl,
@@ -82,7 +83,7 @@ export default function LoginPage() {
           </div>
           <CardTitle data-testid="text-login-title">Connexion</CardTitle>
           <CardDescription data-testid="text-login-description">
-            Connectez-vous à votre compte FEVES
+            Connectez-vous à votre compte {PLATFORM_NAME}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -165,7 +166,7 @@ export default function LoginPage() {
               { label: "Admin", email: "admin@feves.fr" },
               { label: "Senior", email: "senior@test.fr" },
               { label: "Jeune", email: "junior@test.fr" },
-              { label: "Référent", email: "referent@test.fr" },
+              { label: "Aidant", email: "referent@test.fr" },
               { label: "Professeur", email: "professeur@test.fr" },
             ].map((account) => (
               <button

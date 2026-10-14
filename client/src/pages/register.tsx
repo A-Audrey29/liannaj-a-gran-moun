@@ -121,11 +121,13 @@ export default function Register() {
       const res = await fetch("/api/auth/register", { method: "POST", body: formData });
       if (!res.ok) {
         const errBody = await res.json().catch(() => ({}));
-        throw new Error(errBody.message || `${res.status}`);
+        // Status first: onError matches on "409" / "400".
+        throw new Error(`${res.status}: ${errBody.message || ""}`);
       }
+      return (await res.json().catch(() => ({}))) as { emailSent?: boolean };
     },
-    onSuccess: () => {
-      navigate("/registration-pending");
+    onSuccess: (body) => {
+      navigate(body.emailSent === false ? "/registration-pending?email=echec" : "/registration-pending");
     },
     onError: (error: Error) => {
       const msg = error.message.includes("409")

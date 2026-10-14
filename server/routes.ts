@@ -453,14 +453,25 @@ export async function registerRoutes(
         console.log(`[DEV] Lien de validation pour ${data.email} : ${validationUrl}`);
       }
 
-      await sendEmail({
-        to: data.validatorEmail,
-        subject: `${PLATFORM_NAME} - Validation d'inscription de ${userName}`,
-        htmlContent: getValidationEmailHtml(null, userName, validationUrl, user.role === "SENIOR"),
-      });
+      // The account exists from here on: an e-mail failure must not answer
+      // "erreur", or a retry would hit "adresse déjà utilisée".
+      let emailSent = true;
+      try {
+        await sendEmail({
+          to: data.validatorEmail,
+          subject: `${PLATFORM_NAME} - Validation d'inscription de ${userName}`,
+          htmlContent: getValidationEmailHtml(null, userName, validationUrl, user.role === "SENIOR"),
+        });
+      } catch (emailErr) {
+        emailSent = false;
+        console.error("[REGISTER] Validation e-mail not sent:", emailErr);
+      }
 
       return res.status(201).json({
-        message: "Inscription réussie ! Un email a été envoyé à votre référent pour valider votre compte.",
+        message: emailSent
+          ? "Inscription réussie ! Un email a été envoyé à votre référent pour valider votre compte."
+          : "Inscription enregistrée, mais l'e-mail de validation n'a pas pu être envoyé.",
+        emailSent,
       });
     } catch (err) {
       console.error("[REGISTER] Error:", err);

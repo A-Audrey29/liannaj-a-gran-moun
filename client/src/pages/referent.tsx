@@ -4,7 +4,7 @@ import { apiRequest, apiErrorCode, apiErrorMessage, queryClient } from "@/lib/qu
 import { useToast } from "@/hooks/use-toast";
 import { ToastAction } from "@/components/ui/toast";
 import { useLocation } from "wouter";
-import { getPhotoUrl } from "@/lib/photo-url";
+import { UserAvatar } from "@/components/user-avatar";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -108,13 +108,9 @@ function DashboardTab({ senior, relations }: { senior: UserType | null; relation
         <Card data-testid="card-linked-senior">
           <CardContent className="pt-6">
             <div className="flex items-center gap-4">
-              <img
-                src={getPhotoUrl(senior.profilePhoto)}
-                alt={`${senior.firstName} ${senior.lastName}`}
-                className="w-14 h-14 rounded-full object-cover"
-              />
+              <UserAvatar photo={senior.profilePhoto} firstName={senior.firstName} lastName={senior.lastName} className="w-14 h-14" />
               <div className="flex-1">
-                <p className="text-sm text-muted-foreground">Sénior lié</p>
+                <p className="text-sm text-muted-foreground">Votre proche</p>
                 <p className="text-lg font-bold" data-testid="text-senior-name">
                   {senior.firstName} {senior.lastName}
                 </p>
@@ -235,11 +231,7 @@ function SuiviTab({ relations }: { relations: RelationWithUsers[] }) {
               >
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
-                    <img
-                      src={getPhotoUrl(r.junior.profilePhoto)}
-                      alt={`${r.junior.firstName} ${r.junior.lastName}`}
-                      className="w-10 h-10 rounded-full object-cover"
-                    />
+                    <UserAvatar photo={r.junior.profilePhoto} firstName={r.junior.firstName} lastName={r.junior.lastName} className="w-10 h-10" />
                     <div>
                       <p className="font-medium">{r.junior.firstName} {r.junior.lastName}</p>
                       <p className="text-xs text-muted-foreground">{(r.interventions || []).length} intervention{(r.interventions || []).length > 1 ? "s" : ""}</p>
@@ -581,14 +573,10 @@ function ProfilTab() {
       <Card data-testid="card-profil-referent">
         <CardContent className="pt-6 space-y-3">
           <div className="flex items-center gap-4 mb-4">
-            <img
-              src={getPhotoUrl(user.profilePhoto)}
-              alt={`${user.firstName} ${user.lastName}`}
-              className="w-16 h-16 rounded-full object-cover"
-            />
+            <UserAvatar photo={user.profilePhoto} firstName={user.firstName} lastName={user.lastName} className="w-16 h-16" />
             <div>
               <p className="font-bold text-lg">{user.firstName} {user.lastName}</p>
-              <Badge className="bg-violet-100 text-violet-800 text-xs">Référent sénior</Badge>
+              <Badge className="bg-violet-100 text-violet-800 text-xs">Aidant</Badge>
             </div>
           </div>
           <div>
@@ -659,9 +647,9 @@ export default function ReferentHome() {
           <h1 className="text-2xl md:text-3xl font-bold" data-testid="text-referent-title">
             Bonjour {user.firstName}
           </h1>
-          <p className="text-sm text-muted-foreground mt-0.5">Espace référent sénior</p>
+          <p className="text-sm text-muted-foreground mt-0.5">Espace aidant</p>
         </div>
-        <Badge className="bg-violet-100 text-violet-800">Référent</Badge>
+        <Badge className="bg-violet-100 text-violet-800">Aidant</Badge>
       </div>
 
       {isLoading && (
