@@ -6,10 +6,45 @@ import mainsImg from "@assets/mainsConfiance_1772976732191.png";
 import rireImg from "@assets/seniorJeuneHRire_1772976732193.png";
 import cgrrLogo from "@assets/logo_CGRR_1774262532462.png";
 import { User, GraduationCap, Heart } from "lucide-react";
+import { CREDIT_OFFERS } from "@shared/credit-offers";
+
+// Table of contents shown at the top of the page. Each id matches a section
+// below; sections carry scroll-mt-20 so the sticky header (h-16) does not
+// hide their title after the jump.
+const SOMMAIRE: { id: string; label: string }[] = [
+  { id: "confiance", label: "La confiance" },
+  { id: "pour-qui", label: "Pour qui" },
+  { id: "premiere-rencontre", label: "La première rencontre" },
+  { id: "tarifs", label: "Tarifs" },
+  { id: "comment-ca-marche", label: "Comment ça marche" },
+];
+
+function formatEuros(value: number): string {
+  return value.toLocaleString("fr-FR", { maximumFractionDigits: 2 });
+}
 
 export default function Landing() {
   return (
     <div>
+      <nav aria-label="Sommaire" className="bg-white border-b border-[#c9a4e8]/40" data-testid="nav-sommaire">
+        <div className="max-w-6xl mx-auto px-4 py-3">
+          <p className="text-sm font-semibold text-muted-foreground mb-2">Sur cette page :</p>
+          <ul className="flex flex-wrap gap-2">
+            {SOMMAIRE.map((item) => (
+              <li key={item.id}>
+                <a
+                  href={`#${item.id}`}
+                  className="inline-flex items-center min-h-11 px-4 rounded-full bg-[#f3eaff] text-base font-medium text-[#dc4256] hover:bg-[#e8d7fe] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#dc4256]"
+                  data-testid={`link-sommaire-${item.id}`}
+                >
+                  {item.label}
+                </a>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </nav>
+
       <section className="bg-[#f3eaff] py-12 md:py-20">
         <div className="max-w-6xl mx-auto px-4 flex flex-col md:flex-row items-center gap-8">
           <div className="flex-1 text-center md:text-left">
@@ -38,7 +73,7 @@ export default function Landing() {
         </div>
       </section>
 
-      <section className="py-12 md:py-16 bg-white">
+      <section id="confiance" className="scroll-mt-20 py-12 md:py-16 bg-white">
         <div className="max-w-6xl mx-auto px-4 flex flex-col md:flex-row items-center gap-8">
           <div className="flex-1">
             <div className="w-full max-w-sm mx-auto rounded-2xl overflow-hidden">
@@ -61,7 +96,7 @@ export default function Landing() {
         </div>
       </section>
 
-      <section className="py-12 md:py-16 bg-[#f3eaff]">
+      <section id="pour-qui" className="scroll-mt-20 py-12 md:py-16 bg-[#f3eaff]">
         <div className="max-w-6xl mx-auto px-4">
           <div className="flex items-center justify-between mb-10">
             <h2 className="text-2xl md:text-4xl font-bold text-[#dc4256]" data-testid="text-section-pourqui">POUR QUI</h2>
@@ -97,7 +132,7 @@ export default function Landing() {
         </div>
       </section>
 
-      <section className="py-12 md:py-16 bg-white">
+      <section id="premiere-rencontre" className="scroll-mt-20 py-12 md:py-16 bg-white">
         <div className="max-w-6xl mx-auto px-4 flex flex-col md:flex-row-reverse items-center gap-8">
           <div className="flex-1 flex justify-center">
             <div className="w-64 h-64 md:w-80 md:h-80 rounded-full overflow-hidden border-8 border-[#c9a4e8]">
@@ -121,9 +156,41 @@ export default function Landing() {
 
       <section className="py-12 md:py-16 bg-[#f3eaff]">
         <div className="max-w-6xl mx-auto px-4 flex flex-col md:flex-row items-center gap-8">
-          <div className="flex-1 flex justify-center">
-            <div className="w-64 h-64 md:w-72 md:h-72 rounded-2xl overflow-hidden bg-gray-200 flex items-center justify-center">
-              <span className="text-muted-foreground text-sm">Photo a venir</span>
+          {/* Pricing card, in the slot that held the "Photo à venir" placeholder.
+              Names and prices come from CREDIT_OFFERS only, never hard-coded. */}
+          <div className="flex-1 w-full flex justify-center">
+            <div id="tarifs" className="scroll-mt-20 w-full max-w-md bg-white rounded-2xl shadow-sm p-6" data-testid="card-landing-tarifs">
+              <h2 className="text-2xl md:text-3xl font-bold text-[#dc4256] mb-1" data-testid="text-section-tarifs">TARIFS</h2>
+              <p className="text-lg font-semibold text-foreground mb-4">1 crédit = 1 atelier avec un jeune</p>
+              <ul className="space-y-3 mb-4">
+                {CREDIT_OFFERS.map((offer) => (
+                  <li
+                    key={offer.id}
+                    className="flex items-center justify-between gap-4 rounded-xl bg-[#f3eaff] px-4 py-3"
+                    data-testid={`row-landing-tarif-${offer.id}`}
+                  >
+                    <div>
+                      <p className="text-lg font-bold text-foreground">{offer.name}</p>
+                      <p className="text-base text-muted-foreground">
+                        {offer.credits} atelier{offer.credits > 1 ? "s" : ""}
+                        {offer.credits > 1 && ` · ${formatEuros(offer.priceEuros / offer.credits)} € l'atelier`}
+                      </p>
+                    </div>
+                    <p className="text-2xl font-bold text-foreground whitespace-nowrap">{formatEuros(offer.priceEuros)} €</p>
+                  </li>
+                ))}
+              </ul>
+              <ul className="space-y-1 text-base text-foreground mb-5">
+                <li>✓ Première rencontre offerte (30 minutes ou moins)</li>
+                <li>✓ Sans abonnement</li>
+                <li>✓ L'aidant peut payer pour son proche</li>
+                <li>✓ Gratuit pour les jeunes</li>
+              </ul>
+              <Link href="/forfaits">
+                <Button className="w-full h-12 rounded-full bg-[#dc4256] hover:bg-[#c73848] text-white text-base" data-testid="button-landing-forfaits">
+                  Voir le détail des forfaits
+                </Button>
+              </Link>
             </div>
           </div>
           <div className="flex-1">
@@ -141,7 +208,7 @@ export default function Landing() {
         </div>
       </section>
 
-      <section className="py-12 md:py-20 bg-white">
+      <section id="comment-ca-marche" className="scroll-mt-20 py-12 md:py-20 bg-white">
         <div className="max-w-4xl mx-auto px-4 text-center">
           <h2 className="text-2xl md:text-4xl font-bold text-[#dc4256] mb-2" data-testid="text-section-comment">COMMENT CA MARCHE</h2>
           <p className="text-muted-foreground mb-12">Quatre etapes simples pour creer un lien intergenerationnel durable.</p>
