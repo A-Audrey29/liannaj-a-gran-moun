@@ -24,7 +24,7 @@ import {
   getNegativeCreditBalanceEmailHtml,
   escapeHtml,
 } from "./lib/email-templates";
-import { insertUserSchema, createRelationSchema, insertInterventionSchema, feedbackSchema, createPaymentSchema, checkoutSchema, changePasswordSchema, createAdminSchema, insertReportSchema, createAvailabilitySchema, createRecurringAvailabilitiesSchema, createDateExceptionSchema, updateUserCategoriesSchema, meetingHistoryQuerySchema, npsSchema, npsQuerySchema, creditsQuerySchema, checkoutStatusQuerySchema, COMPLETED_STATUSES } from "../shared/schema";
+import { insertUserSchema, createRelationSchema, insertInterventionSchema, feedbackSchema, createPaymentSchema, checkoutSchema, changePasswordSchema, createAdminSchema, insertReportSchema, createAvailabilitySchema, createRecurringAvailabilitiesSchema, createDateExceptionSchema, updateUserCategoriesSchema, meetingHistoryQuerySchema, npsSchema, npsQuerySchema, creditsQuerySchema, checkoutStatusQuerySchema, validateRegistrationSchema, COMPLETED_STATUSES } from "../shared/schema";
 import { creditOwnerId } from "../shared/credits";
 import type { CreditBalanceResponse, CreditHistoryEntry, CheckoutStatusResponse } from "../shared/credits";
 import type { MeetingHistoryEntry, MeetingHistoryResponse, MeetingHistorySummary, Role } from "../shared/schema";
@@ -456,7 +456,7 @@ export async function registerRoutes(
       await sendEmail({
         to: data.validatorEmail,
         subject: `${PLATFORM_NAME} - Validation d'inscription de ${userName}`,
-        htmlContent: getValidationEmailHtml(null, userName, validationUrl),
+        htmlContent: getValidationEmailHtml(null, userName, validationUrl, user.role === "SENIOR"),
       });
 
       return res.status(201).json({
@@ -766,12 +766,44 @@ export async function registerRoutes(
     return res.redirect(`/validate?token=${encodeURIComponent(token)}`);
   });
 
+  // Read-only: lets /validate show whose registration is being validated and,
+  // for a senior, offer the trusted person to open their aidant space. Holding
+  // the (unguessable) token is the proof of being the addressee of the e-mail.
+  app.get("/api/validate/info", async (req, res) => {
+    try {
+      const token = typeof req.query.token === "string" ? req.query.token : "";
+      const user = token ? await storage.getUserByValidationToken(token) : null;
+      if (!user || user.status !== "PENDING_VALIDATION") {
+        return res.status(404).json({ message: "Lien invalide ou déjà utilisé", reason: "invalid" });
+      }
+      if (user.validationExpiry && user.validationExpiry.getTime() < Date.now()) {
+        return res.status(410).json({ message: "Lien expiré", reason: "expired" });
+      }
+      const aidantEmail = user.role === "SENIOR" && user.validatorEmail ? user.validatorEmail.toLowerCase().trim() : null;
+      const aidantAlreadyExists = aidantEmail ? !!(await storage.getUserByEmail(aidantEmail)) : false;
+      return res.json({
+        firstName: user.firstName,
+        role: user.role,
+        aidantEmail,
+        canCreateAidant: !!aidantEmail && !aidantAlreadyExists,
+      });
+    } catch (err) {
+      console.error("[VALIDATE INFO] Error:", err);
+      return res.status(500).json({ message: "Erreur", reason: "invalid" });
+    }
+  });
+
   app.post("/api/validate", async (req, res) => {
     try {
-      const token = typeof req.body.token === "string" ? req.body.token : "";
-      if (!token) {
-        return res.status(400).json({ message: "Token manquant", reason: "invalid" });
+      const parsed = validateRegistrationSchema.safeParse(req.body);
+      if (!parsed.success) {
+        const fieldErrors = parsed.error.flatten().fieldErrors;
+        if (fieldErrors.token) {
+          return res.status(400).json({ message: "Token manquant", reason: "invalid" });
+        }
+        return res.status(400).json({ message: "Données invalides", reason: "aidant_invalid", errors: fieldErrors });
       }
+      const { token, aidant } = parsed.data;
 
       const user = await storage.getUserByValidationToken(token);
       if (!user) {
@@ -780,11 +812,33 @@ export async function registerRoutes(
 
       // Déjà validé (token consommé mais utilisateur actif) : idempotent.
       if (user.status === "ACTIVE") {
-        return res.json({ message: "Compte déjà validé" });
+        return res.json({ message: "Compte déjà validé", aidantCreated: false });
       }
 
       if (user.validationExpiry && user.validationExpiry.getTime() < Date.now()) {
         return res.status(410).json({ message: "Lien expiré", reason: "expired" });
+      }
+
+      if (aidant) {
+        // Only the trusted person of a senior may open an aidant space here,
+        // and only with the address the link was sent to.
+        if (user.role !== "SENIOR" || !user.validatorEmail) {
+          return res.status(400).json({ message: "Création d'un espace aidant impossible pour ce compte", reason: "aidant_not_allowed" });
+        }
+        const email = user.validatorEmail.toLowerCase().trim();
+        if (await storage.getUserByEmail(email)) {
+          return res.status(409).json({ message: "Un compte existe déjà avec cette adresse e-mail", reason: "aidant_exists" });
+        }
+        const created = await storage.activateSeniorWithAidant(user.id, token, {
+          email,
+          password: await bcrypt.hash(aidant.password, 10),
+          firstName: aidant.firstName,
+          lastName: aidant.lastName,
+        });
+        if (!created) {
+          return res.status(404).json({ message: "Lien invalide ou déjà utilisé", reason: "invalid" });
+        }
+        return res.json({ message: "Compte validé, espace aidant créé", aidantCreated: true });
       }
 
       await storage.updateUser(user.id, {
@@ -793,8 +847,12 @@ export async function registerRoutes(
         validationExpiry: null,
       });
 
-      return res.json({ message: "Compte validé" });
-    } catch (err) {
+      return res.json({ message: "Compte validé", aidantCreated: false });
+    } catch (err: any) {
+      // Same address registered between the check and the insert.
+      if (err?.code === "P2002") {
+        return res.status(409).json({ message: "Un compte existe déjà avec cette adresse e-mail", reason: "aidant_exists" });
+      }
       console.error("[VALIDATE] Error:", err);
       return res.status(500).json({ message: "Erreur lors de la validation", reason: "invalid" });
     }
@@ -851,7 +909,7 @@ export async function registerRoutes(
         await sendEmail({
           to: user.validatorEmail,
           subject: `${PLATFORM_NAME} - Nouvelle demande de validation d'inscription de ${userName}`,
-          htmlContent: getValidationEmailHtml(null, userName, validationUrl),
+          htmlContent: getValidationEmailHtml(null, userName, validationUrl, user.role === "SENIOR"),
         });
       }
 

@@ -146,8 +146,17 @@ export default function Landing() {
               <h3 className="text-xl font-bold mb-2">Aidant</h3>
               <p className="text-lg text-gray-700">
                 Vous accompagnez un proche ? Suivez ses rencontres, demandez un atelier pour lui, payez ses forfaits et
-                écrivez à l'équipe. Votre espace aidant est ouvert par l'équipe Lyannaj.
+                écrivez à l'équipe.
               </p>
+              <Link href="/register?profil=aidant">
+                <Button
+                  variant="outline"
+                  className="mt-4 h-12 rounded-full border-[#dc4256] text-[#dc4256] text-base hover:bg-[#dc4256] hover:text-white"
+                  data-testid="button-landing-aidant"
+                >
+                  Ouvrir mon espace aidant
+                </Button>
+              </Link>
             </div>
           </div>
         </div>
@@ -204,7 +213,7 @@ export default function Landing() {
 
           <div className="space-y-6">
             {[
-              { num: "1", text: "Inscrivez-vous comme senior ou comme jeune. Le senior indique un proche de confiance (son aidant), qui valide son inscription." },
+              { num: "1", text: "Inscrivez-vous comme senior ou comme jeune. Le senior indique un proche de confiance (son aidant), qui valide son inscription et peut ouvrir son espace aidant." },
               { num: "2", text: "FEVES analyse les profils et propose des mises en relation compatibles." },
               { num: "3", text: "Une première rencontre est organisée dans un lieu neutre et encadré." },
               { num: "4", text: "Si le courant passe, les rencontres deviennent autonomes." },

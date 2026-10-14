@@ -17,8 +17,18 @@ export function escapeHtml(value: string | number | null | undefined): string {
 export function getValidationEmailHtml(
   validatorName: string | null,
   userName: string,
-  validationUrl: string
+  validationUrl: string,
+  /** Senior registration: the validator is the trusted person (aidant). */
+  forAidant = false
 ): string {
+  const roleLabel = forAidant
+    ? "personne de confiance (son aidant)"
+    : "r&eacute;f&eacute;rent(e)";
+  const aidantParagraph = forAidant
+    ? `<p style="margin:0 0 18px;color:#1f1f1f;font-size:15px;line-height:1.6;">
+                En validant, vous pourrez aussi cr&eacute;er votre <strong>espace aidant</strong>&nbsp;: suivre ses rencontres, demander un atelier pour lui ou elle, payer ses forfaits et &eacute;crire &agrave; l'&eacute;quipe.
+              </p>`
+    : "";
   const greeting = validatorName
     ? `Bonjour ${escapeHtml(validatorName)},`
     : "Bonjour,";
@@ -48,8 +58,9 @@ export function getValidationEmailHtml(
                 Une nouvelle inscription est en attente de votre validation.
               </p>
               <p style="margin:0 0 18px;color:#1f1f1f;font-size:15px;line-height:1.6;">
-                <strong>${escapeHtml(userName)}</strong> souhaite rejoindre ${PLATFORM_NAME} et vous a d&eacute;sign&eacute;(e) comme r&eacute;f&eacute;rent(e).
+                <strong>${escapeHtml(userName)}</strong> souhaite rejoindre ${PLATFORM_NAME} et vous a d&eacute;sign&eacute;(e) comme ${roleLabel}.
               </p>
+              ${aidantParagraph}
               <p style="margin:0 0 24px;color:#1f1f1f;font-size:15px;line-height:1.6;">
                 Cliquez sur le bouton ci-dessous pour valider son inscription&nbsp;:
               </p>

@@ -108,6 +108,16 @@ export interface IStorage {
   getUserByEmail(email: string): Promise<User | null>;
   getReferentsBySeniorId(seniorId: string): Promise<User[]>;
   getUserByValidationToken(token: string): Promise<User | null>;
+  /**
+   * Activates a senior and creates their aidant (REFERENT_SENIOR) account in
+   * one transaction. Returns null if the token was consumed in the meantime
+   * (double click), in which case nothing is written.
+   */
+  activateSeniorWithAidant(
+    seniorId: string,
+    token: string,
+    aidant: { email: string; password: string; firstName: string; lastName: string }
+  ): Promise<User | null>;
   createUser(data: Prisma.UserCreateInput): Promise<User>;
   updateUser(id: string, data: Prisma.UserUpdateInput): Promise<User>;
 
@@ -308,6 +318,30 @@ class DatabaseStorage implements IStorage {
 
   async getUserByValidationToken(token: string): Promise<User | null> {
     return prisma.user.findUnique({ where: { validationToken: token } });
+  }
+
+  async activateSeniorWithAidant(
+    seniorId: string,
+    token: string,
+    aidant: { email: string; password: string; firstName: string; lastName: string }
+  ): Promise<User | null> {
+    return prisma.$transaction(async (tx) => {
+      // Conditional on the token: a concurrent validation that already
+      // consumed it makes this a no-op instead of a second aidant account.
+      const activated = await tx.user.updateMany({
+        where: { id: seniorId, validationToken: token, status: "PENDING_VALIDATION" },
+        data: { status: "ACTIVE", validationToken: null, validationExpiry: null },
+      });
+      if (activated.count === 0) return null;
+      return tx.user.create({
+        data: {
+          ...aidant,
+          role: "REFERENT_SENIOR",
+          status: "ACTIVE",
+          linkedSenior: { connect: { id: seniorId } },
+        },
+      });
+    });
   }
 
   async createUser(data: Prisma.UserCreateInput): Promise<User> {
