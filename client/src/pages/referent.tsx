@@ -616,7 +616,12 @@ function ProfilTab() {
 export default function ReferentHome() {
   const { user } = useAuth();
   const [, setLocation] = useLocation();
-  const [activeTab, setActiveTab] = useState<TabId>("dashboard");
+  // "?tab=contact" opens a tab directly (used by the help link of /forfaits).
+  const [activeTab, setActiveTab] = useState<TabId>(() => {
+    const tab = new URLSearchParams(window.location.search).get("tab");
+    const match = TABS.find((t) => t.id === tab && t.id !== "ateliers");
+    return match ? match.id : "dashboard";
+  });
   const { toast } = useToast();
 
   // "Mes achats" is a page of its own (shared with the senior space): the
