@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/use-auth";
 import { CREDIT_OFFERS } from "@shared/credit-offers";
 import { canBuyCredits } from "@shared/credits";
+import { CONTACT_EMAIL, ORGANIZATION_NAME, PLATFORM_NAME } from "@shared/branding";
 
 /**
  * Public sales page for the credit offers, written for seniors: short
@@ -18,32 +19,55 @@ function formatEuros(value: number): string {
   return value.toLocaleString("fr-FR", { maximumFractionDigits: 2 });
 }
 
-const RULES: { title: string; text: string }[] = [
+type Rule = { title: string; text: string };
+
+// The three rules a buyer needs before paying. The others are folded under
+// "En savoir plus" so the buy button stays near the top.
+const MAIN_RULES: Rule[] = [
   {
     title: "Un atelier est prévu",
-    text: "Un crédit est mis de côté pour cet atelier.",
-  },
-  {
-    title: "Plus de crédit libre",
-    text: "Si tous vos crédits sont déjà mis de côté, un nouvel atelier ne peut pas être prévu. Seule exception : la première rencontre offerte (voir plus bas). Sinon, il faut d'abord acheter un forfait.",
-  },
-  {
-    title: "L'atelier a eu lieu",
-    text: "Le crédit est retiré seulement après l'atelier, quand l'équipe a noté qu'il a bien eu lieu.",
+    text: "Un crédit est réservé pour cet atelier.",
   },
   {
     title: "L'atelier est annulé",
-    text: "Vous (ou l'équipe Lyannaj) pouvez annuler un atelier prévu. Son crédit redevient libre. Vous pourrez l'utiliser pour un autre atelier. Un atelier qui a déjà eu lieu ne peut plus être annulé.",
+    text: "Vous (ou l'équipe Lyannaj) pouvez annuler un atelier prévu. Son crédit vous est rendu : vous pourrez l'utiliser pour un autre atelier. Un atelier qui a déjà eu lieu ne peut plus être annulé.",
   },
   {
     title: "La première rencontre est offerte",
     text: "Avec chaque nouveau jeune, votre toute première rencontre est offerte si elle dure 30 minutes ou moins. Plus longue, elle utilise un crédit, comme un autre atelier.",
   },
+];
+
+const MORE_RULES: Rule[] = [
   {
-    title: "Votre référent peut payer pour vous",
-    text: "Un référent lié à votre compte peut acheter un forfait pour vous. Les crédits arrivent sur votre compte.",
+    title: "L'atelier a eu lieu",
+    text: "Le crédit est retiré seulement après l'atelier, quand l'équipe a noté qu'il a bien eu lieu.",
+  },
+  {
+    title: "Tous vos crédits sont réservés",
+    text: "Un nouvel atelier ne peut pas être prévu. Seule exception : la première rencontre offerte. Sinon, il faut d'abord acheter un forfait.",
   },
 ];
+
+/** Where "Une question ?" leads: the in-app help for buyers, e-mail otherwise. */
+function helpHref(role: string | undefined): string {
+  if (role === "SENIOR") return "/mon-espace?tab=aide";
+  if (role === "REFERENT_SENIOR") return "/espace-referent?tab=contact";
+  return `mailto:${CONTACT_EMAIL}`;
+}
+
+function RuleList({ rules }: { rules: Rule[] }) {
+  return (
+    <ol className="space-y-4">
+      {rules.map((rule) => (
+        <li key={rule.title} className="rounded-2xl bg-gray-50 border border-gray-200 p-5">
+          <p className="font-bold text-gray-900">{rule.title}</p>
+          <p className="text-gray-800">{rule.text}</p>
+        </li>
+      ))}
+    </ol>
+  );
+}
 
 export default function Forfaits() {
   const { user } = useAuth();
@@ -64,7 +88,15 @@ export default function Forfaits() {
       <p className="mb-2">
         Pour faire un atelier avec un jeune, vous utilisez des crédits.
       </p>
-      <p className="mb-8 font-semibold">1 crédit = 1 atelier.</p>
+      <p className="mb-6 font-semibold">1 crédit = 1 atelier.</p>
+
+      <div className="mb-8 rounded-2xl border-2 border-[#c9a4e8] bg-[#f3eaff] p-5" data-testid="box-forfaits-aidant">
+        <p className="font-bold text-gray-900">Vous accompagnez un proche ?</p>
+        <p className="text-gray-800">
+          Vous pouvez acheter un forfait pour lui. Les crédits arrivent directement sur son compte. Vous suivez ses
+          ateliers depuis votre espace aidant.
+        </p>
+      </div>
 
       <h2 className="text-2xl font-bold mb-4">Choisissez votre forfait</h2>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-10">
@@ -103,14 +135,17 @@ export default function Forfaits() {
       )}
 
       <h2 className="text-2xl font-bold mb-4">Comment vos crédits sont utilisés</h2>
-      <ol className="space-y-4 mb-10">
-        {RULES.map((rule) => (
-          <li key={rule.title} className="rounded-2xl bg-gray-50 border border-gray-200 p-5">
-            <p className="font-bold text-gray-900">{rule.title}</p>
-            <p className="text-gray-800">{rule.text}</p>
-          </li>
-        ))}
-      </ol>
+      <div className="mb-4">
+        <RuleList rules={MAIN_RULES} />
+      </div>
+      <details className="mb-10 group" data-testid="details-forfaits-more">
+        <summary className="cursor-pointer inline-flex items-center min-h-12 px-5 rounded-full border-2 border-gray-300 font-semibold text-gray-900 hover:bg-gray-50">
+          En savoir plus
+        </summary>
+        <div className="mt-4">
+          <RuleList rules={MORE_RULES} />
+        </div>
+      </details>
 
       <h2 className="text-2xl font-bold mb-4">Payer</h2>
       <p className="mb-2">Le paiement se fait en ligne, par carte bancaire.</p>
@@ -119,6 +154,19 @@ export default function Forfaits() {
           Vous voyez vos crédits à tout moment dans « Mes achats ».
         </p>
       )}
+
+      <div className="mb-8 rounded-2xl bg-gray-50 border border-gray-200 p-5" data-testid="box-forfaits-help">
+        <p className="font-bold text-gray-900">Une question avant d'acheter ?</p>
+        <p className="text-gray-800 mb-2">
+          L'équipe {PLATFORM_NAME} vous répond :{" "}
+          <a href={helpHref(user?.role)} className="font-semibold text-[#dc4256] underline" data-testid="link-forfaits-help">
+            {user && (user.role === "SENIOR" || user.role === "REFERENT_SENIOR") ? "écrire à l'équipe" : CONTACT_EMAIL}
+          </a>
+        </p>
+        <p className="text-gray-700">
+          {PLATFORM_NAME} est portée par l'association {ORGANIZATION_NAME} et financée par la CGRR Agirc-Arrco.
+        </p>
+      </div>
 
       {canBuy && (
         <Button

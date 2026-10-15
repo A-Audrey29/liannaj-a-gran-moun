@@ -32,6 +32,7 @@ const PolitiqueConfidentialite = lazy(() => import("@/pages/politique-confidenti
 const CGU = lazy(() => import("@/pages/cgu"));
 const ForgotPassword = lazy(() => import("@/pages/forgot-password"));
 const ResetPassword = lazy(() => import("@/pages/reset-password"));
+const CGV = lazy(() => import("@/pages/cgv"));
 const CreditsSuccess = lazy(() => import("@/pages/credits-success"));
 const CreditsCancel = lazy(() => import("@/pages/credits-cancel"));
 const MesAteliers = lazy(() => import("@/pages/mes-ateliers"));
@@ -99,6 +100,7 @@ function Router() {
         <Route path="/mentions-legales" component={MentionsLegales} />
         <Route path="/politique-confidentialite" component={PolitiqueConfidentialite} />
         <Route path="/cgu" component={CGU} />
+        <Route path="/cgv" component={CGV} />
         <Route path="/forfaits" component={Forfaits} />
         <Route component={NotFound} />
       </Switch>

@@ -392,6 +392,23 @@ export const createAdminSchema = z.object({
   lastName: z.string().min(1, "Nom requis"),
 });
 
+/**
+ * POST /api/validate. `aidant` is optional: the trusted person who validates a
+ * senior's registration may open their own aidant (REFERENT_SENIOR) space in
+ * the same step. Their e-mail is the one the validation link was sent to, so
+ * it is never taken from the request.
+ */
+export const validateRegistrationSchema = z.object({
+  token: z.string().min(1, "Token manquant"),
+  aidant: z
+    .object({
+      firstName: z.string().trim().min(1, "Prénom requis").max(100),
+      lastName: z.string().trim().min(1, "Nom requis").max(100),
+      password: z.string().min(6, "Le mot de passe doit faire au moins 6 caractères"),
+    })
+    .optional(),
+});
+
 export const createReferentSchema = z.object({
   email: z.string().email("Email invalide"),
   password: z.string().min(6, "Le mot de passe doit faire au moins 6 caractères"),

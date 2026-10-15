@@ -56,8 +56,9 @@ L'authentification repose sur **Passport.js** avec la stratégie locale (email +
 **Flux d'inscription :**
 1. L'utilisateur soumet le formulaire → compte créé en statut `PENDING_VALIDATION`
 2. Un email est envoyé à l'**email du référent** (≠ email utilisateur) avec un lien de validation
-3. Clic sur le lien → `GET /api/validate?token=xxx` → statut passe à `ACTIVE`
-4. L'utilisateur peut alors se connecter
+3. Clic sur le lien → `GET /api/validate?token=xxx` redirige vers la page `/validate` (sans rien valider)
+4. Clic sur « Valider » → `POST /api/validate` → statut passe à `ACTIVE`. Pour un senior, la personne de confiance peut créer en même temps son espace aidant (`REFERENT_SENIOR` rattaché)
+5. L'utilisateur peut alors se connecter
 
 **Middlewares d'auth :**
 - `requireAuth` — vérifie `req.isAuthenticated()`
