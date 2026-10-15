@@ -22,9 +22,10 @@ import {
   getNewReportEmailHtml,
   getCreditPurchaseConfirmedEmailHtml,
   getNegativeCreditBalanceEmailHtml,
+  getPasswordResetEmailHtml,
   escapeHtml,
 } from "./lib/email-templates";
-import { insertUserSchema, createRelationSchema, insertInterventionSchema, feedbackSchema, createPaymentSchema, checkoutSchema, changePasswordSchema, createAdminSchema, insertReportSchema, createAvailabilitySchema, createRecurringAvailabilitiesSchema, createDateExceptionSchema, updateUserCategoriesSchema, meetingHistoryQuerySchema, npsSchema, npsQuerySchema, creditsQuerySchema, checkoutStatusQuerySchema, validateRegistrationSchema, COMPLETED_STATUSES } from "../shared/schema";
+import { insertUserSchema, createRelationSchema, insertInterventionSchema, feedbackSchema, createPaymentSchema, checkoutSchema, changePasswordSchema, forgotPasswordSchema, resetPasswordSchema, createAdminSchema, insertReportSchema, createAvailabilitySchema, createRecurringAvailabilitiesSchema, createDateExceptionSchema, updateUserCategoriesSchema, meetingHistoryQuerySchema, npsSchema, npsQuerySchema, creditsQuerySchema, checkoutStatusQuerySchema, validateRegistrationSchema, COMPLETED_STATUSES } from "../shared/schema";
 import { creditOwnerId } from "../shared/credits";
 import type { CreditBalanceResponse, CreditHistoryEntry, CheckoutStatusResponse } from "../shared/credits";
 import type { MeetingHistoryEntry, MeetingHistoryResponse, MeetingHistorySummary, Role } from "../shared/schema";
@@ -38,7 +39,8 @@ import { PLATFORM_NAME } from "../shared/branding";
 import { sendPushNotification, getVapidPublicKey } from "./lib/push";
 import { paymentProvider } from "./lib/payment-provider";
 import { findCreditOffer } from "../shared/credit-offers";
-import { env } from "./env";
+import { env, getBaseUrl as getPublicBaseUrl } from "./env";
+import { createPasswordResetToken, resetPasswordWithToken } from "./lib/password-reset";
 
 const TAILLE_MAX_PHOTO = 5 * 1024 * 1024;
 
@@ -253,6 +255,24 @@ const registerLimiter = rateLimit({
   windowMs: 60 * 60 * 1000,
   limit: isDev ? 1000 : 5,
   message: { message: "Trop d'inscriptions depuis cette adresse. Réessayez dans une heure." },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+// Mot de passe oublié : limite par IP, la réponse ne dit jamais si le compte
+// existe, mais chaque appel peut déclencher un e-mail.
+const forgotPasswordLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: isDev ? 1000 : 5,
+  message: { message: "Trop de demandes. Réessayez dans 15 minutes." },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+const resetPasswordLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: isDev ? 1000 : 10,
+  message: { message: "Trop de tentatives. Réessayez dans 15 minutes." },
   standardHeaders: true,
   legacyHeaders: false,
 });
@@ -567,6 +587,65 @@ export async function registerRoutes(
     } catch (err) {
       console.error("[CHANGE_PASSWORD] Error:", err);
       res.status(500).json({ message: "Erreur lors du changement de mot de passe" });
+    }
+  });
+
+  // Réponse identique que le compte existe ou non : ne pas révéler quels
+  // e-mails sont inscrits. Seuls les comptes actifs reçoivent un lien (les
+  // autres ne peuvent de toute façon pas se connecter).
+  const FORGOT_PASSWORD_MESSAGE =
+    "Si un compte actif existe avec cet email, un lien pour choisir un nouveau mot de passe vient d'être envoyé.";
+
+  app.post("/api/auth/forgot-password", forgotPasswordLimiter, async (req, res) => {
+    const parsed = forgotPasswordSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ message: "Email invalide" });
+    }
+    try {
+      const user = await storage.getUserByEmail(parsed.data.email);
+      if (user && user.status === "ACTIVE") {
+        const token = await createPasswordResetToken(user.id);
+        // URL fixe (BASE_URL), jamais dérivée des en-têtes de la requête : un
+        // en-tête Host falsifié enverrait sinon le jeton vers un autre site.
+        const resetUrl = `${getPublicBaseUrl()}/reinitialiser-mot-de-passe?token=${token}`;
+        if (env.NODE_ENV === "development") {
+          console.log(`[DEV] Lien de réinitialisation pour ${user.email} : ${resetUrl}`);
+        }
+        await sendEmail({
+          to: user.email,
+          subject: `${PLATFORM_NAME} - Choisir un nouveau mot de passe`,
+          htmlContent: getPasswordResetEmailHtml(user.firstName, resetUrl),
+        });
+      }
+      return res.json({ message: FORGOT_PASSWORD_MESSAGE });
+    } catch (err) {
+      // Même réponse en cas d'échec d'envoi : un message différent révélerait
+      // que le compte existe.
+      console.error("[FORGOT_PASSWORD] Error:", err);
+      return res.json({ message: FORGOT_PASSWORD_MESSAGE });
+    }
+  });
+
+  app.post("/api/auth/reset-password", resetPasswordLimiter, async (req, res) => {
+    const parsed = resetPasswordSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ message: "Données invalides", errors: parsed.error.flatten().fieldErrors });
+    }
+    try {
+      const hashed = await bcrypt.hash(parsed.data.password, 10);
+      const result = await resetPasswordWithToken(parsed.data.token, hashed);
+      if (!result.ok) {
+        return res.status(400).json({
+          message: result.reason === "expired"
+            ? "Ce lien a expiré. Faites une nouvelle demande."
+            : "Ce lien n'est plus valide. Faites une nouvelle demande.",
+          reason: result.reason,
+        });
+      }
+      return res.json({ message: "Mot de passe modifié. Vous pouvez vous connecter." });
+    } catch (err) {
+      console.error("[RESET_PASSWORD] Error:", err);
+      return res.status(500).json({ message: "Erreur lors du changement de mot de passe" });
     }
   });
 

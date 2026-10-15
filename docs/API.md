@@ -73,6 +73,22 @@ Renvoie l'email de validation pour un compte en attente.
 - **Body** : `{ email: string }`
 - **Réponse 200** : Message générique (toujours 200, même si compte non trouvé — sécurité)
 
+### `POST /api/auth/forgot-password`
+Envoie un lien « choisir un nouveau mot de passe » (valable 1 h, usage unique).
+- **Auth** : Non
+- **Body** : `{ email: string }`
+- **Réponse 200** : Message générique, que le compte existe ou non. Seuls les comptes `ACTIVE` reçoivent un e-mail ; une nouvelle demande annule le lien précédent.
+- **Réponse 400** : Email mal formé
+- **Limite** : 5 demandes / 15 min / IP
+
+### `POST /api/auth/reset-password`
+Remplace le mot de passe à partir du jeton reçu par e-mail, puis ferme toutes les sessions ouvertes du compte.
+- **Auth** : Non
+- **Body** : `{ token: string, password: string }` (6 caractères minimum)
+- **Réponse 200** : `{ message: string }`
+- **Réponse 400** : Données invalides, ou `{ message, reason: "invalid" | "expired" }` (lien inconnu, déjà utilisé ou expiré)
+- **Limite** : 10 tentatives / 15 min / IP
+
 ### `GET /api/validate`
 Lien reçu par e-mail. Redirige vers la page `/validate?token=…` **sans rien valider** (les scanners de messagerie préchargent les liens).
 - **Auth** : Non

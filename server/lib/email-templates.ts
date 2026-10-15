@@ -421,3 +421,28 @@ export function getNewAdminNotificationEmailHtml(
     </table>`;
   return emailWrapper(`Notification admin - ${PLATFORM_NAME}`, body);
 }
+
+/** Lien "mot de passe oublié", valable 1 heure. */
+export function getPasswordResetEmailHtml(userName: string, resetUrl: string): string {
+  const body = `
+    <p style="margin:0 0 18px;color:#1f1f1f;font-size:15px;line-height:1.6;">Bonjour ${escapeHtml(userName)},</p>
+    <p style="margin:0 0 18px;color:#1f1f1f;font-size:15px;line-height:1.6;">
+      Vous avez demand&eacute; &agrave; changer votre mot de passe ${PLATFORM_NAME}. Cliquez sur le bouton ci-dessous pour en choisir un nouveau.
+    </p>
+    <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 auto 28px;">
+      <tr>
+        <td align="center" style="border-radius:6px;background:linear-gradient(135deg,#e91e8c,#7c3aed);">
+          <a href="${escapeHtml(resetUrl)}" target="_blank" style="display:inline-block;padding:14px 36px;color:#ffffff;font-size:15px;font-weight:600;text-decoration:none;border-radius:6px;">
+            Choisir un nouveau mot de passe
+          </a>
+        </td>
+      </tr>
+    </table>
+    <p style="margin:0 0 18px;color:#6b7280;font-size:13px;line-height:1.5;">
+      Ce lien est valable 1 heure et ne peut servir qu'une fois. Si vous n'&ecirc;tes pas &agrave; l'origine de cette demande, ignorez ce message : votre mot de passe actuel reste inchang&eacute;.
+    </p>
+    <p style="margin:0;color:#6b7280;font-size:12px;line-height:1.5;word-break:break-all;">
+      ${escapeHtml(resetUrl)}
+    </p>`;
+  return emailWrapper(`Nouveau mot de passe - ${PLATFORM_NAME}`, body);
+}
