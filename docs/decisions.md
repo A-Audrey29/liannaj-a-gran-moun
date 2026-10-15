@@ -28,6 +28,14 @@ par le senior. L'adresse du compte aidant est donc toujours
 rattachement (plus de code, demandes abusives à filtrer) ; l'aidant inscrit
 les deux comptes (exige de rendre l'e-mail du senior facultatif, migration).
 
+**Faux seniors (décision d'Audrey, 2026-10-15).** Rien ne vérifie qu'un
+senior inscrit est réel : quelqu'un avec deux adresses e-mail peut inscrire un
+faux senior, le valider et obtenir un espace aidant. Risque accepté : un faux
+profil sera détecté à la première rencontre, qui est organisée et encadrée
+par l'équipe. Pas de validation admin préalable ni de vérification de l'e-mail
+du senior pour l'instant. Pas de nouveau risque par rapport à avant : le
+validateur pouvait déjà valider un faux senior.
+
 **Limites connues.** Un seul aidant par ce chemin (règle « 1 référent = 1
 senior » inchangée) ; un 2e aidant, ou une adresse ayant déjà un compte,
 passe encore par l'admin (`POST /api/admin/referents`). Le senior doit avoir
