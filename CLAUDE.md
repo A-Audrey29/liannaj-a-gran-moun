@@ -107,6 +107,11 @@ npm run db:push    # prisma db push — NE PAS utiliser sur la base Neon avec do
   (impl : `stripe-provider.ts`). Webhook (`/api/webhooks/payment`) vérifie la
   signature sur `req.rawBody` (capturé dans `server/app.ts`), jamais le body
   JSON déjà parsé. Détail complet dans `docs/decisions.md`.
+- **Compte aidant** (`REFERENT_SENIOR`, appelé « aidant » dans l'interface) :
+  l'aidant l'ouvre lui-même depuis le lien de validation de l'inscription du
+  senior (`POST /api/validate` + champ `aidant`), avec l'adresse qui a reçu
+  le lien (`validatorEmail`) — jamais une adresse venant de la requête. Les
+  autres cas passent par l'admin. Détail dans `docs/decisions.md`.
 - **NPS** (exigence du financeur): réponses dans `NpsResponse`, **jamais** en
   colonne d'`Intervention` (les routes à masquage de feedback la
   sérialiseraient). Éligibilité décidée côté serveur seulement (rôle senior /

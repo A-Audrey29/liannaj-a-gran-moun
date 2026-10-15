@@ -3,6 +3,45 @@
 Journal des choix d'architecture et de leurs raisons. Une entrée par décision,
 la plus récente en haut.
 
+## 2026-10-14 — L'aidant ouvre son espace depuis le lien de validation
+
+Décision d'Audrey : l'aidant doit pouvoir ouvrir son compte lui-même, sans
+attendre l'admin.
+
+**Comment.** La personne de confiance désignée par le senior à l'inscription
+(`validatorEmail`) reçoit le lien de validation. Sur `/validate`, elle peut
+« Valider et créer mon espace aidant » : `POST /api/validate` avec un champ
+`aidant` (prénom, nom, mot de passe) active le senior ET crée un
+`REFERENT_SENIOR` rattaché (`linkedSeniorId`), dans une seule transaction
+(`storage.activateSeniorWithAidant`). « Valider seulement » reste possible.
+`GET /api/validate/info` (lecture seule) fournit le prénom du senior et
+l'adresse de connexion à afficher. La page d'inscription a un onglet
+« Aidant » qui explique ces 3 étapes puis ouvre le formulaire senior.
+
+**Pourquoi ce lien comme preuve.** Un compte aidant voit les rencontres et
+paie pour un senior : il faut prouver le lien senior-aidant. Le lien e-mail
+(token UUID à usage unique) prouve que la personne contrôle l'adresse choisie
+par le senior. L'adresse du compte aidant est donc toujours
+`validatorEmail`, jamais une valeur de la requête.
+
+**Alternatives écartées.** Inscription libre de l'aidant + approbation du
+rattachement (plus de code, demandes abusives à filtrer) ; l'aidant inscrit
+les deux comptes (exige de rendre l'e-mail du senior facultatif, migration).
+
+**Faux seniors (décision d'Audrey, 2026-10-15).** Rien ne vérifie qu'un
+senior inscrit est réel : quelqu'un avec deux adresses e-mail peut inscrire un
+faux senior, le valider et obtenir un espace aidant. Risque accepté : un faux
+profil sera détecté à la première rencontre, qui est organisée et encadrée
+par l'équipe. Pas de validation admin préalable ni de vérification de l'e-mail
+du senior pour l'instant. Pas de nouveau risque par rapport à avant : le
+validateur pouvait déjà valider un faux senior.
+
+**Limites connues.** Un seul aidant par ce chemin (règle « 1 référent = 1
+senior » inchangée) ; un 2e aidant, ou une adresse ayant déjà un compte,
+passe encore par l'admin (`POST /api/admin/referents`). Le senior doit avoir
+sa propre adresse e-mail, différente de celle de l'aidant. Tests :
+`tests/validation-aidant.test.ts`.
+
 ## 2026-10-13 — Un référent = un senior ; pas de recharge automatique ; plus d'abonnement
 
 Décisions d'Audrey (revue de #16 et #17, ticket bobby#48).

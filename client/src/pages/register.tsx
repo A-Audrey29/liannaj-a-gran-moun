@@ -3,6 +3,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { insertUserBaseSchema, type InsertUser, type Category } from "@shared/schema";
+import { PLATFORM_NAME } from "@shared/branding";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { z } from "zod";
@@ -19,7 +20,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { User, GraduationCap, Loader2, Upload, Camera, X, ImagePlus } from "lucide-react";
+import { User, GraduationCap, Heart, Loader2, Upload, Camera, X, ImagePlus } from "lucide-react";
 import { useState, useRef, useCallback } from "react";
 
 const registerSchema = insertUserBaseSchema.extend({
@@ -38,6 +39,13 @@ export default function Register() {
   const [trustedCivilite, setTrustedCivilite] = useState<"M." | "Mme" | "">("");
   const [photo, setPhoto] = useState<File | null>(null);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
+  // "Aidant" is not an account type of this form: an aidant's space is opened
+  // from the validation link of the senior's registration (validate.tsx). The
+  // tab explains that, then lets the aidant fill the form for their relative.
+  const [aidantView, setAidantView] = useState(
+    () => new URLSearchParams(window.location.search).get("profil") === "aidant"
+  );
+  const [forProche, setForProche] = useState(false);
 
   const form = useForm<RegisterForm>({
     resolver: zodResolver(registerSchema),
@@ -113,16 +121,20 @@ export default function Register() {
       const res = await fetch("/api/auth/register", { method: "POST", body: formData });
       if (!res.ok) {
         const errBody = await res.json().catch(() => ({}));
-        throw new Error(errBody.message || `${res.status}`);
+        // Status first: onError matches on "409" / "400".
+        throw new Error(`${res.status}: ${errBody.message || ""}`);
       }
+      return (await res.json().catch(() => ({}))) as { emailSent?: boolean };
     },
-    onSuccess: () => {
-      navigate("/registration-pending");
+    onSuccess: (body) => {
+      navigate(body.emailSent === false ? "/registration-pending?email=echec" : "/registration-pending");
     },
     onError: (error: Error) => {
-      const msg = error.message.includes("409")
+      const msg = error.message.startsWith("409")
         ? "Cette adresse email est déjà utilisée"
-        : error.message.includes("400")
+        : error.message.startsWith("429")
+        ? "Trop d'inscriptions depuis cette connexion. Réessayez dans une heure."
+        : error.message.startsWith("400")
         ? "Veuillez vérifier les champs du formulaire"
         : "Une erreur est survenue lors de l'inscription";
       toast({ title: "Erreur", description: msg, variant: "destructive" });
@@ -138,7 +150,7 @@ export default function Register() {
       <Card className="w-full max-w-2xl">
         <CardHeader className="text-center">
           <CardTitle className="text-2xl" data-testid="text-register-title">
-            Inscription FEVES
+            Inscription {PLATFORM_NAME}
           </CardTitle>
           <CardDescription data-testid="text-register-description">
             Créez votre compte pour rejoindre la communauté
@@ -158,12 +170,12 @@ export default function Register() {
                   render={({ field }) => (
                     <FormItem>
                       <FormControl>
-                        <div className="grid grid-cols-2 gap-3">
+                        <div className="grid grid-cols-3 gap-3">
                           <Button
                             type="button"
-                            variant={field.value === "SENIOR" ? "default" : "outline"}
+                            variant={!aidantView && field.value === "SENIOR" ? "default" : "outline"}
                             className="flex items-center gap-2"
-                            onClick={() => field.onChange("SENIOR")}
+                            onClick={() => { setAidantView(false); field.onChange("SENIOR"); }}
                             data-testid="button-role-senior"
                           >
                             <User className="w-4 h-4" />
@@ -171,13 +183,23 @@ export default function Register() {
                           </Button>
                           <Button
                             type="button"
-                            variant={field.value === "JUNIOR" ? "default" : "outline"}
+                            variant={!aidantView && field.value === "JUNIOR" ? "default" : "outline"}
                             className="flex items-center gap-2"
-                            onClick={() => field.onChange("JUNIOR")}
+                            onClick={() => { setAidantView(false); setForProche(false); field.onChange("JUNIOR"); }}
                             data-testid="button-role-junior"
                           >
                             <GraduationCap className="w-4 h-4" />
                             Jeune
+                          </Button>
+                          <Button
+                            type="button"
+                            variant={aidantView ? "default" : "outline"}
+                            className="flex items-center gap-2"
+                            onClick={() => setAidantView(true)}
+                            data-testid="button-role-aidant"
+                          >
+                            <Heart className="w-4 h-4" />
+                            Aidant
                           </Button>
                         </div>
                       </FormControl>
@@ -186,6 +208,51 @@ export default function Register() {
                   )}
                 />
               </div>
+
+              {aidantView && (
+                <div className="rounded-2xl border-2 border-[#c9a4e8] bg-[#f3eaff] p-5 space-y-4 text-base" data-testid="panel-aidant">
+                  <h3 className="text-xl font-bold">Vous accompagnez un proche senior ?</h3>
+                  <p>Votre espace aidant vous permet de suivre ses rencontres, de demander un atelier pour lui ou elle, de payer ses forfaits et d'écrire à l'équipe.</p>
+                  <p className="font-semibold">Comment l'ouvrir, en 3 étapes :</p>
+                  <ol className="list-decimal pl-5 space-y-2">
+                    <li>
+                      <strong>Inscrivez votre proche</strong> avec le bouton ci-dessous (vous pouvez remplir le formulaire avec lui ou
+                      elle). Il lui faut sa propre adresse e-mail, différente de la vôtre.
+                    </li>
+                    <li>
+                      Dans la partie <strong>« Personne de confiance (aidant) »</strong>, mettez <strong>votre</strong> nom et{" "}
+                      <strong>votre</strong> adresse e-mail.
+                    </li>
+                    <li>
+                      Vous recevez un e-mail. En validant l'inscription de votre proche, vous <strong>créez votre espace aidant</strong>{" "}
+                      et choisissez votre mot de passe.
+                    </li>
+                  </ol>
+                  <Button
+                    type="button"
+                    className="w-full h-12 text-base"
+                    onClick={() => {
+                      form.setValue("role", "SENIOR");
+                      setForProche(true);
+                      setAidantView(false);
+                      // The reminder sits at the top of the form: bring it into view.
+                      window.scrollTo({ top: 0 });
+                    }}
+                    data-testid="button-aidant-inscrire-proche"
+                  >
+                    Inscrire mon proche
+                  </Button>
+                </div>
+              )}
+
+              <div className={aidantView ? "hidden" : "space-y-8"}>
+              {forProche && role === "SENIOR" && (
+                <p className="rounded-xl border-2 border-[#c9a4e8] bg-[#f3eaff] p-4 text-base" data-testid="text-for-proche">
+                  Vous inscrivez votre proche : remplissez <strong>ses</strong> informations (nom, e-mail, mot de passe). Mettez{" "}
+                  <strong>votre</strong> nom et <strong>votre</strong> e-mail dans « Personne de confiance (aidant) », en bas du
+                  formulaire.
+                </p>
+              )}
 
               <div className="space-y-4">
                 <h3 className="text-base font-semibold" data-testid="text-section-identity">
@@ -419,7 +486,7 @@ export default function Register() {
               {role === "SENIOR" && (
                 <div className="space-y-4">
                   <h3 className="text-base font-semibold" data-testid="text-section-senior">
-                    Personne de confiance
+                    Personne de confiance (aidant)
                   </h3>
                   <div className="grid grid-cols-2 gap-3">
                     <FormField
@@ -468,7 +535,8 @@ export default function Register() {
                     />
                   </div>
                   <p className="text-sm text-muted-foreground" data-testid="text-senior-validation-info">
-                    Un lien sera envoyé à la personne de confiance pour valider votre inscription.
+                    Un lien sera envoyé à cette personne pour valider votre inscription. Elle pourra aussi créer son espace
+                    aidant pour vous accompagner sur {PLATFORM_NAME}.
                   </p>
                 </div>
               )}
@@ -573,6 +641,7 @@ export default function Register() {
                   Se connecter
                 </a>
               </p>
+              </div>
             </form>
           </Form>
         </CardContent>

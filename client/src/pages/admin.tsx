@@ -1660,7 +1660,7 @@ function MonCompteTab() {
 
 const CREER_COMPTE_ROLES = [
   { id: "admin", label: "Admin" },
-  { id: "referent", label: "Référent sénior" },
+  { id: "referent", label: "Aidant (référent sénior)" },
   { id: "professeur", label: "Professeur" },
 ] as const;
 

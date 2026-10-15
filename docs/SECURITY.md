@@ -149,6 +149,7 @@ Aucun `express.static("uploads")` dans le code. Route `GET /api/photos/:filename
 | `npsQuerySchema` | `GET /api/admin/nps` | `from`/`to` au format `YYYY-MM-DD`, `from ≤ to` | `shared/schema.ts` | `routes.ts` (bloc NPS) |
 | `createPaymentSchema` | `POST /api/admin/payments` | Montant positif, libellé requis | `schema.ts:205-210` | `routes.ts:1195` |
 | `createAdminSchema` | `POST /api/admin/create-admin` | Email valide, password min 6 chars | `schema.ts:217-222` | `routes.ts:1166` |
+| `validateRegistrationSchema` | `POST /api/validate` | Token requis ; `aidant?` : prénom/nom 1-100, password min 6 chars. Pas d'e-mail dans le body : l'adresse aidant = `validatorEmail` du senior | `shared/schema.ts` | `server/routes.ts` |
 
 ### 6.2 Validations inline (hors Zod)
 

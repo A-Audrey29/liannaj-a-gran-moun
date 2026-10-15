@@ -15,8 +15,8 @@ Inscription d'un nouvel utilisateur.
 - **Auth** : Non
 - **Body** : `multipart/form-data` avec un champ `data` (JSON stringifié) + champ optionnel `photo` (image)
 - **Champs data** : `email`, `password`, `firstName`, `lastName`, `role` (SENIOR|JUNIOR), `birthDate?`, `phone?`, `address?`, `city?`, `postalCode?`, `bio?`, `desiredActivity?`, `categoryIds?[]`, `validatorEmail`, `schoolName?` (JUNIOR), `referentTitle/FirstName/LastName/Email?` (JUNIOR), `trustedPersonName/Email?` (SENIOR)
-- **Réponse 201** : `{ message: string }`
-- **Notes** : Crée le compte en `PENDING_VALIDATION`. Envoie un email de validation au `validatorEmail`. L'email validateur ≠ email utilisateur (anti-auto-validation).
+- **Réponse 201** : `{ message: string, emailSent: boolean }`
+- **Notes** : Crée le compte en `PENDING_VALIDATION`. Envoie un email de validation au `validatorEmail`. L'email validateur ≠ email utilisateur (anti-auto-validation). Si l'envoi de l'e-mail échoue, le compte existe quand même : réponse 201 avec `emailSent: false` (jamais 500, sinon un nouvel essai tomberait sur « adresse déjà utilisée »).
 
 ### `POST /api/auth/login`
 Connexion.
@@ -74,10 +74,24 @@ Renvoie l'email de validation pour un compte en attente.
 - **Réponse 200** : Message générique (toujours 200, même si compte non trouvé — sécurité)
 
 ### `GET /api/validate`
-Valide un compte via le token reçu par email (redirige vers une page, pas JSON).
+Lien reçu par e-mail. Redirige vers la page `/validate?token=…` **sans rien valider** (les scanners de messagerie préchargent les liens).
 - **Auth** : Non
 - **Params URL** : `?token=uuid`
-- **Réponse** : Redirect vers `/validation-success` ou `/validation-error`
+
+### `GET /api/validate/info`
+Lecture seule, pour la page `/validate`.
+- **Auth** : Non (le token fait office de preuve)
+- **Params URL** : `?token=uuid`
+- **Réponse 200** : `{ firstName, role, aidantEmail: string | null, canCreateAidant: boolean }` — `aidantEmail` seulement pour un senior
+- **Réponse 404 / 410** : lien inconnu ou déjà utilisé (`reason: "invalid"`) / expiré (`reason: "expired"`)
+
+### `POST /api/validate`
+Valide l'inscription (clic humain). Pour un senior, peut créer en même temps l'espace aidant de la personne de confiance.
+- **Auth** : Non
+- **Body** : `{ token: string, aidant?: { firstName, lastName, password } }`
+- **Réponse 200** : `{ message, aidantCreated: boolean }`
+- **Erreurs** : 400 `invalid` (token manquant) / `aidant_invalid` (champs aidant) / `aidant_not_allowed` (pas un senior) ; 404 `invalid` ; 409 `aidant_exists` (adresse déjà utilisée, l'inscription reste en attente) ; 410 `expired`
+- **Notes** : l'adresse du compte aidant est toujours le `validatorEmail` du senior, jamais une valeur de la requête. Activation du senior + création de l'aidant dans une seule transaction.
 
 ---
 

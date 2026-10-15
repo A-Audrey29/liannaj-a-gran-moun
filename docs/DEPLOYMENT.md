@@ -12,6 +12,11 @@ Ce guide explique comment déployer FEVES sur [Render](https://render.com/).
 
 ---
 
+## À vérifier juste avant la mise en production
+
+- [ ] **Adresse e-mail de contact** : `CONTACT_EMAIL` dans `shared/branding.ts` vaut encore `contact@baicoco.fr`, une valeur de gabarit qui appartient à un tiers. Elle s'affiche sur la page d'accueil, `/forfaits`, le pied de page, la page d'attente d'inscription (quand l'e-mail de validation n'est pas parti) et la page de validation. À remplacer par l'adresse réelle de l'association.
+- [ ] Base de données de production : ménage ou clone des données de test (voir décision du 2026-10-13).
+
 ## 1. Base de données PostgreSQL
 
 ### Option A — Render Postgres (recommandé)
