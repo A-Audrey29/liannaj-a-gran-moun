@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { PLATFORM_NAME } from "@shared/branding";
 
 /**
- * Mise en page commune aux pages légales (mentions, CGU, confidentialité).
+ * Mise en page commune aux pages légales (mentions, CGU, CGV, confidentialité).
  *
  * Ces pages doivent rester accessibles sans authentification : un visiteur
  * doit pouvoir lire la politique de confidentialité avant de créer un compte.

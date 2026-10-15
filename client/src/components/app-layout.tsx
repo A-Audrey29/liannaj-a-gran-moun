@@ -164,6 +164,11 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                     Conditions d'utilisation
                   </Link>
                 </li>
+                <li>
+                  <Link href="/cgv" className="hover:text-foreground transition-colors" data-testid="link-cgv">
+                    Conditions de vente
+                  </Link>
+                </li>
               </ul>
             </div>
             <div>
