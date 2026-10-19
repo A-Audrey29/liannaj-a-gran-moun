@@ -1,6 +1,6 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { apiRequest, apiErrorMessage, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -16,10 +16,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Calendar as CalendarWidget } from "@/components/ui/calendar";
-import { Calendar, Plus, Trash2, AlertTriangle } from "lucide-react";
-import type { Availability } from "@shared/schema";
+import { Calendar, Plus, Trash2, AlertTriangle, CalendarPlus } from "lucide-react";
+import type { Availability, AvailabilityTemplate } from "@shared/schema";
 import { fmtDayLong, fmtTime, gpDecimalHour, JOURS_LONGS } from "@/lib/availability-format";
-import { gpDateTimeToUtc, gpDayISO } from "@shared/dates";
+import { gpDateTimeToUtc, gpDayISO, todayISO, addDaysISO, fmtDayLongMonth } from "@shared/dates";
 
 const GRID_START_HOUR = 8;
 const GRID_END_HOUR = 20;
@@ -43,17 +43,6 @@ const DUREE_OPTIONS = [
   { weeks: 8, label: "8 semaines" },
   { weeks: 12, label: "12 semaines" },
 ];
-
-function todayISO(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
-
-function addDaysISO(iso: string, days: number): string {
-  const [y, m, d] = iso.split("-").map(Number);
-  const date = new Date(y, m - 1, d + days);
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
-}
 
 const SOMMAIRE = [
   { id: "section-recurrentes", label: "1. Dispos récurrentes" },
@@ -103,7 +92,7 @@ export default function DisponibilitesTab() {
       </nav>
 
       <div id="section-recurrentes">
-        <RecurringForm availabilities={availabilities || []} />
+        <RecurringForm />
       </div>
 
       <div id="section-calendrier">
@@ -113,28 +102,44 @@ export default function DisponibilitesTab() {
   );
 }
 
-function useRecurringExpiry(availabilities: Availability[]) {
-  return useMemo(() => {
-    const now = Date.now();
-    const upcomingAvailable = availabilities
-      .filter((a) => a.kind === "AVAILABLE" && new Date(a.endAt).getTime() > now);
-    if (upcomingAvailable.length === 0) return null;
-    const lastEnd = Math.max(...upcomingAvailable.map((a) => new Date(a.endAt).getTime()));
-    const daysLeft = Math.ceil((lastEnd - now) / (1000 * 60 * 60 * 24));
-    return daysLeft;
-  }, [availabilities]);
+/** Extension proposed in one click (POST /api/availabilities/extend). */
+const EXTEND_WEEKS = 4;
+
+interface TemplateResponse {
+  slots: AvailabilityTemplate | null;
+  lastEndAt: string | null;
 }
 
-function RecurringForm({ availabilities }: { availabilities: Availability[] }) {
+function RecurringForm() {
   const { toast } = useToast();
   const [enabled, setEnabled] = useState<Record<number, boolean>>({});
   const [times, setTimes] = useState<Record<number, { start: string; end: string }>>({});
   const [weeks, setWeeks] = useState(4);
+  const [prefilled, setPrefilled] = useState(false);
 
-  const daysLeft = useRecurringExpiry(availabilities);
+  const { data: template } = useQuery<TemplateResponse>({ queryKey: ["/api/availabilities/template"] });
+
+  // The saved weekly pattern pre-fills the form: it used to come back empty,
+  // and the junior had to retype everything to extend.
+  useEffect(() => {
+    if (prefilled || !template?.slots) return;
+    setEnabled(Object.fromEntries(template.slots.map((s) => [s.dayOfWeek, true])));
+    setTimes(Object.fromEntries(template.slots.map((s) => [s.dayOfWeek, { start: s.startTime, end: s.endTime }])));
+    setPrefilled(true);
+  }, [template, prefilled]);
+
+  const lastEnd = template?.lastEndAt ? new Date(template.lastEndAt) : null;
+  // Last covered day (a slot ending at midnight belongs to the day before).
+  const lastDay = lastEnd ? new Date(lastEnd.getTime() - 1) : null;
+  const daysLeft = lastEnd ? Math.ceil((lastEnd.getTime() - Date.now()) / (24 * 60 * 60 * 1000)) : null;
 
   const from = todayISO();
-  const to = addDaysISO(from, weeks * 7);
+  const to = addDaysISO(from, weeks * 7 - 1);
+
+  function refreshAvailabilities() {
+    queryClient.invalidateQueries({ queryKey: ["/api/availabilities/me"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/availabilities/template"] });
+  }
 
   const submit = useMutation({
     mutationFn: async () => {
@@ -146,10 +151,26 @@ function RecurringForm({ availabilities }: { availabilities: Availability[] }) {
       await apiRequest("POST", "/api/availabilities/recurring", { from, to, slots });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/availabilities/me"] });
+      refreshAvailabilities();
       toast({ title: "Planning enregistré", description: `Vos disponibilités des ${weeks} prochaines semaines sont à jour.` });
     },
     onError: () => toast({ title: "Erreur", description: "Impossible d'enregistrer le planning.", variant: "destructive" }),
+  });
+
+  const extend = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/availabilities/extend", { weeks: EXTEND_WEEKS });
+      return res.json() as Promise<{ untilISO: string }>;
+    },
+    onSuccess: (data) => {
+      refreshAvailabilities();
+      toast({
+        title: "Planning prolongé",
+        description: `Vos disponibilités vont maintenant jusqu'au ${fmtDayLongMonth(gpDateTimeToUtc(data.untilISO, 12, 0))}.`,
+      });
+    },
+    onError: (err) =>
+      toast({ title: "Impossible de prolonger", description: apiErrorMessage(err, "Réessayez dans un instant."), variant: "destructive" }),
   });
 
   const anyEnabled = DAY_ORDER.some((dow) => enabled[dow]);
@@ -160,16 +181,37 @@ function RecurringForm({ availabilities }: { availabilities: Availability[] }) {
         <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1">Mon planning habituel</h4>
         <p className="text-xs text-muted-foreground mb-4">Cochez les jours où vous êtes disponible, et indiquez l'horaire.</p>
 
-        {daysLeft !== null && daysLeft <= 15 && (
+        {lastDay && (
           <div
-            className="flex items-start gap-2 rounded-xl bg-amber-50 border border-amber-200 px-4 py-3 mb-4 text-sm text-amber-800"
-            data-testid="banner-expiry-warning"
+            className={`rounded-xl px-4 py-3 mb-4 text-sm border ${
+              daysLeft !== null && daysLeft <= 15
+                ? "bg-amber-50 border-amber-200 text-amber-800"
+                : "bg-[#f3eaff] border-transparent text-gray-800"
+            }`}
+            data-testid="box-availability-end"
           >
-            <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
-            <span>
-              Il ne reste plus que <strong>{daysLeft} jour{daysLeft > 1 ? "s" : ""}</strong> de créneaux déclarés.
-              Pensez à mettre à jour votre planning pour rester visible.
-            </span>
+            <p className="flex items-start gap-2">
+              {daysLeft !== null && daysLeft <= 15 && <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />}
+              <span>
+                {daysLeft !== null && daysLeft <= 0
+                  ? <>Vos créneaux se sont arrêtés le <strong>{fmtDayLongMonth(lastDay)}</strong> : les séniors ne peuvent plus vous proposer de rencontre.</>
+                  : <>Vos créneaux vont jusqu'au <strong>{fmtDayLongMonth(lastDay)}</strong>.</>}
+              </span>
+            </p>
+            {template?.slots ? (
+              <Button
+                size="sm"
+                className="mt-3 rounded-full bg-[#dc4256] hover:bg-[#c73848] text-white"
+                onClick={() => extend.mutate()}
+                disabled={extend.isPending}
+                data-testid="button-extend-availability"
+              >
+                <CalendarPlus className="w-4 h-4 mr-1.5" />
+                {extend.isPending ? "Prolongation..." : `Prolonger de ${EXTEND_WEEKS} semaines`}
+              </Button>
+            ) : (
+              <p className="mt-2 text-xs">Enregistrez votre planning habituel ci-dessous : vous pourrez ensuite le prolonger en un clic.</p>
+            )}
           </div>
         )}
 

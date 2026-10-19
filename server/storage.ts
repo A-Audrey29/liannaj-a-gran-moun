@@ -1,6 +1,7 @@
 import { prisma } from "./prisma";
 import { OVERDUE_STATUSES, isMeetingOverdue, overdueStartBefore } from "../shared/meeting-check";
-import type { User, Category, UserCategory, Relation, Intervention, AdminRecommendation, Notification, PaymentRecord, Favorite, Conversation, Message, PushSubscription, Report, TeacherStudent, TeacherComment, Availability, CreditLedger, NpsResponse, Prisma } from "../generated/prisma/client.ts";
+import type { User, Category, UserCategory, Relation, Intervention, AdminRecommendation, Notification, PaymentRecord, Favorite, Conversation, Message, PushSubscription, Report, TeacherStudent, TeacherComment, Availability, CreditLedger, NpsResponse } from "../generated/prisma/client.ts";
+import { Prisma } from "../generated/prisma/client.ts";
 import { COMPLETED_STATUSES } from "../shared/schema";
 import { NPS_COOLDOWN_DAYS, NPS_SEGMENTS, type NpsSegment } from "../shared/nps";
 
@@ -211,8 +212,13 @@ export interface IStorage {
   ): Promise<Intervention[]>;
   deleteAndCreateAvailabilities(
     deleteIds: string[],
-    createData: { userId: string; startAt: Date; endAt: Date; kind: "AVAILABLE" | "UNAVAILABLE" }[]
+    createData: { userId: string; startAt: Date; endAt: Date; kind: "AVAILABLE" | "UNAVAILABLE" }[],
+    saveTemplate?: { userId: string; template: Prisma.InputJsonValue }
   ): Promise<{ deleted: number; created: number }>;
+  /** Jeunes actifs ayant un planning habituel, avec la fin de leur dernier créneau. */
+  getJuniorsWithAvailabilityTemplate(): Promise<{ user: User; lastEnd: Date | null }[]>;
+  /** Notification de rappel + date d'envoi, dans une transaction. */
+  recordAvailabilityReminder(userId: string, notification: { title: string; message: string; link: string }): Promise<void>;
 
   createAdminRecommendation(seniorId: string, juniorId: string, note?: string): Promise<AdminRecommendation>;
   getAdminRecommendations(seniorId: string): Promise<(AdminRecommendation & { junior: User })[]>;
@@ -641,9 +647,16 @@ class DatabaseStorage implements IStorage {
 
   async deleteAndCreateAvailabilities(
     deleteIds: string[],
-    createData: { userId: string; startAt: Date; endAt: Date; kind: "AVAILABLE" | "UNAVAILABLE" }[]
+    createData: { userId: string; startAt: Date; endAt: Date; kind: "AVAILABLE" | "UNAVAILABLE" }[],
+    saveTemplate?: { userId: string; template: Prisma.InputJsonValue }
   ): Promise<{ deleted: number; created: number }> {
     return prisma.$transaction(async (tx) => {
+      if (saveTemplate) {
+        await tx.user.update({
+          where: { id: saveTemplate.userId },
+          data: { availabilityTemplate: saveTemplate.template },
+        });
+      }
       const deleted = deleteIds.length > 0
         ? (await tx.availability.updateMany({ where: { id: { in: deleteIds } }, data: { deletedAt: new Date() } })).count
         : 0;
@@ -745,6 +758,30 @@ class DatabaseStorage implements IStorage {
       orderBy: { createdAt: "desc" },
       take: 50,
     });
+  }
+
+  async getJuniorsWithAvailabilityTemplate(): Promise<{ user: User; lastEnd: Date | null }[]> {
+    const users = await prisma.user.findMany({
+      where: { role: "JUNIOR", status: "ACTIVE", availabilityTemplate: { not: Prisma.DbNull } },
+    });
+    if (users.length === 0) return [];
+    const ends = await prisma.availability.groupBy({
+      by: ["userId"],
+      where: { userId: { in: users.map((u) => u.id) }, kind: "AVAILABLE", deletedAt: null },
+      _max: { endAt: true },
+    });
+    const lastEndByUser = new Map(ends.map((e) => [e.userId, e._max.endAt]));
+    return users.map((user) => ({ user, lastEnd: lastEndByUser.get(user.id) ?? null }));
+  }
+
+  async recordAvailabilityReminder(
+    userId: string,
+    notification: { title: string; message: string; link: string }
+  ): Promise<void> {
+    await prisma.$transaction([
+      prisma.notification.create({ data: { user: { connect: { id: userId } }, type: "SYSTEM", ...notification } }),
+      prisma.user.update({ where: { id: userId }, data: { availabilityReminderSentAt: new Date() } }),
+    ]);
   }
 
   async createNotification(data: Prisma.NotificationCreateInput): Promise<Notification> {
