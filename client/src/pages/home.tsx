@@ -2,6 +2,7 @@ import { useAuth, type AuthUser } from "@/hooks/use-auth";
 import { getPhotoUrl } from "@/lib/photo-url";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { logout } from "@/lib/logout";
 import { useToast } from "@/hooks/use-toast";
 import { useLocation } from "wouter";
 import { useForm } from "react-hook-form";
@@ -89,7 +90,7 @@ function useDashboardCounts(relations?: RelationWithUsers[], pendingFB?: Interve
 export default function Home() {
   const { user } = useAuth();
   const [, setLocation] = useLocation();
-  const [activeTab, setActiveTabState] = useState<string>("dashboard");
+  const [savedTab, setActiveTabState] = useState<string>("dashboard");
   const [openRelationId, setOpenRelationId] = useState<string | null>(null);
   const isNotAdmin = user?.role !== "ADMIN";
   const tabs = (user?.role === "ADMIN"
@@ -100,6 +101,9 @@ export default function Home() {
       )
     : ALL_TABS.filter((t) => t.id !== "aide" && t.id !== "disponibilites")
   ).filter((t) => t.id !== "ateliers" || user?.role === "SENIOR");
+  // An unknown tab for this role (link from another space, stale state)
+  // would render an empty page: fall back to the dashboard.
+  const activeTab = savedTab === "aide" || tabs.some((t) => t.id === savedTab) ? savedTab : "dashboard";
   const { toast } = useToast();
 
   function setActiveTab(tab: string) {
@@ -1071,9 +1075,7 @@ function ProfilTab({ user }: { user: AuthUser | null }) {
 
   const handleLogout = async () => {
     try {
-      await apiRequest("POST", "/api/auth/logout");
-      queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
-      setLocation("/login");
+      await logout(setLocation);
     } catch {
       toast({ title: "Erreur", variant: "destructive" });
     }

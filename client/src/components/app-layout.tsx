@@ -2,6 +2,7 @@ import { PLATFORM_TAGLINE, PLATFORM_NAME, ORGANIZATION_NAME, CONTACT_EMAIL } fro
 import { useAuth } from "@/hooks/use-auth";
 import { Link, useLocation } from "wouter";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { logout } from "@/lib/logout";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger, SheetTitle } from "@/components/ui/sheet";
@@ -54,11 +55,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   const handleLogout = async () => {
     try {
-      await apiRequest("POST", "/api/auth/logout");
-      queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
-      setLocation("/login");
+      await logout(setLocation);
     } catch {
-      toast({ title: "Erreur", description: "Impossible de se deconnecter", variant: "destructive" });
+      toast({ title: "Erreur", description: "Impossible de se déconnecter", variant: "destructive" });
     }
   };
 

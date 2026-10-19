@@ -2484,6 +2484,7 @@ export async function registerRoutes(
 
       const senior = await storage.getUser(linkedSeniorId);
       if (!senior || senior.role !== "SENIOR") return res.status(400).json({ message: "Sénior invalide" });
+      if (senior.status !== "ACTIVE") return res.status(400).json({ message: "Ce sénior n'est pas actif" });
 
       const hashedPassword = await bcrypt.hash(password, 10);
       const referent = await storage.createUser({
@@ -2496,7 +2497,6 @@ export async function registerRoutes(
         phone: phone || null,
         // UserCreateInput (checked) attend la relation, pas le scalar FK.
         linkedSenior: { connect: { id: linkedSeniorId } },
-        profilePhoto: `https://ui-avatars.com/api/?name=${encodeURIComponent(firstName + "+" + lastName)}&background=8b5cf6&color=fff&size=200`,
       });
 
       res.status(201).json(sanitizeUser(referent));
@@ -2693,7 +2693,6 @@ export async function registerRoutes(
         role: "TEACHER",
         status: "ACTIVE",
         phone: phone || null,
-        profilePhoto: `https://ui-avatars.com/api/?name=${encodeURIComponent(firstName + "+" + lastName)}&background=16a34a&color=fff&size=200`,
       });
 
       res.status(201).json(sanitizeUser(teacher));

@@ -103,7 +103,10 @@ function DashboardTab({ senior, relations }: { senior: UserType | null; relation
   const pendingRelations = relations.filter((r) => r.status === "PENDING" || r.status === "PENDING_FIRST_MEETING");
 
   const now = new Date();
-  const upcomingInterventions = activeRelations
+  // The first meeting happens while the relation is still PENDING_FIRST_MEETING:
+  // it is the one the aidant most needs to see.
+  const upcomingInterventions = relations
+    .filter((r) => r.status === "ACTIVE" || r.status === "PENDING_FIRST_MEETING")
     .flatMap((r) => (r.interventions || [])
       .filter((i) => isUpcomingOrOngoing(i, now))
       .map((i) => ({ ...i, juniorName: `${r.junior.firstName} ${r.junior.lastName}` })))
@@ -170,7 +173,7 @@ function DashboardTab({ senior, relations }: { senior: UserType | null; relation
         <Card>
           <CardContent className="pt-5">
             <p className="text-3xl font-bold text-blue-600">{upcomingInterventions.length}</p>
-            <p className="text-sm text-muted-foreground mt-1">Prochaine{upcomingInterventions.length > 1 ? "s" : ""} rencontre{upcomingInterventions.length > 1 ? "s" : ""}</p>
+            <p className="text-sm text-muted-foreground mt-1">Rencontre{upcomingInterventions.length > 1 ? "s" : ""} à venir</p>
           </CardContent>
         </Card>
       </div>
