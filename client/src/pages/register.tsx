@@ -441,7 +441,7 @@ export default function Register() {
 
               <div className="space-y-4">
                 <h3 className="text-base font-semibold" data-testid="text-section-categories">
-                  Je peux animer les ateliers suivant :
+                  {role === "JUNIOR" ? "Je peux animer les ateliers suivants :" : "Les ateliers qui m'intéressent :"}
                 </h3>
                 {categoriesQuery.isLoading ? (
                   <div className="flex items-center gap-2 text-muted-foreground text-sm">

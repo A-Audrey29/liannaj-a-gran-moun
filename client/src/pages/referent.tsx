@@ -1,8 +1,7 @@
 import { useAuth } from "@/hooks/use-auth";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { apiRequest, apiErrorCode, apiErrorMessage, queryClient } from "@/lib/queryClient";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { ToastAction } from "@/components/ui/toast";
 import { useLocation } from "wouter";
 import { UserAvatar } from "@/components/user-avatar";
 import { Card, CardContent } from "@/components/ui/card";
@@ -16,20 +15,17 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { referentInterventionSchema, referentContactSchema, type ReferentInterventionInput, type ReferentContactInput } from "@shared/schema";
+import { referentContactSchema, type ReferentContactInput } from "@shared/schema";
 import type { User as UserType, Relation, Intervention } from "@shared/schema";
-import { ATELIERS } from "@shared/ateliers";
 import { LayoutGrid, Calendar, Plus, Mail, User, CheckCircle, Clock, Loader2, ChevronRight, BookOpen } from "lucide-react";
 import { useState } from "react";
 import { useSSE } from "@/hooks/use-sse";
 import { MobileTabsMenu } from "@/components/mobile-tabs-menu";
 import MeetingHistory from "@/components/meeting-history";
 import { fmtTime, fmtDayLongMonthYear } from "@/lib/availability-format";
-import { gpLocalInputToUtcISO } from "@shared/dates";
-import { z } from "zod";
 import { CreditOffersCard } from "@/components/credit-offers-card";
 import { NpsPrompt } from "@/components/nps-prompt";
-import { insufficientCreditsNotice, type CreditBalanceResponse } from "@shared/credits";
+import { type CreditBalanceResponse } from "@shared/credits";
 import { isUpcomingOrOngoing } from "@shared/meeting-check";
 
 type RelationWithUsers = Relation & { senior: UserType; junior: UserType; interventions?: Intervention[] };
@@ -74,18 +70,10 @@ function formatDate(d: string | Date) {
   return `${fmtDayLongMonthYear(date)} à ${fmtTime(date)}`;
 }
 
-// Le champ datetime-local donne "2026-10-20T09:00" sans fuseau : le schéma
-// serveur l'exige, la conversion se fait à l'envoi (gpLocalInputToUtcISO).
-const referentInterventionFormSchema = referentInterventionSchema.extend({
-  scheduledDate: z
-    .string()
-    .refine((v) => gpLocalInputToUtcISO(v) !== null, "Date et heure requises"),
-});
-
 const TABS = [
   { id: "dashboard", label: "Tableau de bord", icon: LayoutGrid },
-  { id: "suivi", label: "Suivi des prestations", icon: Calendar },
-  { id: "prestation", label: "Demander une prestation", icon: Plus },
+  { id: "suivi", label: "Suivi des ateliers", icon: Calendar },
+  { id: "prestation", label: "Demander un atelier", icon: Plus },
   // Navigates to /mes-ateliers (see selectTab), same page as the senior's tab.
   { id: "ateliers", label: "Mes achats", icon: BookOpen },
   { id: "contact", label: "Contacter l'équipe", icon: Mail },
@@ -247,7 +235,7 @@ function SuiviTab({ relations }: { relations: RelationWithUsers[] }) {
                     <UserAvatar photo={r.junior.profilePhoto} firstName={r.junior.firstName} lastName={r.junior.lastName} className="w-10 h-10" />
                     <div>
                       <p className="font-medium">{r.junior.firstName} {r.junior.lastName}</p>
-                      <p className="text-xs text-muted-foreground">{(r.interventions || []).length} intervention{(r.interventions || []).length > 1 ? "s" : ""}</p>
+                      <p className="text-xs text-muted-foreground">{(r.interventions || []).length} rencontre{(r.interventions || []).length > 1 ? "s" : ""}</p>
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
@@ -298,208 +286,46 @@ function SuiviTab({ relations }: { relations: RelationWithUsers[] }) {
 
 // ==================== DEMANDER PRESTATION TAB ====================
 
-const TASK_OPTIONS = ATELIERS;
 
+/**
+ * Asking for a workshop goes through the relation page, which shows the
+ * junior's availability next to the form. A free date field here was typed
+ * blind and often refused as outside the junior's slots.
+ */
 function PrestationTab({ relations }: { relations: RelationWithUsers[] }) {
-  const { toast } = useToast();
-  const { user } = useAuth();
   const [, setLocation] = useLocation();
-  const [selectedTasks, setSelectedTasks] = useState<string[]>([]);
-
   const activeRelations = relations.filter((r) => r.status === "ACTIVE");
-
-  const form = useForm<ReferentInterventionInput>({
-    resolver: zodResolver(referentInterventionFormSchema),
-    defaultValues: {
-      relationId: "",
-      scheduledDate: "",
-      durationMinutes: 120,
-      location: "",
-      tasks: [],
-    },
-  });
-
-  const createMut = useMutation({
-    mutationFn: (data: ReferentInterventionInput) =>
-      apiRequest("POST", "/api/referent/interventions", {
-        ...data,
-        // Saisie en heure de Guadeloupe, même si l'aidant est en métropole.
-        scheduledDate: gpLocalInputToUtcISO(data.scheduledDate),
-        tasks: selectedTasks,
-      }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/referent/relations"] });
-      form.reset();
-      setSelectedTasks([]);
-      toast({ title: "Prestation demandée", description: "La demande a été transmise au jeune." });
-    },
-    onError: (err) => {
-      if (apiErrorCode(err) === "INSUFFICIENT_CREDITS") {
-        // Role-aware wording; "buy" only for who can buy (shared/credits.ts).
-        const notice = insufficientCreditsNotice(user);
-        toast({
-          title: notice.title,
-          description: notice.message,
-          variant: "destructive",
-          action: notice.canBuy ? (
-            <ToastAction
-              altText="Acheter des ateliers"
-              onClick={() => setLocation("/mes-ateliers")}
-              data-testid="button-toast-buy-ateliers"
-            >
-              Acheter des ateliers
-            </ToastAction>
-          ) : undefined,
-        });
-        return;
-      }
-      toast({ title: "Erreur", description: apiErrorMessage(err, "Erreur lors de la demande"), variant: "destructive" });
-    },
-  });
-
-  function toggleTask(task: string) {
-    setSelectedTasks((prev) => prev.includes(task) ? prev.filter((t) => t !== task) : [...prev, task]);
-  }
 
   if (activeRelations.length === 0) {
     return (
-      <div className="text-center py-12 text-muted-foreground">
-        <Plus className="w-10 h-10 mx-auto mb-3 opacity-30" />
-        <p>Aucune relation active. Les prestations ne peuvent être demandées que pour des relations actives.</p>
+      <div className="text-center py-12 text-muted-foreground" data-testid="text-no-active-relation">
+        <p>Un atelier ne peut être demandé qu'après la première rencontre, avec un jeune déjà rencontré.</p>
       </div>
     );
   }
 
   return (
-    <div className="max-w-lg">
-      <h3 className="text-base font-semibold mb-1">Nouvelle demande de prestation</h3>
-      <p className="text-sm text-muted-foreground mb-4">
-        Vous pouvez demander une intervention au nom du sénior lié. Le jeune recevra une notification et devra confirmer.
+    <div className="space-y-3">
+      <h3 className="text-base font-semibold">Demander un atelier</h3>
+      <p className="text-sm text-muted-foreground">
+        Choisissez le jeune, puis un de ses créneaux libres. Les heures sont celles de la Guadeloupe.
       </p>
-
-      <Form {...form}>
-        <form
-          onSubmit={form.handleSubmit((data) => createMut.mutate(data))}
-          className="space-y-4"
-        >
-          <FormField
-            control={form.control}
-            name="relationId"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Relation concernée <span className="text-destructive">*</span></FormLabel>
-                <Select onValueChange={field.onChange} value={field.value}>
-                  <FormControl>
-                    <SelectTrigger data-testid="select-relation">
-                      <SelectValue placeholder="Choisir une relation active..." />
-                    </SelectTrigger>
-                  </FormControl>
-                  <SelectContent>
-                    {activeRelations.map((r) => (
-                      <SelectItem key={r.id} value={r.id} data-testid={`option-relation-${r.id}`}>
-                        {r.junior.firstName} {r.junior.lastName}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          <FormField
-            control={form.control}
-            name="scheduledDate"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Date proposée, heure de Guadeloupe <span className="text-destructive">*</span></FormLabel>
-                <FormControl>
-                  <Input type="datetime-local" {...field} data-testid="input-scheduled-date" />
-                </FormControl>
-                <p className="text-xs text-muted-foreground">
-                  Si vous êtes en métropole : 5 h de moins qu'à Paris en hiver, 6 h en été.
-                </p>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          <FormField
-            control={form.control}
-            name="durationMinutes"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Durée</FormLabel>
-                <Select
-                  onValueChange={(v) => field.onChange(Number(v))}
-                  value={String(field.value)}
-                >
-                  <FormControl>
-                    <SelectTrigger data-testid="select-duration">
-                      <SelectValue />
-                    </SelectTrigger>
-                  </FormControl>
-                  <SelectContent>
-                    <SelectItem value="60">1 heure</SelectItem>
-                    <SelectItem value="90">1h30</SelectItem>
-                    <SelectItem value="120">2 heures</SelectItem>
-                    <SelectItem value="180">3 heures</SelectItem>
-                  </SelectContent>
-                </Select>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          <FormField
-            control={form.control}
-            name="location"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Lieu</FormLabel>
-                <FormControl>
-                  <Input placeholder="Domicile du sénior, parc, etc." {...field} data-testid="input-location" />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          <div>
-            <Label>Activités prévues</Label>
-            <div className="flex flex-wrap gap-2 mt-2">
-              {TASK_OPTIONS.map((task) => {
-                const selected = selectedTasks.includes(task);
-                return (
-                  <button
-                    key={task}
-                    type="button"
-                    onClick={() => toggleTask(task)}
-                    className={`px-3 py-1.5 rounded-full text-sm border transition-colors ${
-                      selected
-                        ? "bg-[#8b5cf6] text-white border-[#8b5cf6]"
-                        : "bg-white text-muted-foreground border-border hover:bg-muted"
-                    }`}
-                    data-testid={`task-${task}`}
-                  >
-                    {task}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          <Button
-            type="submit"
-            className="bg-[#8b5cf6] hover:bg-[#7c3aed] w-full"
-            disabled={createMut.isPending}
-            data-testid="btn-submit-prestation"
-          >
-            {createMut.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <CheckCircle className="w-4 h-4 mr-1" />}
-            Envoyer la demande
-          </Button>
-        </form>
-      </Form>
+      {activeRelations.map((r) => (
+        <Card key={r.id} data-testid={`card-prestation-${r.id}`}>
+          <CardContent className="py-4 flex flex-wrap items-center justify-between gap-3">
+            <p className="font-medium">
+              {r.junior.firstName} {r.junior.lastName}
+            </p>
+            <Button
+              className="bg-[#8b5cf6] hover:bg-[#7c4fe0] text-white"
+              onClick={() => setLocation(`/relations/${r.id}`)}
+              data-testid={`btn-prestation-${r.id}`}
+            >
+              Voir ses créneaux
+            </Button>
+          </CardContent>
+        </Card>
+      ))}
     </div>
   );
 }
@@ -541,7 +367,7 @@ function ContactTab() {
               <FormItem>
                 <FormLabel>Sujet <span className="text-destructive">*</span></FormLabel>
                 <FormControl>
-                  <Input placeholder="Ex : Question sur une prestation" {...field} data-testid="input-contact-subject" />
+                  <Input placeholder="Ex : Question sur un atelier" {...field} data-testid="input-contact-subject" />
                 </FormControl>
                 <FormMessage />
               </FormItem>

@@ -3,6 +3,7 @@ import { getPhotoUrl } from "@/lib/photo-url";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { logout } from "@/lib/logout";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { useLocation } from "wouter";
 import { useForm } from "react-hook-form";
@@ -19,7 +20,7 @@ import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Checkbox } from "@/components/ui/checkbox";
 import StatusBadge from "@/components/status-badge";
-import { Calendar, MessageCircle, Mail, User, LayoutGrid, ChevronRight, ChevronLeft, Plus, Check, X, Pencil, Heart, Camera, Trash2, AlertTriangle, Users, ClipboardCheck, List, GalleryHorizontalEnd, MapPin, Lock, HelpCircle, Loader2, CalendarClock, BookOpen } from "lucide-react";
+import { Search, Calendar, MessageCircle, Mail, User, LayoutGrid, ChevronRight, ChevronLeft, Plus, Check, X, Pencil, Heart, Camera, Trash2, AlertTriangle, Users, ClipboardCheck, List, GalleryHorizontalEnd, MapPin, Lock, HelpCircle, Loader2, CalendarClock, BookOpen } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 import { updateProfileSchema, type UpdateProfileInput, changePasswordSchema, type ChangePasswordInput } from "@shared/schema";
 import type { Relation, User as UserType, Intervention, Category } from "@shared/schema";
@@ -146,6 +147,7 @@ export default function Home() {
   });
 
   const counts = useDashboardCounts(relations, pendingFB, user);
+  const proposableRelations = counts.activeRelations.filter((r) => r.status === "ACTIVE");
 
   const getTabBadge = (tabId: string) => {
     if (tabId === "messages") return unreadMessages;
@@ -210,21 +212,17 @@ export default function Home() {
         )}
       </div>
 
-      {user?.role === "SENIOR" && creditData && (
-        <div className="mb-6">
-          <CreditOffersCard />
-        </div>
-      )}
-
       {user?.role === "SENIOR" && relLoading && (
         <Skeleton className="w-full mb-6 rounded-2xl h-14" data-testid="skeleton-proposer-rencontre-permanent" />
       )}
-      {user?.role === "SENIOR" && !relLoading && counts.activeRelations.length > 0 && (
+      {/* Only an ACTIVE relation lets the senior propose: before the first
+          meeting the team organises it (relation-detail says so). */}
+      {user?.role === "SENIOR" && !relLoading && proposableRelations.length > 0 && (
         <Button
           className="w-full mb-6 rounded-2xl h-14 text-base font-semibold bg-[#dc4256] hover:bg-[#c73848] text-white shadow-sm"
           onClick={() => {
-            if (counts.activeRelations.length === 1) {
-              setLocation(`/relations/${counts.activeRelations[0].id}`);
+            if (proposableRelations.length === 1) {
+              setLocation(`/relations/${proposableRelations[0].id}`);
             } else {
               setActiveTab("rencontres");
             }
@@ -232,6 +230,15 @@ export default function Home() {
           data-testid="button-proposer-rencontre-permanent"
         >
           <Calendar className="w-5 h-5 mr-2" /> Proposer une rencontre
+        </Button>
+      )}
+      {user?.role === "SENIOR" && !relLoading && counts.activeRelations.length === 0 && activeTab !== "demandes" && (
+        <Button
+          className="w-full mb-6 rounded-2xl h-14 text-base font-semibold bg-[#dc4256] hover:bg-[#c73848] text-white shadow-sm"
+          onClick={() => setActiveTab("demandes")}
+          data-testid="button-choisir-jeune"
+        >
+          <Search className="w-5 h-5 mr-2" /> Choisir un jeune
         </Button>
       )}
 
@@ -264,6 +271,11 @@ export default function Home() {
       </div>
 
       {activeTab === "dashboard" && <DashboardTab counts={counts} isLoading={relLoading} user={user} onSwitchTab={setActiveTab} creditAvailable={creditData?.available} onOpenAteliers={() => setLocation("/mes-ateliers")} />}
+      {user?.role === "SENIOR" && creditData && activeTab === "dashboard" && (
+        <div className="mt-6">
+          <CreditOffersCard />
+        </div>
+      )}
       {activeTab === "rencontres" && <RencontresTab relations={relations} isLoading={relLoading} user={user} onOpenMessage={(relationId) => { setOpenRelationId(relationId); setActiveTab("messages"); }} />}
       {activeTab === "disponibilites" && user?.role === "JUNIOR" && <DisponibilitesTab />}
       {activeTab === "messages" && <MessagesTab user={user} openRelationId={openRelationId} />}
@@ -480,7 +492,7 @@ function RencontresTab({ relations, isLoading, user, onOpenMessage }: { relation
           <Card key={rel.id} className="rounded-2xl border-0 shadow-sm overflow-hidden" data-testid={`card-relation-${rel.id}`}>
             <CardContent className="p-0">
               <div
-                className="w-full flex items-center justify-between py-4 px-4"
+                className="w-full flex flex-wrap items-center justify-between gap-3 py-4 px-4"
                 data-testid={`header-relation-${rel.id}`}
               >
                 <div className="flex items-center gap-3">
@@ -490,7 +502,7 @@ function RencontresTab({ relations, isLoading, user, onOpenMessage }: { relation
                     <p className="text-xs text-muted-foreground">{partner.city || "Ville non renseignée"}</p>
                   </div>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                   <StatusBadge status={rel.status} />
                   {rel.status === "ACTIVE" && (
                     <Button
@@ -509,7 +521,7 @@ function RencontresTab({ relations, isLoading, user, onOpenMessage }: { relation
                     onClick={() => setLocation(`/relations/${rel.id}`)}
                     data-testid={`button-voir-profil-${rel.id}`}
                   >
-                    Voir son profil <ChevronRight className="w-3 h-3 ml-1" />
+                    Voir le détail <ChevronRight className="w-3 h-3 ml-1" />
                   </Button>
                 </div>
               </div>
@@ -531,7 +543,7 @@ function RencontresTab({ relations, isLoading, user, onOpenMessage }: { relation
           renderActions={(entry) =>
             entry.status === "PROPOSED" && user?.role === "JUNIOR" ? (
               <div>
-                <p className="text-[11px] text-orange-700 mb-2">Cette rencontre attend votre confirmation.</p>
+                <p className="text-sm text-orange-700 mb-2">Cette rencontre attend votre confirmation.</p>
                 <Button
                   size="sm"
                   className="w-full bg-[#dc4256] hover:bg-[#c73848] text-white text-xs"
@@ -542,6 +554,9 @@ function RencontresTab({ relations, isLoading, user, onOpenMessage }: { relation
                   <Check className="w-3.5 h-3.5 mr-1.5" />
                   {confirmMutation.isPending ? "Confirmation..." : "Confirmer la rencontre"}
                 </Button>
+                <p className="text-xs text-muted-foreground mt-2">
+                  Vous ne pouvez pas venir ? Prévenez l'équipe avec le bouton Aide en haut de la page.
+                </p>
               </div>
             ) : null
           }
@@ -575,6 +590,10 @@ function DemandesTab({ relations, isLoading, user }: { relations?: RelationWithU
     enabled: isSenior,
   });
 
+  // A request is sent only after confirmation: a single tap used to send it,
+  // with no way to take it back.
+  const [juniorToRequest, setJuniorToRequest] = useState<{ id: string; firstName: string } | null>(null);
+
   const createRelationMutation = useMutation({
     mutationFn: async (juniorId: string) => {
       await apiRequest("POST", "/api/relations", { juniorId });
@@ -582,7 +601,7 @@ function DemandesTab({ relations, isLoading, user }: { relations?: RelationWithU
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/relations"] });
       queryClient.invalidateQueries({ queryKey: ["/api/matching/suggestions"] });
-      toast({ title: "Demande envoyee", description: "Le jeune recevra votre demande." });
+      toast({ title: "Demande envoyée", description: "Le jeune recevra votre demande." });
     },
     onError: (e: Error) => {
       toast({ title: "Erreur", description: e.message, variant: "destructive" });
@@ -609,7 +628,7 @@ function DemandesTab({ relations, isLoading, user }: { relations?: RelationWithU
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/relations"] });
-      toast({ title: "Demande acceptee !" });
+      toast({ title: "Demande acceptée !" });
     },
     onError: () => toast({ title: "Erreur", variant: "destructive" }),
   });
@@ -620,7 +639,7 @@ function DemandesTab({ relations, isLoading, user }: { relations?: RelationWithU
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/relations"] });
-      toast({ title: "Demande refusee." });
+      toast({ title: "Demande refusée." });
     },
     onError: () => toast({ title: "Erreur", variant: "destructive" }),
   });
@@ -647,7 +666,7 @@ function DemandesTab({ relations, isLoading, user }: { relations?: RelationWithU
     <div className="space-y-6">
       {isSenior && (
         <div>
-          <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-4">Suggestions de matching</h3>
+          <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-4">Choisissez un jeune</h3>
           <div className="flex items-center justify-between mb-4">
             <div className="flex gap-2 flex-wrap">
               {filterButtons.map((f) => (
@@ -730,12 +749,12 @@ function DemandesTab({ relations, isLoading, user }: { relations?: RelationWithU
                           <Button
                             size="sm"
                             variant="ghost"
-                            className="rounded-full text-[10px] px-2 py-1 h-auto text-[#dc4256] hover:text-[#c73848] hover:bg-red-50"
-                            onClick={() => createRelationMutation.mutate(s.user.id)}
+                            className="rounded-full text-sm px-3 py-1.5 h-auto text-[#dc4256] hover:text-[#c73848] hover:bg-red-50"
+                            onClick={() => setJuniorToRequest({ id: s.user.id, firstName: s.user.firstName })}
                             disabled={createRelationMutation.isPending}
                             data-testid={`button-propose-${s.user.id}`}
                           >
-                            <Plus className="w-3 h-3 mr-0.5" /> Proposer une rencontre
+                            <Plus className="w-4 h-4 mr-1" /> Demander à rencontrer
                           </Button>
                         </div>
                       </div>
@@ -756,7 +775,7 @@ function DemandesTab({ relations, isLoading, user }: { relations?: RelationWithU
                 ))}
               </div>
             ) : (
-              <div className="relative" data-testid="carousel-container">
+              <div className="relative overflow-x-clip" data-testid="carousel-container">
                 <div className="flex items-center justify-center py-4" style={{ minHeight: "480px" }}>
                   {filteredSuggestions.map((s, idx) => {
                     const offset = idx - safeCarouselIndex;
@@ -821,12 +840,12 @@ function DemandesTab({ relations, isLoading, user }: { relations?: RelationWithU
                           <Button
                             size="sm"
                             variant="ghost"
-                            className="rounded-full text-[10px] px-2 py-1 h-auto text-[#dc4256] hover:text-[#c73848] hover:bg-red-50 w-full mt-1"
-                            onClick={() => createRelationMutation.mutate(s.user.id)}
+                            className="rounded-full text-sm px-3 py-2 h-auto text-[#dc4256] hover:text-[#c73848] hover:bg-red-50 w-full mt-1"
+                            onClick={() => setJuniorToRequest({ id: s.user.id, firstName: s.user.firstName })}
                             disabled={createRelationMutation.isPending}
                             data-testid={`button-propose-${s.user.id}`}
                           >
-                            <Plus className="w-3 h-3 mr-0.5" /> Proposer une rencontre
+                            <Plus className="w-4 h-4 mr-1" /> Demander à rencontrer
                           </Button>
                         </CardContent>
                       </Card>
@@ -874,7 +893,7 @@ function DemandesTab({ relations, isLoading, user }: { relations?: RelationWithU
 
       <div>
         <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-4">
-          {isSenior ? "Demandes envoyees" : "Demandes recues"}
+          {isSenior ? "Demandes envoyées" : "Demandes reçues"}
         </h3>
         {pendingRelations.length === 0 ? (
           <Card className="rounded-2xl border-0 shadow-sm">
@@ -943,6 +962,29 @@ function DemandesTab({ relations, isLoading, user }: { relations?: RelationWithU
           </div>
         )}
       </div>
+      <AlertDialog open={juniorToRequest !== null} onOpenChange={(open) => { if (!open) setJuniorToRequest(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Demander à rencontrer {juniorToRequest?.firstName} ?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {juniorToRequest?.firstName} reçoit votre demande. Si elle est acceptée, l'équipe vous contacte pour
+              organiser une première rencontre, offerte.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="button-cancel-request">Annuler</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (juniorToRequest) createRelationMutation.mutate(juniorToRequest.id);
+                setJuniorToRequest(null);
+              }}
+              data-testid="button-confirm-request"
+            >
+              Envoyer la demande
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
@@ -1186,7 +1228,7 @@ function ProfilTab({ user }: { user: AuthUser | null }) {
         className="w-full rounded-full bg-[#dc4256] hover:bg-[#c73848] text-white"
         data-testid="button-logout-profil"
       >
-        Deconnexion
+        Déconnexion
       </Button>
     </div>
   );

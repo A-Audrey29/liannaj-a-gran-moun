@@ -81,7 +81,6 @@ import { CREDIT_OFFERS } from "@shared/credit-offers";
 import MessagerieAdminTab from "@/components/admin-messages-tab";
 import SatisfactionTab from "@/components/admin-satisfaction-tab";
 import { fmtTime, fmtDayLongMonthYear, gpParts } from "@/lib/availability-format";
-import { gpLocalInputToUtcISO } from "@shared/dates";
 
 type SafeUser = Omit<User, "password" | "validationToken" | "validationExpiry">;
 type RelationWithUsers = Relation & { senior: SafeUser; junior: SafeUser };
@@ -144,6 +143,18 @@ const ROLE_COLORS: Record<string, string> = {
   TEACHER: "bg-green-100 text-green-800",
 };
 
+const ROLE_LABELS: Record<string, string> = {
+  ADMIN: "Admin",
+  SENIOR: "Senior",
+  JUNIOR: "Jeune",
+  REFERENT_SENIOR: "Aidant",
+  TEACHER: "Professeur",
+};
+
+function roleLabel(role: string) {
+  return ROLE_LABELS[role] ?? role;
+}
+
 function formatDate(d: string | Date) {
   return new Date(d).toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric" });
 }
@@ -181,7 +192,7 @@ function UserCombobox({
               <span className="flex items-center gap-2">
                 <Search className="w-4 h-4 text-muted-foreground shrink-0" />
                 <span className="truncate">{selected.firstName} {selected.lastName}</span>
-                <Badge className={`${ROLE_COLORS[selected.role] || ""} text-[10px] px-1.5 py-0`}>{selected.role}</Badge>
+                <Badge className={`${ROLE_COLORS[selected.role] || ""} text-[10px] px-1.5 py-0`}>{roleLabel(selected.role)}</Badge>
               </span>
             ) : (
               <span className="flex items-center gap-2 text-muted-foreground">
@@ -210,7 +221,7 @@ function UserCombobox({
                     data-testid={`${testId}-item-${u.id}`}
                   >
                     <span className="flex-1 truncate">{u.firstName} {u.lastName}</span>
-                    <Badge className={`${ROLE_COLORS[u.role] || ""} text-[10px] px-1.5 py-0`}>{u.role}</Badge>
+                    <Badge className={`${ROLE_COLORS[u.role] || ""} text-[10px] px-1.5 py-0`}>{roleLabel(u.role)}</Badge>
                   </CommandItem>
                 ))}
               </CommandGroup>
@@ -380,10 +391,16 @@ function UsersTab() {
               {u.referentFirstName && u.referentLastName && (
                 <div className="text-xs text-muted-foreground">Réf: {u.referentTitle || ""} {u.referentFirstName} {u.referentLastName}</div>
               )}
+              {u.role === "REFERENT_SENIOR" && u.linkedSeniorId && (() => {
+                const senior = users.find((x) => x.id === u.linkedSeniorId);
+                return senior ? (
+                  <div className="text-xs text-muted-foreground">Aidant de {senior.firstName} {senior.lastName}</div>
+                ) : null;
+              })()}
               <div className="text-xs text-muted-foreground mt-1">Inscrit le {formatDate(u.createdAt)}</div>
             </div>
             <div className="flex items-center gap-2 flex-shrink-0">
-              <Badge className={ROLE_COLORS[u.role] || ""}>{u.role}</Badge>
+              <Badge className={ROLE_COLORS[u.role] || ""}>{roleLabel(u.role)}</Badge>
               <Badge className={STATUS_COLORS[u.status] || ""}>{STATUS_LABELS[u.status] || u.status}</Badge>
             </div>
             <div className="flex gap-1.5 flex-shrink-0">
@@ -717,60 +734,13 @@ function RelationsTab() {
 // ==================== CADRAGE ====================
 
 function CadrageTab() {
-  const { toast } = useToast();
-  const [dialogOpen, setDialogOpen] = useState(false);
+  const [, setLocation] = useLocation();
   const [searchUserId, setSearchUserId] = useState<string | null>(null);
-  const [selectedRelation, setSelectedRelation] = useState<RelationWithUsers | null>(null);
-  const [formData, setFormData] = useState({
-    scheduledDate: "",
-    durationMinutes: 30,
-    location: "",
-    tasks: [] as string[],
-  });
-
-  function toggleTask(task: string) {
-    setFormData((prev) => ({
-      ...prev,
-      tasks: prev.tasks.includes(task) ? prev.tasks.filter((t) => t !== task) : [...prev.tasks, task],
-    }));
-  }
 
   const { data: relations = [], isLoading } = useQuery<RelationWithUsers[]>({
     queryKey: ["/api/admin/relations/pending-meeting"],
   });
   const { data: allUsers = [] } = useQuery<SafeUser[]>({ queryKey: ["/api/admin/users"] });
-
-  const createMut = useMutation({
-    mutationFn: (data: { relationId: string; scheduledDate: string; durationMinutes: number; location?: string; tasks?: string[] }) =>
-      apiRequest("POST", `/api/relations/${data.relationId}/interventions`, data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/relations/pending-meeting"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/relations"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/relations"] });
-      setDialogOpen(false);
-      setSelectedRelation(null);
-      setFormData({ scheduledDate: "", durationMinutes: 30, location: "", tasks: [] });
-      toast({ title: "1ère rencontre organisée" });
-    },
-    onError: (err) => {
-      toast({ title: "Erreur", description: apiErrorMessage(err, "Impossible de créer l'intervention"), variant: "destructive" });
-    },
-  });
-
-  function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!selectedRelation || !formData.scheduledDate) return;
-    // Saisie en heure de Guadeloupe, même depuis un navigateur en métropole.
-    const scheduledDate = gpLocalInputToUtcISO(formData.scheduledDate);
-    if (!scheduledDate) return;
-    createMut.mutate({
-      relationId: selectedRelation.id,
-      scheduledDate,
-      durationMinutes: formData.durationMinutes,
-      location: formData.location || undefined,
-      tasks: formData.tasks,
-    });
-  }
 
   if (isLoading) {
     return <div className="flex justify-center py-12"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>;
@@ -794,7 +764,7 @@ function CadrageTab() {
       {filteredRelations.length === 0 ? (
         <div className="text-center py-12 text-muted-foreground">
           <Shield className="w-10 h-10 mx-auto mb-3 opacity-40" />
-          Aucun cadrage à organiser
+          Aucune première rencontre à organiser
         </div>
       ) : (
         <div className="space-y-2">
@@ -810,13 +780,13 @@ function CadrageTab() {
                   Relation créée le {formatDate(r.createdAt)}
                 </div>
               </div>
+              {/* The relation page shows the junior's availability next to
+                  the form: a date typed blind was often refused as outside
+                  the junior's slots. */}
               <Button
                 size="sm"
                 className="bg-[#dc4256] hover:bg-[#c53a4d] text-white"
-                onClick={() => {
-                  setSelectedRelation(r);
-                  setDialogOpen(true);
-                }}
+                onClick={() => setLocation(`/relations/${r.id}`)}
                 data-testid={`btn-organiser-${r.id}`}
               >
                 <Calendar className="w-3.5 h-3.5 mr-1" />
@@ -826,86 +796,6 @@ function CadrageTab() {
           ))}
         </div>
       )}
-
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Organiser la 1ère rencontre</DialogTitle>
-          </DialogHeader>
-          {selectedRelation && (
-            <div className="text-sm text-muted-foreground mb-2">
-              {selectedRelation.senior.firstName} {selectedRelation.senior.lastName} ↔ {selectedRelation.junior.firstName} {selectedRelation.junior.lastName}
-            </div>
-          )}
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <Label htmlFor="cadrage-date">Date et heure en Guadeloupe *</Label>
-              <Input
-                id="cadrage-date"
-                type="datetime-local"
-                value={formData.scheduledDate}
-                onChange={(e) => setFormData({ ...formData, scheduledDate: e.target.value })}
-                required
-                data-testid="input-cadrage-date"
-              />
-              <p className="text-xs text-muted-foreground mt-1">
-                Heure locale de la Guadeloupe (5 h de moins qu'à Paris en hiver, 6 h en été).
-              </p>
-            </div>
-            <div>
-              <Label htmlFor="cadrage-duration">Durée (minutes)</Label>
-              <Input
-                id="cadrage-duration"
-                type="number"
-                min={30}
-                max={480}
-                value={formData.durationMinutes}
-                onChange={(e) => setFormData({ ...formData, durationMinutes: parseInt(e.target.value) || 30 })}
-                data-testid="input-cadrage-duration"
-              />
-            </div>
-            <div>
-              <Label htmlFor="cadrage-location">Lieu</Label>
-              <Input
-                id="cadrage-location"
-                value={formData.location}
-                onChange={(e) => setFormData({ ...formData, location: e.target.value })}
-                placeholder="Ex: Bureau FEVES, 15 rue..."
-                data-testid="input-cadrage-location"
-              />
-            </div>
-            <div>
-              <Label>Prestation</Label>
-              <div className="flex flex-wrap gap-2 mt-2">
-                {ATELIERS.map((task) => {
-                  const selected = formData.tasks.includes(task);
-                  return (
-                    <button
-                      key={task}
-                      type="button"
-                      onClick={() => toggleTask(task)}
-                      className={`px-3 py-1.5 rounded-full text-sm border transition-colors ${
-                        selected
-                          ? "bg-primary text-primary-foreground border-primary"
-                          : "bg-white text-muted-foreground border-border hover:bg-muted"
-                      }`}
-                      data-testid={`task-${task}`}
-                    >
-                      {task}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-            <DialogFooter>
-              <Button type="submit" className="bg-[#dc4256] hover:bg-[#c53a4d]" disabled={createMut.isPending} data-testid="btn-submit-cadrage">
-                {createMut.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : null}
-                Créer l'intervention
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }
@@ -960,7 +850,7 @@ function ProfileDialog({ user, open, onOpenChange }: { user: SafeUser | null; op
           </DialogTitle>
         </DialogHeader>
         <div className="flex gap-2 mb-4">
-          <Badge className={ROLE_COLORS[user.role] || ""}>{user.role}</Badge>
+          <Badge className={ROLE_COLORS[user.role] || ""}>{roleLabel(user.role)}</Badge>
           <Badge className={STATUS_COLORS[user.status] || ""}>{STATUS_LABELS[user.status] || user.status}</Badge>
         </div>
         <div className="space-y-3">
@@ -1196,8 +1086,8 @@ const NOTIF_TYPE_COLORS: Record<string, string> = {
 
 const NOTIF_TYPE_LABELS: Record<string, string> = {
   RELATION_REQUEST: "Relation",
-  INTERVENTION_PROPOSED: "Intervention proposée",
-  INTERVENTION_CONFIRMED: "Intervention confirmée",
+  INTERVENTION_PROPOSED: "Rencontre proposée",
+  INTERVENTION_CONFIRMED: "Rencontre confirmée",
   FEEDBACK_REMINDER: "Rappel feedback",
   MEETING_CHECK: "Rencontre a-t-elle eu lieu ?",
   SYSTEM: "Système",
@@ -1335,7 +1225,21 @@ function PaiementsTab() {
   const { data: payments = [], isLoading } = useQuery<PaymentWithUser[]>({ queryKey: ["/api/admin/payments"] });
   const { data: users = [] } = useQuery<SafeUser[]>({ queryKey: ["/api/admin/users"] });
 
-  const eligibleUsers = users.filter((u) => u.role !== "ADMIN" && u.status === "ACTIVE");
+  // Only seniors and their aidants hold credits (shared/credits.ts).
+  const eligibleUsers = users.filter((u) => (u.role === "SENIOR" || u.role === "REFERENT_SENIOR") && u.status === "ACTIVE");
+
+  // Picking an offer fills amount, label and credits: typed by hand, the
+  // credits were easy to forget and the senior paid without getting them.
+  function applyOffer(offerId: string) {
+    const offer = CREDIT_OFFERS.find((o) => o.id === offerId);
+    if (!offer) return;
+    setFormData((prev) => ({
+      ...prev,
+      amount: String(offer.priceEuros),
+      label: `${offer.name} — ${offer.label}`,
+      credits: String(offer.credits),
+    }));
+  }
 
   const createMut = useMutation({
     mutationFn: (data: { userId: string; amount: number; label: string; date?: string; credits?: number }) =>
@@ -1371,7 +1275,7 @@ function PaiementsTab() {
   return (
     <div>
       <div className="rounded-2xl border bg-muted/30 p-4 mb-6" data-testid="section-credit-offers">
-        <p className="text-sm font-semibold mb-1">Offres de crédits en ligne (Stripe)</p>
+        <p className="text-sm font-semibold mb-1">Offres de crédits</p>
         <p className="text-xs text-muted-foreground mb-3">
           Lecture seule — ces prix sont fixés dans le code (<code>shared/credit-offers.ts</code>),
           pas modifiables depuis cet écran. Changer un montant nécessite un déploiement.
@@ -1444,7 +1348,22 @@ function PaiementsTab() {
                 <SelectContent>
                   {eligibleUsers.map((u) => (
                     <SelectItem key={u.id} value={u.id}>
-                      {u.firstName} {u.lastName} ({u.role})
+                      {u.firstName} {u.lastName} ({roleLabel(u.role)})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>Offre</Label>
+              <Select onValueChange={applyOffer}>
+                <SelectTrigger data-testid="select-payment-offer">
+                  <SelectValue placeholder="Choisir une offre (remplit les champs)" />
+                </SelectTrigger>
+                <SelectContent>
+                  {CREDIT_OFFERS.map((o) => (
+                    <SelectItem key={o.id} value={o.id}>
+                      {o.name} — {o.credits} atelier{o.credits > 1 ? "s" : ""} — {o.priceEuros} €
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -2237,7 +2156,7 @@ export default function Admin() {
 
       <MobileTabsMenu tabs={ADMIN_TABS} activeTab={activeTab} onSelect={setActiveTab} getBadgeCount={getTabCount} />
 
-      <div className="hidden md:flex gap-1 mb-8 overflow-x-auto pb-2">
+      <div className="hidden md:flex flex-wrap gap-2 mb-8">
         {ADMIN_TABS.map((tab) => {
           const isActive = activeTab === tab.id;
           const Icon = tab.icon;

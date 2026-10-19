@@ -221,7 +221,8 @@ export const insertUserSchema = insertUserBaseSchema.refine(
  * Le fuseau est obligatoire (Z ou ±hh:mm). Une heure sans fuseau
  * ("2026-08-17T14:00") était lue dans le fuseau du serveur : UTC sur Render,
  * Paris en dev. Une rencontre saisie à 14h par l'admin s'affichait alors à
- * 10h en Guadeloupe. Les formulaires convertissent avec gpLocalInputToUtcISO.
+ * 10h en Guadeloupe. Les formulaires envoient un instant UTC calculé depuis
+ * l'heure de Guadeloupe (créneaux du jeune, gpDateTimeToUtc).
  */
 const isoDateTime = z
   .string()

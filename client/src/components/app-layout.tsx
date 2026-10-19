@@ -48,7 +48,7 @@ function NavLinks({ authenticated, role, onClick }: { authenticated: boolean; ro
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const { user, isAuthenticated } = useAuth();
-  const [, setLocation] = useLocation();
+  const [location, setLocation] = useLocation();
   const { toast } = useToast();
   const [mobileOpen, setMobileOpen] = useState(false);
   const pageTabs = usePageTabsRegistry();
@@ -79,6 +79,15 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           </nav>
 
           <div className="flex md:hidden items-center gap-2">
+            {/* Returning seniors look for the login button first: keep it
+                visible instead of hidden in the menu. */}
+            {!isAuthenticated && location !== "/login" && (
+              <Link href="/login">
+                <Button variant="outline" size="sm" className="rounded-full text-sm" data-testid="link-connexion-mobile">
+                  Connexion
+                </Button>
+              </Link>
+            )}
             <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
               <Tooltip>
                 <TooltipTrigger asChild>

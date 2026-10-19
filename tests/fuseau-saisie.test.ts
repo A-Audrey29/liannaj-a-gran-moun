@@ -7,13 +7,14 @@
  * rencontre saisie à 9h s'affichait 5h en Guadeloupe, ou était refusée comme
  * hors disponibilités.
  *
- * Maintenant : le formulaire convertit en heure de Guadeloupe
- * (gpLocalInputToUtcISO), et le serveur refuse toute date sans fuseau.
+ * Maintenant : l'admin et l'aidant choisissent un créneau du jeune (instant UTC
+ * calculé depuis l'heure de Guadeloupe), et le serveur refuse toute date sans
+ * fuseau.
  */
 import { describe, it, expect, beforeEach, afterAll } from "vitest";
 import { resetDatabase, createUser, loginAs, createRelation } from "./helpers";
 import { prisma } from "../server/prisma";
-import { gpLocalInputToUtcISO, fmtTime } from "../shared/dates";
+import { gpDateTimeToUtc, fmtTime } from "../shared/dates";
 
 beforeEach(async () => {
   await resetDatabase();
@@ -23,22 +24,17 @@ afterAll(async () => {
   await prisma.$disconnect();
 });
 
-describe("gpLocalInputToUtcISO", () => {
-  it("lit la saisie comme une heure de Guadeloupe (UTC-4)", () => {
-    expect(gpLocalInputToUtcISO("2026-06-15T09:00")).toBe("2026-06-15T13:00:00.000Z");
+describe("gpDateTimeToUtc", () => {
+  it("lit l'heure comme une heure de Guadeloupe (UTC-4)", () => {
+    expect(gpDateTimeToUtc("2026-06-15", 9, 0).toISOString()).toBe("2026-06-15T13:00:00.000Z");
   });
 
   it("change de jour UTC le soir en Guadeloupe", () => {
-    expect(gpLocalInputToUtcISO("2026-06-15T21:30")).toBe("2026-06-16T01:30:00.000Z");
+    expect(gpDateTimeToUtc("2026-06-15", 21, 30).toISOString()).toBe("2026-06-16T01:30:00.000Z");
   });
 
-  it("refuse une valeur incomplète", () => {
-    expect(gpLocalInputToUtcISO("")).toBeNull();
-    expect(gpLocalInputToUtcISO("2026-06-15")).toBeNull();
-  });
-
-  it("l'heure affichée est celle saisie", () => {
-    expect(fmtTime(new Date(gpLocalInputToUtcISO("2026-06-15T09:00")!))).toBe("9h00");
+  it("l'heure affichée est celle choisie", () => {
+    expect(fmtTime(gpDateTimeToUtc("2026-06-15", 9, 0))).toBe("9h00");
   });
 });
 
@@ -64,7 +60,7 @@ describe("1ère rencontre organisée par l'admin", () => {
     const { relation, adminAgent } = await preparer();
 
     const res = await adminAgent.post(`/api/relations/${relation.id}/interventions`).send({
-      scheduledDate: gpLocalInputToUtcISO("2026-06-15T10:00"),
+      scheduledDate: gpDateTimeToUtc("2026-06-15", 10, 0).toISOString(),
       durationMinutes: 30,
     });
 

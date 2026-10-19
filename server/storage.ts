@@ -2,6 +2,7 @@ import { prisma } from "./prisma";
 import { OVERDUE_STATUSES, isMeetingOverdue, overdueStartBefore } from "../shared/meeting-check";
 import type { User, Category, UserCategory, Relation, Intervention, AdminRecommendation, Notification, PaymentRecord, Favorite, Conversation, Message, PushSubscription, Report, TeacherStudent, TeacherComment, Availability, CreditLedger, NpsResponse, Prisma } from "../generated/prisma/client.ts";
 import { COMPLETED_STATUSES } from "../shared/schema";
+import { FREE_FIRST_MEETING_MAX_MINUTES } from "../shared/credits";
 import { NPS_COOLDOWN_DAYS, NPS_SEGMENTS, type NpsSegment } from "../shared/nps";
 
 /**
@@ -61,8 +62,7 @@ async function findNpsIneligibility(db: NpsDb, user: NpsRespondent): Promise<Nps
   return recentAnswer ? "COOLDOWN" : null;
 }
 
-/** Longest meeting that can still be the free first meeting of a relation. */
-export const FREE_FIRST_MEETING_MAX_MINUTES = 30;
+export { FREE_FIRST_MEETING_MAX_MINUTES };
 
 /** Planned and not yet held: these meetings reserve a credit. */
 const RESERVING_STATUSES = ["PROPOSED", "CONFIRMED"] as const;
