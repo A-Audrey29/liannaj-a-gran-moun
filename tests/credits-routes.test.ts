@@ -10,7 +10,7 @@
  *   et seul l'acheteur voit l'etat de sa session.
  */
 import { describe, it, expect, beforeEach, afterAll } from "vitest";
-import { resetDatabase, createUser, loginAs, createRelation, crediterSenior } from "./helpers";
+import { resetDatabase, createUser, loginAs, createRelation, crediterSenior, anonymousAgent } from "./helpers";
 import { prisma } from "../server/prisma";
 
 beforeEach(async () => {
@@ -131,5 +131,17 @@ describe("pas d'abonnement (#48 b)", () => {
     expect(res.status).toBe(201);
     expect((await prisma.user.findUniqueOrThrow({ where: { id: senior.id } })).subscriptionActive).toBe(false);
     expect((await prisma.user.findUniqueOrThrow({ where: { id: referent.id } })).subscriptionActive).toBe(false);
+  });
+});
+
+describe("GET /api/credits/payment-status", () => {
+  it("dit sans connexion si le paiement en ligne est ouvert", async () => {
+    const agent = await anonymousAgent();
+
+    const res = await agent.get("/api/credits/payment-status");
+
+    expect(res.status).toBe(200);
+    // tests/setup.ts configure un prestataire factice.
+    expect(res.body).toEqual({ online: true });
   });
 });

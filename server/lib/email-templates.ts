@@ -153,7 +153,7 @@ export function getRelationAcceptedEmailHtml(
       Bonne nouvelle ! Votre demande de relation avec <strong>${escapeHtml(juniorName)}</strong> a &eacute;t&eacute; accept&eacute;e.
     </p>
     <p style="margin:0 0 18px;color:#1f1f1f;font-size:15px;line-height:1.6;">
-      Vous pouvez d&egrave;s maintenant planifier des interventions ensemble sur la plateforme ${PLATFORM_NAME}.
+      Vous pouvez d&egrave;s maintenant planifier des rencontres ensemble sur la plateforme ${PLATFORM_NAME}.
     </p>
     <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 auto 28px;">
       <tr>
@@ -176,7 +176,7 @@ export function getInterventionProposedEmailHtml(
   const body = `
     <p style="margin:0 0 18px;color:#1f1f1f;font-size:15px;line-height:1.6;">Bonjour ${escapeHtml(userName)},</p>
     <p style="margin:0 0 18px;color:#1f1f1f;font-size:15px;line-height:1.6;">
-      Une nouvelle intervention vous a &eacute;t&eacute; propos&eacute;e :
+      Une nouvelle rencontre vous a &eacute;t&eacute; propos&eacute;e :
     </p>
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 24px;background-color:#f8f4fc;border-radius:6px;padding:16px;">
       <tr>
@@ -193,18 +193,18 @@ export function getInterventionProposedEmailHtml(
       </tr>
     </table>
     <p style="margin:0 0 18px;color:#1f1f1f;font-size:15px;line-height:1.6;">
-      Connectez-vous pour confirmer ou refuser cette intervention.
+      Connectez-vous pour confirmer cette rencontre. En cas d'emp&ecirc;chement, &eacute;crivez &agrave; l'&eacute;quipe depuis le bouton Aide de votre espace.
     </p>
     <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 auto 28px;">
       <tr>
         <td align="center" style="border-radius:6px;background:linear-gradient(135deg,#e91e8c,#7c3aed);">
           <a href="${escapeHtml(relationUrl)}" target="_blank" style="display:inline-block;padding:14px 36px;color:#ffffff;font-size:15px;font-weight:600;text-decoration:none;border-radius:6px;">
-            Voir l'intervention
+            Voir la rencontre
           </a>
         </td>
       </tr>
     </table>`;
-  return emailWrapper(`Nouvelle intervention propos\u00e9e - ${PLATFORM_NAME}`, body);
+  return emailWrapper(`Nouvelle rencontre propos\u00e9e - ${PLATFORM_NAME}`, body);
 }
 
 export function getInterventionConfirmedEmailHtml(
@@ -215,7 +215,7 @@ export function getInterventionConfirmedEmailHtml(
   const body = `
     <p style="margin:0 0 18px;color:#1f1f1f;font-size:15px;line-height:1.6;">Bonjour ${escapeHtml(userName)},</p>
     <p style="margin:0 0 18px;color:#1f1f1f;font-size:15px;line-height:1.6;">
-      L'intervention pr&eacute;vue le <strong>${escapeHtml(date)}</strong> a &eacute;t&eacute; confirm&eacute;e.
+      La rencontre pr&eacute;vue le <strong>${escapeHtml(date)}</strong> a &eacute;t&eacute; confirm&eacute;e.
     </p>
     <p style="margin:0 0 18px;color:#1f1f1f;font-size:15px;line-height:1.6;">
       Tout est en ordre ! Rendez-vous le jour J.
@@ -229,7 +229,7 @@ export function getInterventionConfirmedEmailHtml(
         </td>
       </tr>
     </table>`;
-  return emailWrapper(`Intervention confirm\u00e9e - ${PLATFORM_NAME}`, body);
+  return emailWrapper(`Rencontre confirm\u00e9e - ${PLATFORM_NAME}`, body);
 }
 
 export function getNegativeCreditBalanceEmailHtml(
@@ -282,7 +282,7 @@ export function getFeedbackReminderEmailHtml(
   const body = `
     <p style="margin:0 0 18px;color:#1f1f1f;font-size:15px;line-height:1.6;">Bonjour ${escapeHtml(userName)},</p>
     <p style="margin:0 0 18px;color:#1f1f1f;font-size:15px;line-height:1.6;">
-      L'intervention du <strong>${escapeHtml(interventionDate)}</strong> s'est termin&eacute;e il y a quelques jours.
+      La rencontre du <strong>${escapeHtml(interventionDate)}</strong> s'est termin&eacute;e il y a quelques jours.
     </p>
     <p style="margin:0 0 18px;color:#1f1f1f;font-size:15px;line-height:1.6;">
       Votre avis est pr&eacute;cieux ! Prenez quelques instants pour laisser un retour sur cette exp&eacute;rience.

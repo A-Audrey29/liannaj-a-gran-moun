@@ -23,7 +23,7 @@ import type { Relation, User as UserType, Intervention } from "@shared/schema";
 import AvailabilityWeekPicker, { type FreeSlot } from "@/components/availability-week-picker";
 import { fmtTime, fmtTimeRange, fmtDayLong, fmtDayShort } from "@/lib/availability-format";
 import { ATELIERS } from "@shared/ateliers";
-import { insufficientCreditsNotice } from "@shared/credits";
+import { insufficientCreditsNotice, FREE_FIRST_MEETING_MAX_MINUTES } from "@shared/credits";
 
 type RelationDetail = Relation & { senior: UserType; junior: UserType; interventions: Intervention[] };
 
@@ -204,7 +204,21 @@ export default function RelationDetail() {
         </Card>
       )}
 
-      {(isSenior || isAdmin || isReferent) && (
+      {relation.status === "PENDING_FIRST_MEETING" && (isSenior || isJunior) && (
+        <div
+          className="rounded-2xl bg-[#f3eaff] px-5 py-4 mb-6 text-sm"
+          data-testid="text-first-meeting-info"
+        >
+          <p className="font-semibold text-base mb-1">Votre première rencontre</p>
+          {sortedInterventions.some((i) => i.status === "PROPOSED" || i.status === "CONFIRMED")
+            ? "Elle est prévue : le jour, l'heure et le lieu sont indiqués plus bas."
+            : "L'équipe Lyannaj l'organise pour vous et vous contacte pour fixer le jour. Vous n'avez rien à faire."}
+        </div>
+      )}
+
+      {/* The week picker is shown only where a slot can be picked: a senior
+          waiting for the first meeting saw green slots that did nothing. */}
+      {(canPropose || canProposeFirst || isAdmin || isReferent) && (
         <AvailabilityWeekPicker
           juniorId={relation.juniorId}
           juniorName={relation.junior.firstName}
@@ -224,15 +238,17 @@ export default function RelationDetail() {
       )}
 
       <div className="flex items-center justify-between mb-4">
-        <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Interventions</h3>
+        <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Rencontres</h3>
       </div>
 
       {sortedInterventions.length === 0 ? (
         <Card className="rounded-2xl border-0 shadow-sm">
           <CardContent className="py-6 text-center text-muted-foreground text-sm">
-            {relation.status === "PENDING_FIRST_MEETING"
-              ? "Un administrateur va organiser votre premiere rencontre."
-              : "Aucune intervention pour le moment."}
+            {relation.status !== "PENDING_FIRST_MEETING"
+              ? "Aucune rencontre pour le moment."
+              : isAdmin
+              ? `Cliquez sur un créneau de ${relation.junior.firstName} ci-dessus pour organiser la première rencontre.`
+              : "L'équipe Lyannaj va vous contacter pour organiser votre première rencontre."}
           </CardContent>
         </Card>
       ) : (
@@ -279,7 +295,7 @@ function InterventionCard({ intervention, relation, user }: { intervention: Inte
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/relations", relation.id] });
-      toast({ title: "Intervention confirmee !" });
+      toast({ title: "Rencontre confirmée !" });
     },
     onError: () => toast({ title: "Erreur", variant: "destructive" }),
   });
@@ -290,7 +306,7 @@ function InterventionCard({ intervention, relation, user }: { intervention: Inte
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/relations", relation.id] });
-      toast({ title: "Intervention annulee." });
+      toast({ title: "Rencontre annulée." });
     },
     onError: () => toast({ title: "Erreur", variant: "destructive" }),
   });
@@ -415,7 +431,7 @@ function NewInterventionDialog({
   const { user } = useAuth();
   const [, navigate] = useLocation();
   const [startTime, setStartTime] = useState("");
-  const [duration, setDuration] = useState("120");
+  const [duration, setDuration] = useState(String(isFirst ? FREE_FIRST_MEETING_MAX_MINUTES : 120));
   const [location, setLocation] = useState("");
   const [tasks, setTasks] = useState<string[]>([]);
 
@@ -437,7 +453,9 @@ function NewInterventionDialog({
     if (slot) {
       const slotMinutes = Math.floor((slot.endAt.getTime() - slot.startAt.getTime()) / 60_000);
       setStartTime(slot.startAt.toISOString());
-      setDuration(String(Math.min(120, Math.min(slotMinutes, 480))));
+      // First meeting: default to the free duration, a longer one costs a credit.
+      const defaultMinutes = isFirst ? FREE_FIRST_MEETING_MAX_MINUTES : 120;
+      setDuration(String(Math.min(defaultMinutes, Math.min(slotMinutes, 480))));
     }
   }, [slot]);
 
@@ -467,7 +485,7 @@ function NewInterventionDialog({
       queryClient.invalidateQueries({ queryKey: ["/api/referent/relations"] });
       queryClient.invalidateQueries({ queryKey: [`/api/users`] });
       toast({ title: isFirst ? "1ère rencontre proposée !" : "Rencontre proposée !" });
-      setDuration("120");
+      setDuration(String(isFirst ? FREE_FIRST_MEETING_MAX_MINUTES : 120));
       setLocation("");
       setTasks([]);
       onClose();
@@ -553,6 +571,11 @@ function NewInterventionDialog({
                   ? `Ce créneau ne dure que ${maxDuration} minutes.`
                   : `Jusqu'à ${maxDuration} minutes disponibles.`}
               </p>
+              {isFirst && (
+                <p className="text-xs text-muted-foreground mt-1" data-testid="text-free-first-meeting">
+                  Offerte jusqu'à {FREE_FIRST_MEETING_MAX_MINUTES} minutes. Au-delà, elle utilise un atelier du senior.
+                </p>
+              )}
             </div>
             <div>
               <Label>Lieu</Label>

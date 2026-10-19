@@ -58,3 +58,9 @@ export interface CreditHistoryEntry {
 export interface CheckoutStatusResponse {
   credited: boolean;
 }
+
+/**
+ * Longest meeting that can still be the free first meeting of a relation
+ * (decision 2026-10-12). Shared so the form defaults to a free duration.
+ */
+export const FREE_FIRST_MEETING_MAX_MINUTES = 30;

@@ -3,6 +3,7 @@ import { OVERDUE_STATUSES, isMeetingOverdue, overdueStartBefore } from "../share
 import type { User, Category, UserCategory, Relation, Intervention, AdminRecommendation, Notification, PaymentRecord, Favorite, Conversation, Message, PushSubscription, Report, TeacherStudent, TeacherComment, Availability, CreditLedger, NpsResponse } from "../generated/prisma/client.ts";
 import { Prisma } from "../generated/prisma/client.ts";
 import { COMPLETED_STATUSES } from "../shared/schema";
+import { FREE_FIRST_MEETING_MAX_MINUTES } from "../shared/credits";
 import { NPS_COOLDOWN_DAYS, NPS_SEGMENTS, type NpsSegment } from "../shared/nps";
 
 /**
@@ -62,8 +63,7 @@ async function findNpsIneligibility(db: NpsDb, user: NpsRespondent): Promise<Nps
   return recentAnswer ? "COOLDOWN" : null;
 }
 
-/** Longest meeting that can still be the free first meeting of a relation. */
-export const FREE_FIRST_MEETING_MAX_MINUTES = 30;
+export { FREE_FIRST_MEETING_MAX_MINUTES };
 
 /** Planned and not yet held: these meetings reserve a credit. */
 const RESERVING_STATUSES = ["PROPOSED", "CONFIRMED"] as const;
@@ -236,6 +236,7 @@ export interface IStorage {
   deleteUser(id: string): Promise<void>;
   getAllRelations(): Promise<(Relation & { senior: User; junior: User })[]>;
   getAllRelationsByStatus(status: string): Promise<(Relation & { senior: User; junior: User })[]>;
+  getRelationsAwaitingFirstMeeting(): Promise<(Relation & { senior: User; junior: User })[]>;
   createPayment(data: { userId: string; amount: number; label: string; date?: Date; credits?: number; creditSeniorId?: string | null; triggeredById: string; stripeSessionId?: string | null }): Promise<PaymentRecord>;
   getPayments(): Promise<(PaymentRecord & { user: User })[]>;
   getPaymentByStripeSessionId(stripeSessionId: string): Promise<PaymentRecord | null>;
@@ -835,6 +836,22 @@ class DatabaseStorage implements IStorage {
   async getAllRelationsByStatus(status: string): Promise<(Relation & { senior: User; junior: User })[]> {
     return prisma.relation.findMany({
       where: { status: status as any },
+      include: { senior: true, junior: true },
+      orderBy: { createdAt: "desc" },
+    });
+  }
+
+  /**
+   * Relations dont la 1ère rencontre reste à organiser par l'admin : statut
+   * PENDING_FIRST_MEETING et aucune rencontre en cours (une rencontre annulée
+   * remet la relation dans la liste).
+   */
+  async getRelationsAwaitingFirstMeeting(): Promise<(Relation & { senior: User; junior: User })[]> {
+    return prisma.relation.findMany({
+      where: {
+        status: "PENDING_FIRST_MEETING",
+        interventions: { none: { status: { not: "CANCELLED" } } },
+      },
       include: { senior: true, junior: true },
       orderBy: { createdAt: "desc" },
     });

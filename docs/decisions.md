@@ -35,6 +35,49 @@ La date de fin garde une information utile : le jeune est toujours là.
 changement n'ont pas de modèle : l'onglet leur demande de le réenregistrer
 une fois, et ils ne reçoivent pas de rappel tant que ce n'est pas fait.
 
+## 2026-10-19 — Audit pré-production : heure des rencontres, achat via l'équipe
+
+Audit navigateur des 5 rôles avant la mise en production (base locale).
+
+**Heure saisie par l'admin et l'aidant.** L'admin est en métropole, les
+utilisateurs en Guadeloupe. Les formulaires « Cadrage » (admin) et « Demander
+une prestation » (aidant) envoyaient la valeur d'un champ `datetime-local`
+sans fuseau ; le serveur la lisait dans son propre fuseau (UTC sur Render,
+Paris en dev). Vérifié : saisie 15:00 depuis Paris → affichée 9h00.
+
+*Décision* : ces deux formulaires sont supprimés. L'admin et l'aidant passent
+par la page de la relation, qui affiche les créneaux du jeune et calcule
+l'instant avec `gpDateTimeToUtc` (même chemin que le senior). Toute heure de
+rencontre est une heure de Guadeloupe. En défense, le schéma serveur refuse
+désormais une date sans fuseau (`Z` ou `±hh:mm`) au lieu de la deviner.
+
+*Alternative écartée* : garder les champs libres avec conversion. L'heure
+serait juste, mais une date tapée sans voir le planning du jeune était
+souvent refusée « hors disponibilités » (règle volontaire, `validateSlot`
+dans `server/routes.ts`).
+
+**1ère rencontre : 30 min par défaut.** Le formulaire proposait 120 min,
+ce qui transformait la rencontre gratuite en rencontre payante (refusée si
+le senior n'a pas de crédit). `FREE_FIRST_MEETING_MAX_MINUTES` est passé
+dans `shared/credits.ts` pour que client et serveur partagent la valeur.
+
+**Achat sans prestataire de paiement.** Stripe est abandonné, HelloAsso
+n'est pas encore branché : les boutons « Acheter » répondaient 503. Route
+publique `GET /api/credits/payment-status` (`{ online }`) : sans prestataire,
+les offres restent visibles et le bouton devient « écrivez à l'équipe » ;
+l'admin enregistre le paiement (onglet Paiements, offre pré-remplie). Le
+jour où HelloAsso est configuré, les boutons reviennent sans autre
+changement.
+
+**Déconnexion sur appareil partagé.** Senior et aidant partagent souvent une
+tablette. La déconnexion vide maintenant le cache des requêtes et les
+onglets mémorisés (`client/src/lib/logout.ts`) : le compte suivant héritait
+de l'onglet du précédent (page vide) et voyait brièvement ses données.
+
+**Non tranché, laissé tel quel** : le jeune ne peut ni refuser ni annuler
+une rencontre (seuls senior et admin annulent). L'interface et l'e-mail lui
+indiquent de prévenir l'équipe via le bouton Aide.
+
 ## 2026-10-14 — L'aidant ouvre son espace depuis le lien de validation
 
 Décision d'Audrey : l'aidant doit pouvoir ouvrir son compte lui-même, sans
