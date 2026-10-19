@@ -1244,10 +1244,10 @@ export async function registerRoutes(
         }
       } else if (relation.status === "ACTIVE") {
         if (relation.seniorId !== user.id && user.role !== "ADMIN") {
-          return res.status(403).json({ message: "Seul le Senior peut proposer une intervention" });
+          return res.status(403).json({ message: "Seul le Senior peut proposer une rencontre" });
         }
       } else {
-        return res.status(400).json({ message: "La relation n'est pas dans un état permettant de créer une intervention" });
+        return res.status(400).json({ message: "La relation n'est pas dans un état permettant de créer une rencontre" });
       }
 
       const parsed = insertInterventionSchema.safeParse({
@@ -1292,8 +1292,8 @@ export async function registerRoutes(
       await storage.createNotification({
         user: { connect: { id: relation.juniorId } },
         type: "INTERVENTION_PROPOSED",
-        title: "Nouvelle intervention proposée",
-        message: `Une intervention a été proposée pour le ${fmtDayNumeric(new Date(parsed.data.scheduledDate))} à ${fmtTime(new Date(parsed.data.scheduledDate))}.`,
+        title: "Nouvelle rencontre proposée",
+        message: `Une rencontre a été proposée pour le ${fmtDayNumeric(new Date(parsed.data.scheduledDate))} à ${fmtTime(new Date(parsed.data.scheduledDate))}.`,
         link: `/relations/${relation.id}`,
       });
 
@@ -1304,7 +1304,7 @@ export async function registerRoutes(
         const locationStr = parsed.data.location || "Non précisé";
         sendEmail({
           to: junior.email,
-          subject: `${PLATFORM_NAME} - Nouvelle intervention proposée pour le ${dateStr}`,
+          subject: `${PLATFORM_NAME} - Nouvelle rencontre proposée pour le ${dateStr}`,
           htmlContent: getInterventionProposedEmailHtml(juniorName, dateStr, locationStr, `${getBaseUrl(req)}/relations/${relation.id}`),
         }).catch(console.error);
       }
@@ -1312,7 +1312,7 @@ export async function registerRoutes(
       res.status(201).json(intervention);
     } catch (err) {
       console.error("[CREATE_INTERVENTION] Error:", err);
-      res.status(500).json({ message: "Erreur lors de la création de l'intervention" });
+      res.status(500).json({ message: "Erreur lors de la création de la rencontre" });
     }
   });
 
@@ -1320,13 +1320,13 @@ export async function registerRoutes(
     try {
       const intervention = await storage.getInterventionWithRelation(getParam(req, "id"));
       if (!intervention) {
-        return res.status(404).json({ message: "Intervention non trouvée" });
+        return res.status(404).json({ message: "Rencontre non trouvée" });
       }
       if (intervention.relation.juniorId !== req.user!.id) {
-        return res.status(403).json({ message: "Seul le Junior peut confirmer l'intervention" });
+        return res.status(403).json({ message: "Seul le Junior peut confirmer la rencontre" });
       }
       if (intervention.status !== "PROPOSED") {
-        return res.status(400).json({ message: "Cette intervention ne peut plus être confirmée" });
+        return res.status(400).json({ message: "Cette rencontre ne peut plus être confirmée" });
       }
 
       const updated = await storage.confirmIntervention(intervention.id);
@@ -1337,8 +1337,8 @@ export async function registerRoutes(
       await storage.createNotification({
         user: { connect: { id: intervention.relation.seniorId } },
         type: "INTERVENTION_CONFIRMED",
-        title: "Intervention confirmée",
-        message: `${req.user!.firstName} ${req.user!.lastName} a confirmé l'intervention du ${fmtDayNumeric(intervention.scheduledDate)} à ${fmtTime(intervention.scheduledDate)}.`,
+        title: "Rencontre confirmée",
+        message: `${req.user!.firstName} ${req.user!.lastName} a confirmé la rencontre du ${fmtDayNumeric(intervention.scheduledDate)} à ${fmtTime(intervention.scheduledDate)}.`,
         link: `/relations/${intervention.relationId}`,
       });
 
@@ -1348,7 +1348,7 @@ export async function registerRoutes(
         const dateStr = fmtDayNumeric(intervention.scheduledDate);
         sendEmail({
           to: senior.email,
-          subject: `${PLATFORM_NAME} - Intervention confirmée pour le ${dateStr}`,
+          subject: `${PLATFORM_NAME} - Rencontre confirmée pour le ${dateStr}`,
           htmlContent: getInterventionConfirmedEmailHtml(seniorName, dateStr, `${getBaseUrl(req)}/relations/${intervention.relationId}`),
         }).catch(console.error);
       }
@@ -1364,10 +1364,10 @@ export async function registerRoutes(
     try {
       const intervention = await storage.getInterventionWithRelation(getParam(req, "id"));
       if (!intervention) {
-        return res.status(404).json({ message: "Intervention non trouvée" });
+        return res.status(404).json({ message: "Rencontre non trouvée" });
       }
       if (intervention.status !== "CONFIRMED") {
-        return res.status(400).json({ message: "L'intervention doit être confirmée avant d'être marquée comme réalisée" });
+        return res.status(400).json({ message: "La rencontre doit être confirmée avant d'être marquée comme réalisée" });
       }
 
       const completion = await storage.completeIntervention(
@@ -1428,7 +1428,7 @@ export async function registerRoutes(
         user: { connect: { id: seniorId } },
         type: "FEEDBACK_REMINDER",
         title: "Feedback requis",
-        message: "L'intervention a été validée. Merci de laisser votre feedback.",
+        message: "La rencontre a été validée. Merci de laisser votre feedback.",
         link: `/relations/${intervention.relationId}`,
       });
 
@@ -1436,7 +1436,7 @@ export async function registerRoutes(
         user: { connect: { id: juniorId } },
         type: "FEEDBACK_REMINDER",
         title: "Feedback requis",
-        message: "L'intervention a été validée. Merci de laisser votre feedback.",
+        message: "La rencontre a été validée. Merci de laisser votre feedback.",
         link: `/relations/${intervention.relationId}`,
       });
 
@@ -1445,7 +1445,7 @@ export async function registerRoutes(
       if (seniorUser?.email) {
         sendEmail({
           to: seniorUser.email,
-          subject: `${PLATFORM_NAME} - Donnez votre avis sur l'intervention du ${dateStr}`,
+          subject: `${PLATFORM_NAME} - Donnez votre avis sur la rencontre du ${dateStr}`,
           htmlContent: getFeedbackReminderEmailHtml(`${seniorUser.firstName} ${seniorUser.lastName}`, dateStr, `${getBaseUrl(req)}/relations/${intervention.relationId}`),
         }).catch(console.error);
       }
@@ -1453,7 +1453,7 @@ export async function registerRoutes(
       if (juniorUser?.email) {
         sendEmail({
           to: juniorUser.email,
-          subject: `${PLATFORM_NAME} - Donnez votre avis sur l'intervention du ${dateStr}`,
+          subject: `${PLATFORM_NAME} - Donnez votre avis sur la rencontre du ${dateStr}`,
           htmlContent: getFeedbackReminderEmailHtml(`${juniorUser.firstName} ${juniorUser.lastName}`, dateStr, `${getBaseUrl(req)}/relations/${intervention.relationId}`),
         }).catch(console.error);
       }
@@ -1469,15 +1469,15 @@ export async function registerRoutes(
     try {
       const intervention = await storage.getInterventionWithRelation(getParam(req, "id"));
       if (!intervention) {
-        return res.status(404).json({ message: "Intervention non trouvée" });
+        return res.status(404).json({ message: "Rencontre non trouvée" });
       }
 
       const user = req.user!;
       if (intervention.relation.seniorId !== user.id && user.role !== "ADMIN") {
-        return res.status(403).json({ message: "Seul le Senior ou un administrateur peut annuler l'intervention" });
+        return res.status(403).json({ message: "Seul le Senior ou un administrateur peut annuler la rencontre" });
       }
       if (intervention.status === "CANCELLED" || intervention.status === "COMPLETED" || intervention.status === "COMPLETED_PENDING_FEEDBACK") {
-        return res.status(400).json({ message: "Cette intervention ne peut plus être annulée" });
+        return res.status(400).json({ message: "Cette rencontre ne peut plus être annulée" });
       }
 
       const updated = await storage.cancelIntervention(intervention.id);
@@ -1494,8 +1494,8 @@ export async function registerRoutes(
         await storage.createNotification({
           user: { connect: { id: recipientId } },
           type: "SYSTEM",
-          title: "Intervention annulée",
-          message: `L'intervention du ${fmtDayNumeric(intervention.scheduledDate)} a été annulée.`,
+          title: "Rencontre annulée",
+          message: `La rencontre du ${fmtDayNumeric(intervention.scheduledDate)} a été annulée.`,
           link: `/relations/${intervention.relationId}`,
         });
       }
@@ -1644,10 +1644,10 @@ export async function registerRoutes(
     try {
       const intervention = await storage.getInterventionWithRelation(getParam(req, "id"));
       if (!intervention) {
-        return res.status(404).json({ message: "Intervention non trouvée" });
+        return res.status(404).json({ message: "Rencontre non trouvée" });
       }
       if (intervention.status !== "COMPLETED_PENDING_FEEDBACK") {
-        return res.status(400).json({ message: "Le feedback n'est pas encore attendu pour cette intervention" });
+        return res.status(400).json({ message: "Le feedback n'est pas encore attendu pour cette rencontre" });
       }
 
       const userId = req.user!.id;
@@ -1697,7 +1697,7 @@ export async function registerRoutes(
         user: { connect: { id: otherId } },
         type: "SYSTEM",
         title: "Feedback reçu",
-        message: `${req.user!.firstName} ${req.user!.lastName} a laissé un feedback sur l'intervention.`,
+        message: `${req.user!.firstName} ${req.user!.lastName} a laissé un feedback sur la rencontre.`,
         link: `/relations/${intervention.relationId}`,
       });
 
@@ -2006,7 +2006,7 @@ export async function registerRoutes(
 
   app.get("/api/admin/relations/pending-meeting", requireAdmin, async (_req, res) => {
     try {
-      const relations = await storage.getAllRelationsByStatus("PENDING_FIRST_MEETING");
+      const relations = await storage.getRelationsAwaitingFirstMeeting();
       res.json(relations.map((r) => ({
         ...r,
         senior: sanitizeUser(r.senior),
@@ -2484,6 +2484,7 @@ export async function registerRoutes(
 
       const senior = await storage.getUser(linkedSeniorId);
       if (!senior || senior.role !== "SENIOR") return res.status(400).json({ message: "Sénior invalide" });
+      if (senior.status !== "ACTIVE") return res.status(400).json({ message: "Ce sénior n'est pas actif" });
 
       const hashedPassword = await bcrypt.hash(password, 10);
       const referent = await storage.createUser({
@@ -2496,7 +2497,6 @@ export async function registerRoutes(
         phone: phone || null,
         // UserCreateInput (checked) attend la relation, pas le scalar FK.
         linkedSenior: { connect: { id: linkedSeniorId } },
-        profilePhoto: `https://ui-avatars.com/api/?name=${encodeURIComponent(firstName + "+" + lastName)}&background=8b5cf6&color=fff&size=200`,
       });
 
       res.status(201).json(sanitizeUser(referent));
@@ -2693,7 +2693,6 @@ export async function registerRoutes(
         role: "TEACHER",
         status: "ACTIVE",
         phone: phone || null,
-        profilePhoto: `https://ui-avatars.com/api/?name=${encodeURIComponent(firstName + "+" + lastName)}&background=16a34a&color=fff&size=200`,
       });
 
       res.status(201).json(sanitizeUser(teacher));
@@ -2805,7 +2804,7 @@ export async function registerRoutes(
       const relation = await storage.getRelationWithUsers(parsed.data.relationId);
       if (!relation) return res.status(404).json({ message: "Relation non trouvée" });
       if (relation.seniorId !== linkedSeniorId) return res.status(403).json({ message: "Cette relation n'appartient pas à votre sénior" });
-      if (relation.status !== "ACTIVE") return res.status(400).json({ message: "La relation doit être active pour planifier une intervention" });
+      if (relation.status !== "ACTIVE") return res.status(400).json({ message: "La relation doit être active pour planifier une rencontre" });
 
       const scheduledDate = new Date(parsed.data.scheduledDate);
       if (Number.isNaN(scheduledDate.getTime())) {
@@ -2840,8 +2839,8 @@ export async function registerRoutes(
       await storage.createNotification({
         user: { connect: { id: relation.juniorId } },
         type: "INTERVENTION_PROPOSED",
-        title: "Nouvelle intervention proposée",
-        message: `${senderName} propose une intervention le ${fmtDayNumeric(new Date(parsed.data.scheduledDate))} à ${fmtTime(new Date(parsed.data.scheduledDate))}.`,
+        title: "Nouvelle rencontre proposée",
+        message: `${senderName} propose une rencontre le ${fmtDayNumeric(new Date(parsed.data.scheduledDate))} à ${fmtTime(new Date(parsed.data.scheduledDate))}.`,
         link: null,
       });
       sendSSEEvent(relation.juniorId, "invalidate", { queryKey: ["/api/relations"] });
@@ -2849,7 +2848,7 @@ export async function registerRoutes(
       res.status(201).json(intervention);
     } catch (err) {
       console.error("[REFERENT_INTERVENTION] Error:", err);
-      res.status(500).json({ message: "Erreur lors de la création de l'intervention" });
+      res.status(500).json({ message: "Erreur lors de la création de la rencontre" });
     }
   });
 
@@ -2880,6 +2879,13 @@ export async function registerRoutes(
     }
     return ownerId;
   }
+
+  // Public: tells the client whether to show "Acheter" or "contact the team".
+  // While no payment provider is configured (HelloAsso pending), purchases go
+  // through the team and are recorded by an admin (Paiements tab).
+  app.get("/api/credits/payment-status", (_req, res) => {
+    res.json({ online: paymentProvider.isConfigured() });
+  });
 
   app.get("/api/credits/balance", requireAuth, async (req, res) => {
     try {

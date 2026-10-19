@@ -24,6 +24,8 @@ gratuite).
 
 ## 2. CTA "Proposer une rencontre" sans état vide explicite
 
+**Résolu** (constaté le 2026-10-19) : le planning affiche « X n'a pas encore indiqué ses disponibilités ».
+
 Le calendrier de disponibilités du jeune (`AvailabilityWeekPicker` sur
 `relation-detail.tsx`) n'affiche aucun message si le jeune n'a renseigné
 aucune disponibilité — juste des tirets "—" sur chaque jour, sans
@@ -33,6 +35,8 @@ Fix : ajouter un message du type "Marie n'a pas encore indiqué ses
 disponibilités" quand `freeSlots` est vide sur toute la semaine affichée.
 
 ## 3. `/api/admin/referents` sans vérif du statut du sénior lié
+
+**Résolu le 2026-10-19** : la route refuse un senior non actif (test `tests/admin-referents.test.ts`).
 
 [server/routes.ts:2198](../../server/routes.ts#L2198) vérifie
 `senior.role === "SENIOR"` mais pas `senior.status === "ACTIVE"`. Le

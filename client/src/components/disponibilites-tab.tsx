@@ -191,7 +191,7 @@ function RecurringForm({ availabilities }: { availabilities: Availability[] }) {
 
         <div className="space-y-3">
           {DAY_ORDER.map((dow) => (
-            <div key={dow} className="flex items-center gap-4 py-2 border-b border-border/50 last:border-0">
+            <div key={dow} className="flex flex-wrap items-center gap-x-4 gap-y-2 py-2 border-b border-border/50 last:border-0">
               <Switch
                 checked={!!enabled[dow]}
                 onCheckedChange={(v) => setEnabled((prev) => ({ ...prev, [dow]: v }))}

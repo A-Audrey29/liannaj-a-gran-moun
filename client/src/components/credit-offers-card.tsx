@@ -1,13 +1,36 @@
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest, apiErrorMessage } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/hooks/use-auth";
 import { Link } from "wouter";
 import { CREDIT_OFFERS } from "@shared/credit-offers";
+import { CONTACT_EMAIL } from "@shared/branding";
+
+/** Where a given role writes to the team: in-app for seniors and aidants. */
+export function teamContactHref(role: string | undefined): string {
+  if (role === "SENIOR") return "/mon-espace?tab=aide";
+  if (role === "REFERENT_SENIOR") return "/espace-referent?tab=contact";
+  return `mailto:${CONTACT_EMAIL}`;
+}
+
+/**
+ * Online payment is open only when a provider is configured on the server.
+ * Until then the offers stay visible but buying goes through the team.
+ */
+export function useOnlinePayment(): boolean | undefined {
+  const { data } = useQuery<{ online: boolean }>({
+    queryKey: ["/api/credits/payment-status"],
+    staleTime: 5 * 60 * 1000,
+  });
+  return data?.online;
+}
 
 export function OffersGrid() {
   const { toast } = useToast();
+  const { user } = useAuth();
+  const online = useOnlinePayment();
   const mutation = useMutation({
     mutationFn: async (offerId: string) => {
       const res = await apiRequest("POST", "/api/credits/checkout", { offerId });
@@ -35,16 +58,27 @@ export function OffersGrid() {
             <p className="text-sm">{offer.label}</p>
             <p className="text-xs text-muted-foreground">{offer.priceEuros} €</p>
           </div>
-          <Button
-            size="sm"
-            disabled={mutation.isPending}
-            onClick={() => mutation.mutate(offer.id)}
-            data-testid={`button-buy-${offer.id}`}
-          >
-            Acheter
-          </Button>
+          {online && (
+            <Button
+              size="sm"
+              disabled={mutation.isPending}
+              onClick={() => mutation.mutate(offer.id)}
+              data-testid={`button-buy-${offer.id}`}
+            >
+              Acheter
+            </Button>
+          )}
         </div>
       ))}
+      {online === false && (
+        <p className="text-sm rounded-lg bg-[#f3eaff] px-3 py-2" data-testid="text-buy-via-team">
+          Pour acheter des ateliers,{" "}
+          <a href={teamContactHref(user?.role)} className="font-semibold text-[#dc4256] underline">
+            écrivez à l'équipe
+          </a>
+          . Elle vous indique comment régler et ajoute vos ateliers à votre compte.
+        </p>
+      )}
     </div>
   );
 }

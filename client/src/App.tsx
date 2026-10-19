@@ -1,5 +1,5 @@
-import { Switch, Route } from "wouter";
-import { lazy, Suspense } from "react";
+import { Switch, Route, useLocation } from "wouter";
+import { lazy, Suspense, useEffect } from "react";
 import { Loader2 } from "lucide-react";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
@@ -53,9 +53,23 @@ function PageLoader() {
   );
 }
 
+/**
+ * A client-side page change keeps the previous scroll position: after a long
+ * form (registration, validation), the next page opened halfway down with its
+ * title hidden.
+ */
+function ScrollToTopOnNavigate() {
+  const [location] = useLocation();
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [location]);
+  return null;
+}
+
 function Router() {
   return (
     <PageTabsProvider>
+    <ScrollToTopOnNavigate />
     <AppLayout>
       <Suspense fallback={<PageLoader />}>
       <Switch>

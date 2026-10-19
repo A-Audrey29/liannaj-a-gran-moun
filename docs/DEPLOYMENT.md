@@ -16,6 +16,8 @@ Ce guide explique comment déployer FEVES sur [Render](https://render.com/).
 
 - [ ] **Adresse e-mail de contact** : `CONTACT_EMAIL` dans `shared/branding.ts` vaut encore `contact@baicoco.fr`, une valeur de gabarit qui appartient à un tiers. Elle s'affiche sur la page d'accueil, `/forfaits`, le pied de page, la page d'attente d'inscription (quand l'e-mail de validation n'est pas parti) et la page de validation. À remplacer par l'adresse réelle de l'association.
 - [ ] Base de données de production : ménage ou clone des données de test (voir décision du 2026-10-13).
+- [ ] Pages légales (mentions, confidentialité, CGU, CGV) : textes fournis par l'association, à intégrer.
+- [ ] Paiement : tant qu'aucun prestataire n'est configuré (HelloAsso à brancher), les boutons « Acheter » sont remplacés par « écrivez à l'équipe » et l'admin enregistre le paiement dans l'onglet Paiements. Prévenir l'équipe FEVES de ce circuit.
 
 ## 1. Base de données PostgreSQL
 
@@ -44,11 +46,19 @@ Toute base PostgreSQL accessible publiquement fonctionne (Supabase, Neon, Railwa
 | **Runtime** | `Node` |
 | **Build Command** | `npm install && npx prisma generate && npx prisma migrate deploy && npm run build` |
 | **Start Command** | `npm start` |
-| **Plan** | Free ou Starter |
+| **Plan** | Starter (pas Free, voir ci-dessous) |
 
-> **Start Command** : utiliser `npm start`, qui pointe sur le fichier réellement
-> produit par le build (`dist/index.cjs`) avec `NODE_ENV=production`. Écrire
-> `node dist/index.js` fait échouer le démarrage — ce fichier n'existe pas.
+> **Start Command** : utiliser `npm start`, qui lance le fichier réellement
+> produit par le build (`dist/index.js`, bundle ESM) avec `NODE_ENV=production`.
+> Lancer `node dist/index.js` sans `NODE_ENV=production` démarre le serveur en
+> mode développement (cookies non sécurisés, pas de HSTS).
+
+> **Pourquoi pas le plan Free** : un service Free se met en veille après une
+> période sans visite. Le réveil prend de l'ordre d'une minute (un senior croit
+> que le site est en panne), et les relances automatiques (rappel de feedback,
+> rencontres à clôturer, lancées par `setInterval` dans le process web) ne
+> tournent pas pendant la veille. Conditions des plans à revérifier sur
+> render.com au moment du déploiement.
 
 > **Note sur `prisma migrate deploy`** : cette commande applique les migrations
 > versionnées de `prisma/migrations/` qui ne sont pas encore passées sur la base.

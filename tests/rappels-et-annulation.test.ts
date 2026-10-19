@@ -41,7 +41,7 @@ describe("PATCH /api/interventions/:id/cancel par un admin", () => {
     const res = await (await loginAs(admin)).patch(`/api/interventions/${rencontre.id}/cancel`);
 
     expect(res.status).toBe(200);
-    const notifs = await prisma.notification.findMany({ where: { title: "Intervention annulée" } });
+    const notifs = await prisma.notification.findMany({ where: { title: "Rencontre annulée" } });
     expect(notifs.map((n) => n.userId).sort()).toEqual([senior.id, junior.id].sort());
   });
 
@@ -55,7 +55,7 @@ describe("PATCH /api/interventions/:id/cancel par un admin", () => {
 
     await (await loginAs(senior)).patch(`/api/interventions/${rencontre.id}/cancel`);
 
-    const notifs = await prisma.notification.findMany({ where: { title: "Intervention annulée" } });
+    const notifs = await prisma.notification.findMany({ where: { title: "Rencontre annulée" } });
     expect(notifs.map((n) => n.userId)).toEqual([junior.id]);
   });
 });

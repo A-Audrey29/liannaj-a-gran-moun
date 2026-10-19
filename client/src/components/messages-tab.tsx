@@ -177,8 +177,11 @@ function ChatView({ conversation, userId, onBack }: {
     }
   }, [conversation.relationId, unreadFromOthers]);
 
+  // Scroll the message list only: scrollIntoView also moved the whole page,
+  // leaving the conversation out of view on phones.
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    const el = containerRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
   }, [messages.length]);
 
   const handleSend = () => {
@@ -197,7 +200,7 @@ function ChatView({ conversation, userId, onBack }: {
   const partnerName = `${conversation.partner.firstName} ${conversation.partner.lastName}`;
 
   return (
-    <div className="flex flex-col h-[600px] md:h-[700px]" data-testid="chat-view">
+    <div className="flex flex-col h-[70vh] min-h-[420px] md:h-[700px]" data-testid="chat-view">
       <div className="flex items-center gap-3 p-4 border-b bg-white">
         <button onClick={onBack} className="md:hidden" data-testid="button-back-chat">
           <ArrowLeft className="w-5 h-5" />
@@ -211,7 +214,9 @@ function ChatView({ conversation, userId, onBack }: {
         </div>
       </div>
 
-      <div ref={containerRef} className="flex-1 overflow-y-auto p-4 space-y-3 bg-gray-50">
+      <div ref={containerRef} className="flex-1 overflow-y-auto p-4 bg-gray-50">
+        {/* Messages sit at the bottom, next to the input, like any chat. */}
+        <div className="min-h-full flex flex-col justify-end space-y-3">
         {isLoading ? (
           <div className="space-y-3">
             {[1, 2, 3].map((i) => (
@@ -252,6 +257,7 @@ function ChatView({ conversation, userId, onBack }: {
           })
         )}
         <div ref={messagesEndRef} />
+        </div>
       </div>
 
       <div className="p-3 border-t bg-white">

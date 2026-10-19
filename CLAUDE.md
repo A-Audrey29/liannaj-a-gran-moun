@@ -79,7 +79,10 @@ npm run db:push    # prisma db push — NE PAS utiliser sur la base Neon avec do
   `toLocaleDateString`/`toLocaleTimeString` sur ces champs — le serveur est en
   UTC, les utilisateurs en Guadeloupe (UTC-4 fixe), le dev à Paris (DST). Les
   dates purement administratives (`createdAt`, `birthDate`) restent en
-  `toLocale*`.
+  `toLocale*`. Une heure de rencontre est **toujours une heure de Guadeloupe**, même
+  saisie par l'admin en métropole : jamais de `datetime-local` envoyé brut
+  ni de `new Date("2026-10-20T10:00")` ; on choisit un créneau du jeune
+  (`gpDateTimeToUtc`). Le serveur refuse une date sans fuseau.
 - **Feedback**: le masquage de visibilité (jeune/sénior ne voient que leur
   propre feedback, le référent voit celui du sénior seulement) se fait côté
   serveur avant sérialisation (`scopeFeedback` / `scopeInterventionFeedback`)
@@ -106,7 +109,10 @@ npm run db:push    # prisma db push — NE PAS utiliser sur la base Neon avec do
   passer par le contrat `server/lib/payment-provider.ts`
   (impl : `stripe-provider.ts`). Webhook (`/api/webhooks/payment`) vérifie la
   signature sur `req.rawBody` (capturé dans `server/app.ts`), jamais le body
-  JSON déjà parsé. Détail complet dans `docs/decisions.md`.
+  JSON déjà parsé. Sans prestataire configuré, `GET /api/credits/payment-status`
+  renvoie `online: false` : les boutons « Acheter » deviennent « écrivez à
+  l'équipe » et l'admin saisit le paiement (onglet Paiements). Détail complet
+  dans `docs/decisions.md`.
 - **Compte aidant** (`REFERENT_SENIOR`, appelé « aidant » dans l'interface) :
   l'aidant l'ouvre lui-même depuis le lien de validation de l'inscription du
   senior (`POST /api/validate` + champ `aidant`), avec l'adresse qui a reçu

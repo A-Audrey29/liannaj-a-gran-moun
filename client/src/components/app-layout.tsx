@@ -2,6 +2,7 @@ import { PLATFORM_TAGLINE, PLATFORM_NAME, ORGANIZATION_NAME, CONTACT_EMAIL } fro
 import { useAuth } from "@/hooks/use-auth";
 import { Link, useLocation } from "wouter";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { logout } from "@/lib/logout";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger, SheetTitle } from "@/components/ui/sheet";
@@ -47,18 +48,16 @@ function NavLinks({ authenticated, role, onClick }: { authenticated: boolean; ro
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const { user, isAuthenticated } = useAuth();
-  const [, setLocation] = useLocation();
+  const [location, setLocation] = useLocation();
   const { toast } = useToast();
   const [mobileOpen, setMobileOpen] = useState(false);
   const pageTabs = usePageTabsRegistry();
 
   const handleLogout = async () => {
     try {
-      await apiRequest("POST", "/api/auth/logout");
-      queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
-      setLocation("/login");
+      await logout(setLocation);
     } catch {
-      toast({ title: "Erreur", description: "Impossible de se deconnecter", variant: "destructive" });
+      toast({ title: "Erreur", description: "Impossible de se déconnecter", variant: "destructive" });
     }
   };
 
@@ -80,6 +79,15 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           </nav>
 
           <div className="flex md:hidden items-center gap-2">
+            {/* Returning seniors look for the login button first: keep it
+                visible instead of hidden in the menu. */}
+            {!isAuthenticated && location !== "/login" && (
+              <Link href="/login">
+                <Button variant="outline" size="sm" className="rounded-full text-sm" data-testid="link-connexion-mobile">
+                  Connexion
+                </Button>
+              </Link>
+            )}
             <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
               <Tooltip>
                 <TooltipTrigger asChild>
