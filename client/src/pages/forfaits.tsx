@@ -1,6 +1,7 @@
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/use-auth";
+import { teamContactHref, useOnlinePayment } from "@/components/credit-offers-card";
 import { CREDIT_OFFERS } from "@shared/credit-offers";
 import { canBuyCredits } from "@shared/credits";
 import { CONTACT_EMAIL, ORGANIZATION_NAME, PLATFORM_NAME } from "@shared/branding";
@@ -50,12 +51,6 @@ const MORE_RULES: Rule[] = [
 ];
 
 /** Where "Une question ?" leads: the in-app help for buyers, e-mail otherwise. */
-function helpHref(role: string | undefined): string {
-  if (role === "SENIOR") return "/mon-espace?tab=aide";
-  if (role === "REFERENT_SENIOR") return "/espace-referent?tab=contact";
-  return `mailto:${CONTACT_EMAIL}`;
-}
-
 function RuleList({ rules }: { rules: Rule[] }) {
   return (
     <ol className="space-y-4">
@@ -78,6 +73,7 @@ export default function Forfaits() {
   // referent without a linked senior) cannot buy: no buy button and no
   // sentence pointing to "Mes achats".
   const canBuy = !user || canBuyCredits(user);
+  const online = useOnlinePayment();
   const buyPath = user ? "/mes-ateliers" : "/login";
 
   return (
@@ -148,7 +144,11 @@ export default function Forfaits() {
       </details>
 
       <h2 className="text-2xl font-bold mb-4">Payer</h2>
-      <p className="mb-2">Le paiement se fait en ligne, par carte bancaire.</p>
+      <p className="mb-2" data-testid="text-forfaits-payment">
+        {online === false
+          ? "Le paiement en ligne n'est pas encore ouvert : écrivez à l'équipe, elle vous indique comment régler et ajoute vos ateliers à votre compte."
+          : "Le paiement se fait en ligne, par carte bancaire."}
+      </p>
       {canBuy && (
         <p className="mb-8" data-testid="text-forfaits-mes-ateliers">
           Vous voyez vos crédits à tout moment dans « Mes achats ».
@@ -159,7 +159,7 @@ export default function Forfaits() {
         <p className="font-bold text-gray-900">Une question avant d'acheter ?</p>
         <p className="text-gray-800 mb-2">
           L'équipe {PLATFORM_NAME} vous répond :{" "}
-          <a href={helpHref(user?.role)} className="font-semibold text-[#dc4256] underline" data-testid="link-forfaits-help">
+          <a href={teamContactHref(user?.role)} className="font-semibold text-[#dc4256] underline" data-testid="link-forfaits-help">
             {user && (user.role === "SENIOR" || user.role === "REFERENT_SENIOR") ? "écrire à l'équipe" : CONTACT_EMAIL}
           </a>
         </p>

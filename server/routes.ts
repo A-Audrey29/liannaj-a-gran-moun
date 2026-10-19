@@ -2880,6 +2880,13 @@ export async function registerRoutes(
     return ownerId;
   }
 
+  // Public: tells the client whether to show "Acheter" or "contact the team".
+  // While no payment provider is configured (HelloAsso pending), purchases go
+  // through the team and are recorded by an admin (Paiements tab).
+  app.get("/api/credits/payment-status", (_req, res) => {
+    res.json({ online: paymentProvider.isConfigured() });
+  });
+
   app.get("/api/credits/balance", requireAuth, async (req, res) => {
     try {
       const seniorId = await resolveCreditSenior(req, res);
