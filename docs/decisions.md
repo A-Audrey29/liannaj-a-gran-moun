@@ -3,6 +3,38 @@
 Journal des choix d'architecture et de leurs raisons. Une entrée par décision,
 la plus récente en haut.
 
+## 2026-10-19 — Disponibilités du jeune : planning mémorisé, prolongation, rappel
+
+Demande d'Audrey : les disponibilités d'un jeune « expiraient » sans prévenir.
+
+**Pourquoi elles s'arrêtent.** Le planning habituel n'est pas stocké comme une
+règle : à l'enregistrement, le serveur génère des créneaux datés pour N
+semaines (4 par défaut, plafond 90 jours posé à la relecture du 2026-08-11
+contre une boucle sans fin). Après la dernière date, plus aucun créneau, donc
+plus aucune proposition possible. Le formulaire revenait vide : prolonger
+voulait dire tout ressaisir. Seul un bandeau dans l'onglet prévenait.
+
+**Décision.**
+- Le planning est mémorisé sur le jeune (`User.availabilityTemplate`, JSON),
+  dans la même transaction que les créneaux. Le formulaire est pré-rempli.
+- Bouton « Prolonger de 4 semaines » (`POST /api/availabilities/extend`) : le
+  même planning est ajouté après le dernier créneau (ou à partir d'aujourd'hui
+  s'ils sont tous passés). Rien n'est effacé, aucun créneau n'est créé sur une
+  absence déclarée, plafond de 90 jours après aujourd'hui conservé.
+- Rappel 7 jours avant la fin (notification + e-mail, lien vers l'onglet),
+  une fois par date de fin (`User.availabilityReminderSentAt`,
+  `isAvailabilityReminderDue` dans `shared/availability.ts`). Job toutes les
+  6 h dans le process web, comme les autres relances, avec son verrou.
+
+**Alternative écartée : renouvellement automatique sans fin.** Plus simple
+pour le jeune, mais un jeune qui ne se connecte plus resterait « disponible »
+indéfiniment et les seniors lui proposeraient des rencontres dans le vide.
+La date de fin garde une information utile : le jeune est toujours là.
+
+**Comptes existants.** Les jeunes qui ont enregistré leur planning avant ce
+changement n'ont pas de modèle : l'onglet leur demande de le réenregistrer
+une fois, et ils ne reçoivent pas de rappel tant que ce n'est pas fait.
+
 ## 2026-10-19 — Audit pré-production : heure des rencontres, achat via l'équipe
 
 Audit navigateur des 5 rôles avant la mise en production (base locale).

@@ -446,3 +446,29 @@ export function getPasswordResetEmailHtml(userName: string, resetUrl: string): s
     </p>`;
   return emailWrapper(`Nouveau mot de passe - ${PLATFORM_NAME}`, body);
 }
+
+export function getAvailabilityEndingEmailHtml(
+  firstName: string,
+  lastDate: string,
+  availabilityUrl: string
+): string {
+  const body = `
+    <p style="margin:0 0 18px;color:#1f1f1f;font-size:15px;line-height:1.6;">Bonjour ${escapeHtml(firstName)},</p>
+    <p style="margin:0 0 18px;color:#1f1f1f;font-size:15px;line-height:1.6;">
+      Vos disponibilit&eacute;s sur ${escapeHtml(PLATFORM_NAME)} s&rsquo;arr&ecirc;tent le <strong>${escapeHtml(lastDate)}</strong>.
+      Apr&egrave;s cette date, les s&eacute;niors ne pourront plus vous proposer de rencontre.
+    </p>
+    <p style="margin:0 0 18px;color:#1f1f1f;font-size:15px;line-height:1.6;">
+      Un clic suffit pour prolonger le m&ecirc;me planning de quelques semaines.
+    </p>
+    <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 auto 28px;">
+      <tr>
+        <td align="center" style="border-radius:6px;background:linear-gradient(135deg,#e91e8c,#7c3aed);">
+          <a href="${escapeHtml(availabilityUrl)}" target="_blank" style="display:inline-block;padding:14px 36px;color:#ffffff;font-size:15px;font-weight:600;text-decoration:none;border-radius:6px;">
+            Prolonger mes disponibilit&eacute;s
+          </a>
+        </td>
+      </tr>
+    </table>`;
+  return emailWrapper(`Vos disponibilités se terminent bientôt - ${PLATFORM_NAME}`, body);
+}

@@ -317,6 +317,21 @@ export const createRecurringAvailabilitiesSchema = z
     { message: `Plage limitée à ${MAX_RECURRING_RANGE_DAYS} jours`, path: ["to"] }
   );
 
+/** Planning habituel mémorisé sur le jeune (User.availabilityTemplate). */
+export const availabilityTemplateSchema = z.array(recurringSlotSchema).min(1);
+export type AvailabilityTemplate = z.infer<typeof availabilityTemplateSchema>;
+
+export const EXTEND_AVAILABILITY_WEEK_OPTIONS = [2, 4, 8] as const;
+
+export const extendAvailabilitiesSchema = z.object({
+  weeks: z
+    .number()
+    .int()
+    .refine((w) => (EXTEND_AVAILABILITY_WEEK_OPTIONS as readonly number[]).includes(w), "Durée invalide"),
+});
+
+export { MAX_RECURRING_RANGE_DAYS };
+
 export const createRelationSchema = z.object({
   juniorId: z.string().min(1, "ID du Junior requis"),
 });

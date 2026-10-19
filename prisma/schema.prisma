@@ -97,6 +97,13 @@ model User {
 
   subscriptionActive  Boolean    @default(false)
 
+  // Planning habituel du jeune ([{ dayOfWeek, startTime, endTime }], heures
+  // de Guadeloupe). Les créneaux datés sont générés à partir de lui pour N
+  // semaines ; le garder permet de pré-remplir le formulaire et de prolonger
+  // en un clic. Dernier rappel « vos disponibilités se terminent » envoyé.
+  availabilityTemplate       Json?
+  availabilityReminderSentAt DateTime?
+
   categories          UserCategory[]
 
   sentMessages        Message[] @relation("SentMessages")

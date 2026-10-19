@@ -25,14 +25,14 @@ import {
   getPasswordResetEmailHtml,
   escapeHtml,
 } from "./lib/email-templates";
-import { insertUserSchema, createRelationSchema, insertInterventionSchema, feedbackSchema, createPaymentSchema, checkoutSchema, changePasswordSchema, forgotPasswordSchema, resetPasswordSchema, createAdminSchema, insertReportSchema, createAvailabilitySchema, createRecurringAvailabilitiesSchema, createDateExceptionSchema, updateUserCategoriesSchema, meetingHistoryQuerySchema, npsSchema, npsQuerySchema, creditsQuerySchema, checkoutStatusQuerySchema, validateRegistrationSchema, COMPLETED_STATUSES } from "../shared/schema";
+import { insertUserSchema, createRelationSchema, insertInterventionSchema, feedbackSchema, createPaymentSchema, checkoutSchema, changePasswordSchema, forgotPasswordSchema, resetPasswordSchema, createAdminSchema, insertReportSchema, createAvailabilitySchema, createRecurringAvailabilitiesSchema, extendAvailabilitiesSchema, createDateExceptionSchema, updateUserCategoriesSchema, meetingHistoryQuerySchema, npsSchema, npsQuerySchema, creditsQuerySchema, checkoutStatusQuerySchema, validateRegistrationSchema, COMPLETED_STATUSES } from "../shared/schema";
 import { creditOwnerId } from "../shared/credits";
 import type { CreditBalanceResponse, CreditHistoryEntry, CheckoutStatusResponse } from "../shared/credits";
 import type { MeetingHistoryEntry, MeetingHistoryResponse, MeetingHistorySummary, Role } from "../shared/schema";
 import { buildNpsReport, npsCategory } from "../shared/nps";
 import type { NpsEligibilityResponse, NpsReport, NpsResponseEntry, NpsSegment } from "../shared/nps";
 import type { MeetingHistoryScope, NpsIneligibleReason } from "./storage";
-import { createRecurringAvailabilities, createDateException, deleteAvailability, isWithinAvailability, hasInterventionConflict } from "./lib/availability";
+import { createRecurringAvailabilities, extendRecurringAvailabilities, parseAvailabilityTemplate, lastAvailableEnd, createDateException, deleteAvailability, isWithinAvailability, hasInterventionConflict } from "./lib/availability";
 import { addSSEClient, sendSSEEvent, isUserConnected } from "./lib/sse";
 import { fmtDayNumeric, fmtTime, gpDateTimeToUtc, addDaysISO } from "../shared/dates";
 import { PLATFORM_NAME } from "../shared/branding";
@@ -101,7 +101,9 @@ function uploadSinglePhoto(champ: string) {
 }
 
 function sanitizeUser(user: any) {
-  const { password, validationToken, validationExpiry, ...safe } = user;
+  // availability*: internal to the availability feature (own route for the
+  // junior), not part of a profile sent to other users.
+  const { password, validationToken, validationExpiry, availabilityTemplate, availabilityReminderSentAt, ...safe } = user;
   return safe;
 }
 
@@ -130,6 +132,8 @@ function sanitizeUserPublic(user: any) {
     password,
     validationToken,
     validationExpiry,
+    availabilityTemplate,
+    availabilityReminderSentAt,
     phone,
     address,
     postalCode,
@@ -1554,6 +1558,48 @@ export async function registerRoutes(
       res.status(201).json(result);
     } catch (err) {
       console.error("[CREATE_RECURRING_AVAILABILITIES] Error:", err);
+      res.status(500).json({ message: "Erreur" });
+    }
+  });
+
+  // The junior's weekly pattern and how far their slots go: pre-fills the
+  // form and drives the "extend" button.
+  app.get("/api/availabilities/template", requireAuth, async (req, res) => {
+    try {
+      if (req.user!.role !== "JUNIOR") {
+        return res.status(403).json({ message: "Réservé aux jeunes" });
+      }
+      const user = await storage.getUser(req.user!.id);
+      const lastEnd = await lastAvailableEnd(req.user!.id);
+      res.json({
+        slots: parseAvailabilityTemplate(user?.availabilityTemplate),
+        lastEndAt: lastEnd ? lastEnd.toISOString() : null,
+      });
+    } catch (err) {
+      console.error("[GET_AVAILABILITY_TEMPLATE] Error:", err);
+      res.status(500).json({ message: "Erreur" });
+    }
+  });
+
+  app.post("/api/availabilities/extend", requireAuth, async (req, res) => {
+    try {
+      if (req.user!.role !== "JUNIOR") {
+        return res.status(403).json({ message: "Seul un Junior peut prolonger son planning" });
+      }
+      const parsed = extendAvailabilitiesSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: "Données invalides", errors: parsed.error.flatten().fieldErrors });
+      }
+      const result = await extendRecurringAvailabilities(req.user!.id, parsed.data.weeks);
+      if (!result.ok) {
+        const message = result.reason === "NO_TEMPLATE"
+          ? "Enregistrez d'abord votre planning habituel."
+          : "Vos disponibilités couvrent déjà les 3 prochains mois.";
+        return res.status(400).json({ message, code: result.reason });
+      }
+      res.status(201).json(result);
+    } catch (err) {
+      console.error("[EXTEND_AVAILABILITIES] Error:", err);
       res.status(500).json({ message: "Erreur" });
     }
   });

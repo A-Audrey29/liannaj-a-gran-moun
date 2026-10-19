@@ -77,3 +77,19 @@ export function isSlotCovered(
     contains(m.startAt, m.endAt, start, end)
   );
 }
+
+/** Le rappel « vos disponibilités se terminent » part ce nombre de jours avant la fin. */
+export const AVAILABILITY_REMINDER_DAYS = 7;
+
+/**
+ * Faut-il rappeler au jeune que ses créneaux se terminent ?
+ * Oui quand le dernier créneau finit dans moins de AVAILABILITY_REMINDER_DAYS
+ * jours (ou est déjà passé), une seule fois par date de fin : un rappel
+ * envoyé après le début de la fenêtre de rappel couvre cette date. Prolonger
+ * repousse la fin, ce qui rouvre un rappel pour la nouvelle date.
+ */
+export function isAvailabilityReminderDue(lastEnd: Date, sentAt: Date | null, now: Date): boolean {
+  const windowStart = lastEnd.getTime() - AVAILABILITY_REMINDER_DAYS * 24 * 60 * 60 * 1000;
+  if (now.getTime() < windowStart) return false;
+  return sentAt === null || sentAt.getTime() < windowStart;
+}
