@@ -217,12 +217,17 @@ export const insertUserSchema = insertUserBaseSchema.refine(
  * Une date seule ("2026-08-17") était jusqu'ici acceptée et interprétée à
  * minuit — inexploitable dès lors qu'on contraint la proposition aux plages
  * horaires déclarées par le jeune.
+ *
+ * Le fuseau est obligatoire (Z ou ±hh:mm). Une heure sans fuseau
+ * ("2026-08-17T14:00") était lue dans le fuseau du serveur : UTC sur Render,
+ * Paris en dev. Une rencontre saisie à 14h par l'admin s'affichait alors à
+ * 10h en Guadeloupe. Les formulaires convertissent avec gpLocalInputToUtcISO.
  */
 const isoDateTime = z
   .string()
   .regex(
-    /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/,
-    "Date et heure requises (format ISO, ex. 2026-08-17T14:00)",
+    /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:?\d{2})$/,
+    "Date et heure requises avec fuseau (format ISO, ex. 2026-08-17T18:00:00.000Z)",
   )
   .refine((v) => !Number.isNaN(new Date(v).getTime()), "Date invalide");
 

@@ -230,6 +230,7 @@ export interface IStorage {
   deleteUser(id: string): Promise<void>;
   getAllRelations(): Promise<(Relation & { senior: User; junior: User })[]>;
   getAllRelationsByStatus(status: string): Promise<(Relation & { senior: User; junior: User })[]>;
+  getRelationsAwaitingFirstMeeting(): Promise<(Relation & { senior: User; junior: User })[]>;
   createPayment(data: { userId: string; amount: number; label: string; date?: Date; credits?: number; creditSeniorId?: string | null; triggeredById: string; stripeSessionId?: string | null }): Promise<PaymentRecord>;
   getPayments(): Promise<(PaymentRecord & { user: User })[]>;
   getPaymentByStripeSessionId(stripeSessionId: string): Promise<PaymentRecord | null>;
@@ -798,6 +799,22 @@ class DatabaseStorage implements IStorage {
   async getAllRelationsByStatus(status: string): Promise<(Relation & { senior: User; junior: User })[]> {
     return prisma.relation.findMany({
       where: { status: status as any },
+      include: { senior: true, junior: true },
+      orderBy: { createdAt: "desc" },
+    });
+  }
+
+  /**
+   * Relations dont la 1ère rencontre reste à organiser par l'admin : statut
+   * PENDING_FIRST_MEETING et aucune rencontre en cours (une rencontre annulée
+   * remet la relation dans la liste).
+   */
+  async getRelationsAwaitingFirstMeeting(): Promise<(Relation & { senior: User; junior: User })[]> {
+    return prisma.relation.findMany({
+      where: {
+        status: "PENDING_FIRST_MEETING",
+        interventions: { none: { status: { not: "CANCELLED" } } },
+      },
       include: { senior: true, junior: true },
       orderBy: { createdAt: "desc" },
     });

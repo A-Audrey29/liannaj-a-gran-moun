@@ -25,6 +25,8 @@ import { useSSE } from "@/hooks/use-sse";
 import { MobileTabsMenu } from "@/components/mobile-tabs-menu";
 import MeetingHistory from "@/components/meeting-history";
 import { fmtTime, fmtDayLongMonthYear } from "@/lib/availability-format";
+import { gpLocalInputToUtcISO } from "@shared/dates";
+import { z } from "zod";
 import { CreditOffersCard } from "@/components/credit-offers-card";
 import { NpsPrompt } from "@/components/nps-prompt";
 import { insufficientCreditsNotice, type CreditBalanceResponse } from "@shared/credits";
@@ -71,6 +73,14 @@ function formatDate(d: string | Date) {
   const date = new Date(d);
   return `${fmtDayLongMonthYear(date)} à ${fmtTime(date)}`;
 }
+
+// Le champ datetime-local donne "2026-10-20T09:00" sans fuseau : le schéma
+// serveur l'exige, la conversion se fait à l'envoi (gpLocalInputToUtcISO).
+const referentInterventionFormSchema = referentInterventionSchema.extend({
+  scheduledDate: z
+    .string()
+    .refine((v) => gpLocalInputToUtcISO(v) !== null, "Date et heure requises"),
+});
 
 const TABS = [
   { id: "dashboard", label: "Tableau de bord", icon: LayoutGrid },
@@ -296,7 +306,7 @@ function PrestationTab({ relations }: { relations: RelationWithUsers[] }) {
   const activeRelations = relations.filter((r) => r.status === "ACTIVE");
 
   const form = useForm<ReferentInterventionInput>({
-    resolver: zodResolver(referentInterventionSchema),
+    resolver: zodResolver(referentInterventionFormSchema),
     defaultValues: {
       relationId: "",
       scheduledDate: "",
@@ -308,7 +318,12 @@ function PrestationTab({ relations }: { relations: RelationWithUsers[] }) {
 
   const createMut = useMutation({
     mutationFn: (data: ReferentInterventionInput) =>
-      apiRequest("POST", "/api/referent/interventions", { ...data, tasks: selectedTasks }),
+      apiRequest("POST", "/api/referent/interventions", {
+        ...data,
+        // Saisie en heure de Guadeloupe, même si l'aidant est en métropole.
+        scheduledDate: gpLocalInputToUtcISO(data.scheduledDate),
+        tasks: selectedTasks,
+      }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/referent/relations"] });
       form.reset();
@@ -394,10 +409,13 @@ function PrestationTab({ relations }: { relations: RelationWithUsers[] }) {
             name="scheduledDate"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Date proposée <span className="text-destructive">*</span></FormLabel>
+                <FormLabel>Date proposée, heure de Guadeloupe <span className="text-destructive">*</span></FormLabel>
                 <FormControl>
                   <Input type="datetime-local" {...field} data-testid="input-scheduled-date" />
                 </FormControl>
+                <p className="text-xs text-muted-foreground">
+                  Si vous êtes en métropole : 5 h de moins qu'à Paris en hiver, 6 h en été.
+                </p>
                 <FormMessage />
               </FormItem>
             )}

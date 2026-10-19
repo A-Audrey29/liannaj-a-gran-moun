@@ -102,6 +102,18 @@ export function gpDateTimeToUtc(iso: string, hours: number, minutes: number): Da
   return new Date(Date.UTC(p.y, p.mo, p.d, hours, minutes) + GP_OFFSET_MS);
 }
 
+/**
+ * Valeur d'un <input type="datetime-local"> ("2026-10-20T09:00") lue comme
+ * heure de Guadeloupe, renvoyée en ISO UTC. Ne jamais passer cette valeur à
+ * new Date() : le navigateur de l'admin (métropole) la lirait en heure de Paris.
+ * Renvoie null si la valeur est incomplète.
+ */
+export function gpLocalInputToUtcISO(value: string): string | null {
+  const m = value.match(/^(\d{4}-\d{2}-\d{2})T(\d{2}):(\d{2})/);
+  if (!m) return null;
+  return gpDateTimeToUtc(m[1], +m[2], +m[3]).toISOString();
+}
+
 // ─── Formatage ──────────────────────────────────────────────────────────────
 
 /** "Lun. 8 juin" depuis un ISO de jour. */

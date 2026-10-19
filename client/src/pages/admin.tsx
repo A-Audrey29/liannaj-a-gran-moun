@@ -81,6 +81,7 @@ import { CREDIT_OFFERS } from "@shared/credit-offers";
 import MessagerieAdminTab from "@/components/admin-messages-tab";
 import SatisfactionTab from "@/components/admin-satisfaction-tab";
 import { fmtTime, fmtDayLongMonthYear, gpParts } from "@/lib/availability-format";
+import { gpLocalInputToUtcISO } from "@shared/dates";
 
 type SafeUser = Omit<User, "password" | "validationToken" | "validationExpiry">;
 type RelationWithUsers = Relation & { senior: SafeUser; junior: SafeUser };
@@ -759,9 +760,12 @@ function CadrageTab() {
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!selectedRelation || !formData.scheduledDate) return;
+    // Saisie en heure de Guadeloupe, même depuis un navigateur en métropole.
+    const scheduledDate = gpLocalInputToUtcISO(formData.scheduledDate);
+    if (!scheduledDate) return;
     createMut.mutate({
       relationId: selectedRelation.id,
-      scheduledDate: formData.scheduledDate,
+      scheduledDate,
       durationMinutes: formData.durationMinutes,
       location: formData.location || undefined,
       tasks: formData.tasks,
@@ -835,7 +839,7 @@ function CadrageTab() {
           )}
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <Label htmlFor="cadrage-date">Date et heure *</Label>
+              <Label htmlFor="cadrage-date">Date et heure en Guadeloupe *</Label>
               <Input
                 id="cadrage-date"
                 type="datetime-local"
@@ -844,6 +848,9 @@ function CadrageTab() {
                 required
                 data-testid="input-cadrage-date"
               />
+              <p className="text-xs text-muted-foreground mt-1">
+                Heure locale de la Guadeloupe (5 h de moins qu'à Paris en hiver, 6 h en été).
+              </p>
             </div>
             <div>
               <Label htmlFor="cadrage-duration">Durée (minutes)</Label>

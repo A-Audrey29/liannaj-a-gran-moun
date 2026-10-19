@@ -2006,7 +2006,7 @@ export async function registerRoutes(
 
   app.get("/api/admin/relations/pending-meeting", requireAdmin, async (_req, res) => {
     try {
-      const relations = await storage.getAllRelationsByStatus("PENDING_FIRST_MEETING");
+      const relations = await storage.getRelationsAwaitingFirstMeeting();
       res.json(relations.map((r) => ({
         ...r,
         senior: sanitizeUser(r.senior),
