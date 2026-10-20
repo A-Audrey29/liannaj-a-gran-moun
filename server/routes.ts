@@ -1300,8 +1300,8 @@ export async function registerRoutes(
       await storage.createNotification({
         user: { connect: { id: relation.juniorId } },
         type: "INTERVENTION_PROPOSED",
-        title: "Nouvelle rencontre proposée",
-        message: `Une rencontre a été proposée pour le ${fmtDayNumeric(new Date(parsed.data.scheduledDate))} à ${fmtTime(new Date(parsed.data.scheduledDate))}.`,
+        title: "Atelier demandé",
+        message: `Un atelier vous est demandé pour le ${fmtDayNumeric(new Date(parsed.data.scheduledDate))} à ${fmtTime(new Date(parsed.data.scheduledDate))}.`,
         link: `/relations/${relation.id}`,
       });
 
@@ -1312,7 +1312,7 @@ export async function registerRoutes(
         const locationStr = parsed.data.location || "Non précisé";
         sendEmail({
           to: junior.email,
-          subject: `${PLATFORM_NAME} - Nouvelle rencontre proposée pour le ${dateStr}`,
+          subject: `${PLATFORM_NAME} - Atelier demandé pour le ${dateStr}`,
           htmlContent: getInterventionProposedEmailHtml(juniorName, dateStr, locationStr, `${getBaseUrl(req)}/relations/${relation.id}`),
         }).catch(console.error);
       }
@@ -2890,8 +2890,8 @@ export async function registerRoutes(
       await storage.createNotification({
         user: { connect: { id: relation.juniorId } },
         type: "INTERVENTION_PROPOSED",
-        title: "Nouvelle rencontre proposée",
-        message: `${senderName} propose une rencontre le ${fmtDayNumeric(new Date(parsed.data.scheduledDate))} à ${fmtTime(new Date(parsed.data.scheduledDate))}.`,
+        title: "Atelier demandé",
+        message: `${senderName} demande un atelier le ${fmtDayNumeric(new Date(parsed.data.scheduledDate))} à ${fmtTime(new Date(parsed.data.scheduledDate))}.`,
         link: null,
       });
       sendSSEEvent(relation.juniorId, "invalidate", { queryKey: ["/api/relations"] });

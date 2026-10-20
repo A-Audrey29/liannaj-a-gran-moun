@@ -176,7 +176,7 @@ export function getInterventionProposedEmailHtml(
   const body = `
     <p style="margin:0 0 18px;color:#1f1f1f;font-size:15px;line-height:1.6;">Bonjour ${escapeHtml(userName)},</p>
     <p style="margin:0 0 18px;color:#1f1f1f;font-size:15px;line-height:1.6;">
-      Une nouvelle rencontre vous a &eacute;t&eacute; propos&eacute;e :
+      Un atelier vous est demand&eacute; :
     </p>
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 24px;background-color:#f8f4fc;border-radius:6px;padding:16px;">
       <tr>
@@ -193,18 +193,18 @@ export function getInterventionProposedEmailHtml(
       </tr>
     </table>
     <p style="margin:0 0 18px;color:#1f1f1f;font-size:15px;line-height:1.6;">
-      Connectez-vous pour confirmer cette rencontre. En cas d'emp&ecirc;chement, &eacute;crivez &agrave; l'&eacute;quipe depuis le bouton Aide de votre espace.
+      Connectez-vous pour confirmer cet atelier. En cas d'emp&ecirc;chement, &eacute;crivez &agrave; l'&eacute;quipe depuis le bouton Aide de votre espace.
     </p>
     <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 auto 28px;">
       <tr>
         <td align="center" style="border-radius:6px;background:linear-gradient(135deg,#e91e8c,#7c3aed);">
           <a href="${escapeHtml(relationUrl)}" target="_blank" style="display:inline-block;padding:14px 36px;color:#ffffff;font-size:15px;font-weight:600;text-decoration:none;border-radius:6px;">
-            Voir la rencontre
+            Voir l&rsquo;atelier
           </a>
         </td>
       </tr>
     </table>`;
-  return emailWrapper(`Nouvelle rencontre propos\u00e9e - ${PLATFORM_NAME}`, body);
+  return emailWrapper(`Atelier demand\u00e9 - ${PLATFORM_NAME}`, body);
 }
 
 export function getInterventionConfirmedEmailHtml(
@@ -245,7 +245,7 @@ export function getNegativeCreditBalanceEmailHtml(
     </p>
     <p style="margin:0 0 18px;color:#1f1f1f;font-size:15px;line-height:1.6;">
       Un rattrapage est n&eacute;cessaire pour continuer &agrave; organiser de nouvelles
-      rencontres. Aucune nouvelle rencontre ne pourra &ecirc;tre propos&eacute;e tant que
+      rencontres. Aucun nouvel atelier ne pourra &ecirc;tre demand&eacute; tant que
       le solde n'est pas r&eacute;gularis&eacute;.
     </p>`;
   return emailWrapper(`Solde de crédits négatif - ${PLATFORM_NAME}`, body);
