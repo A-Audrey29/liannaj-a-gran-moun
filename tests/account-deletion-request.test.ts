@@ -118,6 +118,56 @@ describe("POST /api/account/deletion-request", () => {
     }
   });
 
+  it("deux envois simultanes ne creent qu'une demande et un seul e-mail", async () => {
+    await createUser("ADMIN");
+    const senior = await createUser("SENIOR");
+    const agent = await loginAs(senior);
+
+    const reponses = await Promise.all([1, 2, 3].map(() => agent.post(URL).send({ confirmed: true })));
+    expect(reponses.filter((r) => r.status === 201)).toHaveLength(1);
+    expect(reponses.filter((r) => r.body.alreadyRequested)).toHaveLength(2);
+    expect(await demandes()).toHaveLength(1);
+    expect(sendEmail).toHaveBeenCalledTimes(1);
+  });
+
+  it("echappe le prenom dans l'e-mail envoye aux admins", async () => {
+    await createUser("ADMIN");
+    const senior = await createUser("SENIOR", { firstName: "<img src=x onerror=alert(1)>" });
+    await (await loginAs(senior)).post(URL).send({ confirmed: true });
+
+    const html = vi.mocked(sendEmail).mock.calls[0][0].htmlContent as string;
+    expect(html).not.toContain("<img src=x");
+    expect(html).toContain("&lt;img src=x");
+  });
+
+  it("un professeur peut demander aussi", async () => {
+    const prof = await createUser("TEACHER");
+    expect((await (await loginAs(prof)).post(URL).send({ confirmed: true })).status).toBe(201);
+  });
+
+  it("GET indique si une demande est en attente, par utilisateur", async () => {
+    const a = await createUser("SENIOR");
+    const b = await createUser("SENIOR");
+    const agentA = await loginAs(a);
+    expect((await agentA.get(URL)).body).toEqual({ pending: false });
+    await agentA.post(URL).send({ confirmed: true });
+    expect((await agentA.get(URL)).body).toEqual({ pending: true });
+    expect((await (await loginAs(b)).get(URL)).body).toEqual({ pending: false });
+    expect((await (await anonymousAgent()).get(URL)).status).toBe(401);
+  });
+
+  it("l'admin ne recoit jamais le hash du mot de passe dans les signalements", async () => {
+    const admin = await createUser("ADMIN");
+    const senior = await createUser("SENIOR");
+    await (await loginAs(senior)).post(URL).send({ confirmed: true });
+
+    const res = await (await loginAs(admin)).get("/api/admin/reports");
+    const brut = JSON.stringify(res.body);
+    expect(brut).not.toContain("password");
+    expect(brut).not.toContain("validationToken");
+    expect(res.body[0].reporter.email).toBe(senior.email);
+  });
+
   it("la demande apparait dans les signalements de l'admin", async () => {
     const admin = await createUser("ADMIN");
     const senior = await createUser("SENIOR");

@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest, apiErrorMessage } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
@@ -31,12 +32,16 @@ export function useOnlinePayment(): boolean | undefined {
 /** Starts a checkout for one offer and sends the buyer to the payment page. */
 export function useCheckout() {
   const { toast } = useToast();
-  return useMutation({
+  // Stays true once the payment page is on its way: the mutation itself goes
+  // back to "idle" right away, and a second click would open a second checkout.
+  const [redirecting, setRedirecting] = useState(false);
+  const mutation = useMutation({
     mutationFn: async (offerId: string) => {
       const res = await apiRequest("POST", "/api/credits/checkout", { offerId });
       return res.json() as Promise<{ url: string }>;
     },
     onSuccess: (data) => {
+      setRedirecting(true);
       window.location.href = data.url;
     },
     onError: (err) => {
@@ -48,6 +53,7 @@ export function useCheckout() {
       });
     },
   });
+  return { mutate: mutation.mutate, variables: mutation.variables, isPending: mutation.isPending || redirecting };
 }
 
 /** Dashboard entry point: one clear button to the page that explains how buying works. */

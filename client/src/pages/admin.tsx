@@ -328,7 +328,7 @@ function UsersTab() {
     <div>
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-xl font-bold">Utilisateurs</h2>
-        <Button size="sm" className="bg-primary hover:bg-[#c53a4d]" onClick={() => setCreateOpen(true)} data-testid="button-create-user">
+        <Button size="sm" className="bg-primary hover:bg-primary/90" onClick={() => setCreateOpen(true)} data-testid="button-create-user">
           <UserPlus className="w-4 h-4 mr-1" />
           Créer un utilisateur
         </Button>
@@ -786,7 +786,7 @@ function CadrageTab() {
                   the junior's slots. */}
               <Button
                 size="sm"
-                className="bg-primary hover:bg-[#c53a4d] text-white"
+                className="bg-primary hover:bg-primary/90 text-white"
                 onClick={() => setLocation(`/relations/${r.id}`)}
                 data-testid={`btn-organiser-${r.id}`}
               >
@@ -1290,7 +1290,7 @@ function PaiementsTab() {
 
       <div className="flex justify-end mb-4">
         <Button
-          className="bg-primary hover:bg-[#c53a4d] text-white"
+          className="bg-primary hover:bg-primary/90 text-white"
           onClick={() => setDialogOpen(true)}
           data-testid="btn-new-payment"
         >
@@ -1416,7 +1416,7 @@ function PaiementsTab() {
               </p>
             </div>
             <DialogFooter>
-              <Button type="submit" className="bg-primary hover:bg-[#c53a4d]" disabled={createMut.isPending} data-testid="btn-submit-payment">
+              <Button type="submit" className="bg-primary hover:bg-primary/90" disabled={createMut.isPending} data-testid="btn-submit-payment">
                 {createMut.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : null}
                 Enregistrer
               </Button>
@@ -1525,7 +1525,7 @@ function MonCompteTab() {
               data-testid="input-account-email"
             />
           </div>
-          <Button type="submit" className="bg-primary hover:bg-[#c53a4d]" disabled={profileMut.isPending} data-testid="btn-save-profile">
+          <Button type="submit" className="bg-primary hover:bg-primary/90" disabled={profileMut.isPending} data-testid="btn-save-profile">
             {profileMut.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : null}
             Enregistrer
           </Button>
@@ -1568,7 +1568,7 @@ function MonCompteTab() {
               data-testid="input-confirm-password"
             />
           </div>
-          <Button type="submit" className="bg-primary hover:bg-[#c53a4d]" disabled={passwordMut.isPending} data-testid="btn-change-password">
+          <Button type="submit" className="bg-primary hover:bg-primary/90" disabled={passwordMut.isPending} data-testid="btn-change-password">
             {passwordMut.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : null}
             Modifier le mot de passe
           </Button>
@@ -1690,7 +1690,7 @@ function CreerAdminForm() {
             data-testid="input-admin-password"
           />
         </div>
-        <Button type="submit" className="bg-primary hover:bg-[#c53a4d]" disabled={createMut.isPending} data-testid="btn-create-admin">
+        <Button type="submit" className="bg-primary hover:bg-primary/90" disabled={createMut.isPending} data-testid="btn-create-admin">
           {createMut.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : null}
           Créer le compte admin
         </Button>

@@ -2479,7 +2479,8 @@ export async function registerRoutes(
   app.get("/api/admin/reports", requireAdmin, async (_req, res) => {
     try {
       const reports = await storage.getReports();
-      res.json(reports);
+      // The users come straight from the database: never send their password hash.
+      res.json(reports.map((r) => ({ ...r, reporter: sanitizeUser(r.reporter), target: r.target ? sanitizeUser(r.target) : null })));
     } catch (err) {
       console.error("[ADMIN_REPORTS] Error:", err);
       res.status(500).json({ message: "Erreur" });
@@ -3114,6 +3115,17 @@ export async function registerRoutes(
     }
   });
 
+  // Has this user already sent a deletion request that nobody handled yet?
+  app.get("/api/account/deletion-request", requireAuth, async (req, res) => {
+    try {
+      const open = await storage.findOpenReportByReason(req.user!.id, ACCOUNT_DELETION_REASON);
+      res.json({ pending: !!open });
+    } catch (err) {
+      console.error("[ACCOUNT_DELETION] Error:", err);
+      res.status(500).json({ message: "Erreur" });
+    }
+  });
+
   // A user asks the team to delete their account. Nothing is deleted here: the
   // request lands in the admin's "Signalements" tab (and by e-mail) so a person
   // can check it and act. Unused credits are lost, hence the explicit confirmation.
@@ -3128,21 +3140,19 @@ export async function registerRoutes(
         return res.status(403).json({ message: "Un compte administrateur ne se supprime pas par cette demande." });
       }
 
-      // A second click (or a second tab) must not pile up requests.
-      const existing = await storage.findOpenReportByReason(user.id, ACCOUNT_DELETION_REASON);
-      if (existing) {
-        return res.json({ alreadyRequested: true, message: "Votre demande a déjà été envoyée à l'équipe." });
-      }
-
       // Credits belong to the senior (an aidant's request does not touch them).
       const credits = user.role === "SENIOR" ? await storage.getCreditBalance(user.id) : null;
       const creditsLine = credits !== null ? `Ateliers non utilisés : ${Math.max(credits, 0)}.` : "";
       const userName = `${user.firstName} ${user.lastName}`;
-      await storage.createReport({
+      // A second click (or a second tab) must not pile up requests.
+      const { created } = await storage.createReportOnce({
         reporterId: user.id,
         reason: ACCOUNT_DELETION_REASON,
         message: `[Demande de suppression de compte] ${userName} (${user.email}, ${user.role}). ${creditsLine}`.trim(),
       });
+      if (!created) {
+        return res.json({ alreadyRequested: true, message: "Votre demande a déjà été envoyée à l'équipe." });
+      }
 
       const adminUrl = `${getPublicBaseUrl()}/admin`;
       for (const admin of await storage.getAdmins()) {

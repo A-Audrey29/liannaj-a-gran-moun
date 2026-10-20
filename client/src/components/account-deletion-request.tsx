@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { apiRequest, apiErrorMessage } from "@/lib/queryClient";
+import { apiRequest, apiErrorMessage, queryClient } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
@@ -26,7 +26,6 @@ export function AccountDeletionRequest() {
   const { user } = useAuth();
   const { toast } = useToast();
   const [open, setOpen] = useState(false);
-  const [sent, setSent] = useState(false);
   const isSenior = user?.role === "SENIOR";
 
   // Only a senior owns workshops (credits): say how many will be lost.
@@ -34,6 +33,13 @@ export function AccountDeletionRequest() {
     queryKey: ["/api/credits/balance"],
     enabled: isSenior,
   });
+  // The server knows whether a request is still waiting: the button stays
+  // "sent" after leaving the tab or reloading.
+  const { data: state } = useQuery<{ pending: boolean }>({
+    queryKey: ["/api/account/deletion-request"],
+    enabled: !!user && user.role !== "ADMIN",
+  });
+  const sent = state?.pending === true;
   const unused = Math.max(credits?.balance ?? 0, 0);
 
   const mutation = useMutation({
@@ -42,7 +48,7 @@ export function AccountDeletionRequest() {
       return (await res.json()) as { message: string; alreadyRequested?: boolean };
     },
     onSuccess: (data) => {
-      setSent(true);
+      queryClient.setQueryData(["/api/account/deletion-request"], { pending: true });
       setOpen(false);
       toast({ title: data.alreadyRequested ? "Demande déjà envoyée" : "Demande envoyée", description: data.message });
     },

@@ -58,6 +58,6 @@ export function spaceMenuLinks(role: string | undefined): { id: string; label: s
     role === "REFERENT_SENIOR" ? [...REFERENT_TABS] : role === "SENIOR" || role === "JUNIOR" ? homeTabsFor(role) : [];
   return tabs.map((t) => ({
     ...t,
-    href: t.id === "ateliers" ? PURCHASES_PATH : t.id === "dashboard" ? base : `${base}?tab=${t.id}`,
+    href: t.id === "ateliers" ? PURCHASES_PATH : `${base}?tab=${t.id}`,
   }));
 }

@@ -14,7 +14,8 @@ describe("menu burger sur les pages sans onglets", () => {
     const links = spaceMenuLinks("SENIOR");
     expect(links.map((l) => l.id)).toEqual(homeTabsFor("SENIOR").map((t) => t.id));
     expect(links.find((l) => l.id === "ateliers")?.href).toBe(PURCHASES_PATH);
-    expect(links.find((l) => l.id === "dashboard")?.href).toBe("/mon-espace");
+    // Explicit tab: without it Home reopens the last tab used (sessionStorage).
+    expect(links.find((l) => l.id === "dashboard")?.href).toBe("/mon-espace?tab=dashboard");
     expect(links.find((l) => l.id === "messages")?.href).toBe("/mon-espace?tab=messages");
   });
 
@@ -51,7 +52,8 @@ describe("achat d'ateliers", () => {
   it("la page d'achat explique les 3 etapes et propose le paiement", () => {
     const page = read("client/src/pages/forfaits.tsx");
     for (const n of [1, 2, 3]) expect(page).toContain(`<Step n={${n}}`);
-    expect(page).toContain("useCheckout");
+    expect(page).toMatch(/const checkout = useCheckout\(\)/);
+    expect(page).toMatch(/checkout\.mutate\(offer\.id\)/);
     expect(page).toContain("Acheter en confiance");
   });
 });
@@ -73,6 +75,9 @@ describe("espace senior : divers", () => {
     expect(c).toContain('{ confirmed: true }');
     expect(c).toContain("seront perdus");
     // La requete ne part qu'apres le clic de confirmation dans la fenetre.
-    expect(c).toMatch(/AlertDialogAction[\s\S]*mutation\.mutate\(\)/);
+    expect(c).toMatch(/onClick=\{\(e\) => \{[^}]*e\.preventDefault\(\);[^}]*mutation\.mutate\(\);/);
+    // L'etat "envoyee" vient du serveur : il survit au changement d'onglet.
+    expect(c).toContain("/api/account/deletion-request");
+    expect(c).not.toMatch(/useState\(false\)[\s\S]{0,40}setSent/);
   });
 });

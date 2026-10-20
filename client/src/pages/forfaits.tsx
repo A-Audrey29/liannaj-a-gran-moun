@@ -32,7 +32,7 @@ const MAIN_RULES: Rule[] = [
   },
   {
     title: "L'atelier est annulé",
-    text: "Vous (ou l'équipe Lyannaj) pouvez annuler un atelier prévu. Son crédit vous est rendu : vous pourrez l'utiliser pour un autre atelier. Un atelier qui a déjà eu lieu ne peut plus être annulé.",
+    text: "Le senior (ou l'équipe Lyannaj) peut annuler un atelier prévu. Son crédit vous est rendu : vous pourrez l'utiliser pour un autre atelier. Un atelier qui a déjà eu lieu ne peut plus être annulé.",
   },
   {
     title: "La première rencontre est offerte",
@@ -94,7 +94,8 @@ export default function Forfaits() {
   // senior) cannot buy: no buy button and no sentence pointing to "Mes achats".
   const canBuy = !user || canBuyCredits(user);
   const online = useOnlinePayment();
-  const homePath = user?.role === "REFERENT_SENIOR" ? "/espace-referent" : "/mon-espace";
+  const homePath =
+    user?.role === "REFERENT_SENIOR" ? "/espace-referent" : user?.role === "TEACHER" ? "/espace-professeur" : user?.role === "ADMIN" ? "/admin" : "/mon-espace";
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-8 text-lg leading-relaxed text-foreground">
@@ -114,115 +115,124 @@ export default function Forfaits() {
       <p className="mb-2">Pour faire un atelier avec un jeune, vous utilisez des crédits.</p>
       <p className="mb-6 font-semibold">1 crédit = 1 atelier.</p>
 
-      <h2 className="text-2xl font-bold mb-4">Comment ça se passe ?</h2>
-      <ol className="mb-10 space-y-3" data-testid="list-etapes-achat">
-        <Step n={1} title="Vous choisissez un forfait">
-          Un seul atelier, ou un pack pour en faire plusieurs. Le prix est affiché avant tout paiement.
-        </Step>
-        <Step n={2} title="Vous payez">
-          {online === false ? (
-            <span data-testid="text-forfaits-payment">
-              Le paiement en ligne n'est pas encore ouvert. Vous écrivez à l'équipe : elle vous indique comment régler.
-            </span>
-          ) : (
-            <span data-testid="text-forfaits-payment">
-              Vous payez par carte bancaire. Vous êtes envoyé sur la page de paiement de notre prestataire : vos
-              coordonnées bancaires ne passent jamais par {PLATFORM_NAME}.
-            </span>
-          )}
-        </Step>
-        <Step n={3} title="Vos ateliers sont ajoutés">
-          Vos crédits apparaissent dans « Mes achats ». Vous pouvez ensuite proposer une rencontre à un jeune.
-        </Step>
-      </ol>
+      {canBuy && (
+        <>
+          <h2 className="text-2xl font-bold mb-4">Comment ça se passe ?</h2>
+          <ol className="mb-10 space-y-3" data-testid="list-etapes-achat">
+            <Step n={1} title="Vous choisissez un forfait">
+              Un seul atelier, ou un pack pour en faire plusieurs. Le prix est affiché avant tout paiement.
+            </Step>
+            <Step n={2} title="Vous payez">
+              {online === false ? (
+                <span data-testid="text-forfaits-payment">
+                  Le paiement en ligne n'est pas encore ouvert. Vous écrivez à l'équipe : elle vous indique comment régler.
+                </span>
+              ) : (
+                <span data-testid="text-forfaits-payment">
+                  Vous payez par carte bancaire. Vous êtes envoyé sur la page de paiement de notre prestataire : vos
+                  coordonnées bancaires ne passent jamais par {PLATFORM_NAME}.
+                </span>
+              )}
+            </Step>
+            <Step n={3} title="Vos ateliers sont ajoutés">
+              Vos crédits apparaissent dans « Mes achats ». Vous pouvez ensuite proposer une rencontre à un jeune.
+            </Step>
+          </ol>
 
-      <div className="mb-8 rounded-2xl border-2 border-[#c9a4e8] bg-[#f3eaff] p-5" data-testid="box-forfaits-aidant">
-        <p className="font-bold text-gray-900">Vous accompagnez un proche ?</p>
-        <p className="text-gray-800">
-          Vous pouvez acheter un forfait pour lui. Les crédits arrivent directement sur son compte. Vous suivez ses
-          ateliers depuis votre espace aidant.
-        </p>
-      </div>
-
-      <h2 className="text-2xl font-bold mb-4">Choisissez votre forfait</h2>
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-        {CREDIT_OFFERS.map((offer) => (
-          <div
-            key={offer.id}
-            className="rounded-2xl border-2 border-gray-300 bg-white p-6 flex flex-col gap-2"
-            data-testid={`card-forfait-${offer.id}`}
-          >
-            <p className="text-2xl font-bold text-gray-900">{offer.name}</p>
-            <p>
-              {offer.credits} atelier{offer.credits > 1 ? "s" : ""}
+          <div className="mb-8 rounded-2xl border-2 border-[#c9a4e8] bg-[#f3eaff] p-5" data-testid="box-forfaits-aidant">
+            <p className="font-bold text-gray-900">Vous accompagnez un proche ?</p>
+            <p className="text-gray-800">
+              Vous pouvez acheter un forfait pour lui. Les crédits arrivent directement sur son compte. Vous suivez ses
+              ateliers depuis votre espace aidant.
             </p>
-            <p className="text-3xl font-bold text-gray-900">{formatEuros(offer.priceEuros)} €</p>
-            {offer.credits > 1 && (
-              <p className="text-gray-700">soit {formatEuros(offer.priceEuros / offer.credits)} € l'atelier</p>
-            )}
-            {canBuy && !user && (
-              <Button
-                className="mt-auto h-14 text-lg"
-                onClick={() => setLocation("/login")}
-                data-testid={`button-forfait-${offer.id}`}
-              >
-                Me connecter pour acheter
-              </Button>
-            )}
-            {canBuy && user && online === true && (
-              <Button
-                className="mt-auto h-14 text-lg"
-                disabled={checkout.isPending}
-                onClick={() => checkout.mutate(offer.id)}
-                data-testid={`button-forfait-${offer.id}`}
-              >
-                {checkout.isPending && checkout.variables === offer.id ? "Redirection…" : "Acheter"}
-              </Button>
-            )}
-            {canBuy && user && online === false && (
-              <a
-                href={teamContactHref(user.role)}
-                className="mt-auto inline-flex h-14 items-center justify-center rounded-md border-2 border-primary px-4 text-lg font-semibold text-primary hover:bg-primary hover:text-white"
-                data-testid={`button-forfait-${offer.id}`}
-              >
-                Demander à l'équipe
-              </a>
-            )}
           </div>
-        ))}
-      </div>
+
+          <h2 className="text-2xl font-bold mb-4">Choisissez votre forfait</h2>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+            {CREDIT_OFFERS.map((offer) => (
+              <div
+                key={offer.id}
+                className="rounded-2xl border-2 border-gray-300 bg-white p-6 flex flex-col gap-2"
+                data-testid={`card-forfait-${offer.id}`}
+              >
+                <p className="text-2xl font-bold text-gray-900">{offer.name}</p>
+                <p>
+                  {offer.credits} atelier{offer.credits > 1 ? "s" : ""}
+                </p>
+                <p className="text-3xl font-bold text-gray-900">{formatEuros(offer.priceEuros)} €</p>
+                {offer.credits > 1 && (
+                  <p className="text-gray-700">soit {formatEuros(offer.priceEuros / offer.credits)} € l'atelier</p>
+                )}
+                {canBuy && !user && (
+                  <Button
+                    className="mt-auto h-14 text-lg"
+                    onClick={() => setLocation("/login")}
+                    data-testid={`button-forfait-${offer.id}`}
+                  >
+                    Me connecter pour acheter
+                  </Button>
+                )}
+                {canBuy && user && online === true && (
+                  <Button
+                    className="mt-auto h-14 text-lg"
+                    disabled={checkout.isPending}
+                    onClick={() => checkout.mutate(offer.id)}
+                    data-testid={`button-forfait-${offer.id}`}
+                  >
+                    {checkout.isPending && checkout.variables === offer.id ? "Redirection…" : "Acheter"}
+                  </Button>
+                )}
+                {canBuy && user && online === false && (
+                  <a
+                    href={teamContactHref(user.role)}
+                    className="mt-auto inline-flex h-14 items-center justify-center rounded-md border-2 border-primary px-4 text-lg font-semibold text-primary hover:bg-primary hover:text-white"
+                    data-testid={`button-forfait-${offer.id}`}
+                  >
+                    Demander à l'équipe
+                  </a>
+                )}
+              </div>
+            ))}
+          </div>
+        </>
+      )}
       {!canBuy && (
         <p className="mb-10 font-semibold" data-testid="text-forfaits-not-buyer">
           Seuls les seniors et les référents liés à un senior achètent des forfaits.
         </p>
       )}
-      {canBuy && user && online === false && (
-        <p className="mb-10 rounded-2xl bg-[#f3eaff] p-4" data-testid="text-buy-via-team">
-          Le paiement en ligne n'est pas encore ouvert. Cliquez sur « Demander à l'équipe » : elle vous indique comment
-          régler et ajoute vos ateliers à votre compte.
-        </p>
-      )}
-      {canBuy && user && online !== false && <div className="mb-10" />}
+      {canBuy && (
+        <>
+          {canBuy && user && online === false && (
+            <p className="mb-10 rounded-2xl bg-[#f3eaff] p-4" data-testid="text-buy-via-team">
+              Le paiement en ligne n'est pas encore ouvert. Cliquez sur « Demander à l'équipe » : elle vous indique comment
+              régler et ajoute vos ateliers à votre compte.
+            </p>
+          )}
+          {canBuy && user && online !== false && <div className="mb-10" />}
 
-      <h2 className="mb-4 flex items-center gap-2 text-2xl font-bold">
-        <ShieldCheck className="h-6 w-6 text-[#6d28d9]" aria-hidden="true" /> Acheter en confiance
-      </h2>
-      <ul className="mb-10 list-disc space-y-2 pl-6" data-testid="list-confiance-achat">
-        <li>Sans abonnement : vous achetez seulement ce dont vous avez besoin.</li>
-        <li>Le prix de chaque forfait est affiché avant de payer.</li>
-        <li>La première rencontre avec chaque nouveau jeune est offerte (30 minutes ou moins).</li>
-        <li>Un atelier annulé vous rend son crédit.</li>
-        <li>
-          {PLATFORM_NAME} est portée par l'association {ORGANIZATION_NAME} et financée par la CGRR Agirc-Arrco.
-        </li>
-        <li>
-          Les détails sont dans les{" "}
-          <Link href="/cgv" className="font-semibold text-primary underline" data-testid="link-forfaits-cgv">
-            conditions de vente
-          </Link>
-          .
-        </li>
-      </ul>
+          <h2 className="mb-4 flex items-center gap-2 text-2xl font-bold">
+            <ShieldCheck className="h-6 w-6 text-[#6d28d9]" aria-hidden="true" /> Acheter en confiance
+          </h2>
+          <ul className="mb-10 list-disc space-y-2 pl-6" data-testid="list-confiance-achat">
+            <li>Sans abonnement : vous achetez seulement ce dont vous avez besoin.</li>
+            <li>Le prix de chaque forfait est affiché avant de payer.</li>
+            <li>La première rencontre avec chaque nouveau jeune est offerte (30 minutes ou moins).</li>
+            <li>Un atelier annulé vous rend son crédit.</li>
+            <li>
+              {PLATFORM_NAME} est portée par l'association {ORGANIZATION_NAME} et financée par la CGRR Agirc-Arrco.
+            </li>
+            <li>
+              Les détails sont dans les{" "}
+              <Link href="/cgv" className="font-semibold text-primary underline" data-testid="link-forfaits-cgv">
+                conditions de vente
+              </Link>
+              .
+            </li>
+          </ul>
+
+        </>
+      )}
 
       <h2 className="text-2xl font-bold mb-4">Comment vos crédits sont utilisés</h2>
       <div className="mb-4">
