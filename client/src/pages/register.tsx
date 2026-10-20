@@ -146,10 +146,10 @@ export default function Register() {
   }
 
   return (
-    <div className="min-h-screen bg-background flex items-start justify-center py-8 px-4">
+    <div className="min-h-[70dvh] bg-background flex items-start justify-center py-8 px-4">
       <Card className="w-full max-w-2xl">
         <CardHeader className="text-center">
-          <CardTitle className="text-2xl" data-testid="text-register-title">
+          <CardTitle as="h1" className="text-2xl" data-testid="text-register-title">
             Inscription {PLATFORM_NAME}
           </CardTitle>
           <CardDescription data-testid="text-register-description">
@@ -161,9 +161,9 @@ export default function Register() {
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
 
               <div className="space-y-3">
-                <h3 className="text-base font-semibold" data-testid="text-section-role">
+                <h2 className="text-base font-semibold" data-testid="text-section-role">
                   Je suis...
-                </h3>
+                </h2>
                 <FormField
                   control={form.control}
                   name="role"
@@ -211,7 +211,7 @@ export default function Register() {
 
               {aidantView && (
                 <div className="rounded-2xl border-2 border-[#c9a4e8] bg-[#f3eaff] p-5 space-y-4 text-base" data-testid="panel-aidant">
-                  <h3 className="text-xl font-bold">Vous accompagnez un proche senior ?</h3>
+                  <h2 className="text-xl font-bold">Vous accompagnez un proche senior ?</h2>
                   <p>Votre espace aidant vous permet de suivre ses rencontres, de demander un atelier pour lui ou elle, de payer ses forfaits et d'écrire à l'équipe.</p>
                   <p className="font-semibold">Comment l'ouvrir, en 3 étapes :</p>
                   <ol className="list-decimal pl-5 space-y-2">
@@ -255,9 +255,9 @@ export default function Register() {
               )}
 
               <div className="space-y-4">
-                <h3 className="text-base font-semibold" data-testid="text-section-identity">
+                <h2 className="text-base font-semibold" data-testid="text-section-identity">
                   Identité
-                </h3>
+                </h2>
                 <div className="grid grid-cols-2 gap-3">
                   <FormField
                     control={form.control}
@@ -358,9 +358,9 @@ export default function Register() {
               </div>
 
               <div className="space-y-4">
-                <h3 className="text-base font-semibold" data-testid="text-section-address">
+                <h2 className="text-base font-semibold" data-testid="text-section-address">
                   Adresse
-                </h3>
+                </h2>
                 <FormField
                   control={form.control}
                   name="address"
@@ -405,9 +405,9 @@ export default function Register() {
               </div>
 
               <div className="space-y-4">
-                <h3 className="text-base font-semibold" data-testid="text-section-profile">
+                <h2 className="text-base font-semibold" data-testid="text-section-profile">
                   Profil
-                </h3>
+                </h2>
                 <FormField
                   control={form.control}
                   name="bio"
@@ -429,9 +429,9 @@ export default function Register() {
               </div>
 
               <div className="space-y-4">
-                <h3 className="text-base font-semibold" data-testid="text-section-photo">
+                <h2 className="text-base font-semibold" data-testid="text-section-photo">
                   Photo de profil
-                </h3>
+                </h2>
                 <PhotoUploadField
                   photoPreview={photoPreview}
                   onSelect={handlePhotoSelect}
@@ -440,9 +440,9 @@ export default function Register() {
               </div>
 
               <div className="space-y-4">
-                <h3 className="text-base font-semibold" data-testid="text-section-categories">
+                <h2 className="text-base font-semibold" data-testid="text-section-categories">
                   {role === "JUNIOR" ? "Je peux animer les ateliers suivants :" : "Les ateliers qui m'intéressent :"}
-                </h3>
+                </h2>
                 {categoriesQuery.isLoading ? (
                   <div className="flex items-center gap-2 text-muted-foreground text-sm">
                     <Loader2 className="w-4 h-4 animate-spin" />
@@ -458,6 +458,7 @@ export default function Register() {
                           {(categoriesQuery.data ?? []).map((cat) => (
                             <div key={cat.id} className="flex items-start gap-2">
                               <Checkbox
+                                id={`category-${cat.id}`}
                                 className="mt-0.5"
                                 checked={field.value?.includes(cat.id) ?? false}
                                 onCheckedChange={(checked) => {
@@ -470,7 +471,7 @@ export default function Register() {
                                 }}
                                 data-testid={`checkbox-category-${cat.id}`}
                               />
-                              <label className="text-sm" data-testid={`text-category-${cat.id}`}>
+                              <label htmlFor={`category-${cat.id}`} className="text-sm cursor-pointer" data-testid={`text-category-${cat.id}`}>
                                 {cat.name}
                               </label>
                             </div>
@@ -485,9 +486,9 @@ export default function Register() {
 
               {role === "SENIOR" && (
                 <div className="space-y-4">
-                  <h3 className="text-base font-semibold" data-testid="text-section-senior">
+                  <h2 className="text-base font-semibold" data-testid="text-section-senior">
                     Personne de confiance (aidant)
-                  </h3>
+                  </h2>
                   <div className="grid grid-cols-2 gap-3">
                     <FormField
                       control={form.control}
@@ -543,9 +544,9 @@ export default function Register() {
 
               {role === "JUNIOR" && (
                 <div className="space-y-4">
-                  <h3 className="text-base font-semibold" data-testid="text-section-junior">
+                  <h2 className="text-base font-semibold" data-testid="text-section-junior">
                     Référent scolaire
-                  </h3>
+                  </h2>
                   <FormField
                     control={form.control}
                     name="schoolName"
@@ -688,7 +689,7 @@ function PhotoUploadField({
       <div className="relative w-32 h-32 mx-auto">
         <img
           src={photoPreview}
-          alt="Aperçu"
+          alt="Aperçu de la photo choisie"
           className="w-32 h-32 rounded-full object-cover border-2 border-border"
           data-testid="img-photo-preview"
         />
@@ -710,7 +711,7 @@ function PhotoUploadField({
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       className={`border-2 border-dashed rounded-xl p-6 text-center transition-colors ${
-        isDragging ? "border-[#dc4256] bg-red-50" : "border-border"
+        isDragging ? "border-[#c0354a] bg-red-50" : "border-border"
       }`}
       data-testid="dropzone-photo"
     >

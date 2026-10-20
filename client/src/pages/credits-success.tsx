@@ -58,14 +58,14 @@ export default function CreditsSuccess() {
           {isLoading || !balance ? (
             <Loader2 className="w-6 h-6 animate-spin mx-auto mb-8" />
           ) : (
-            <p className="text-3xl font-bold text-[#dc4256] mb-8" data-testid="text-new-balance">
+            <p className="text-3xl font-bold text-[#c0354a] mb-8" data-testid="text-new-balance">
               {balance.available} atelier{balance.available > 1 ? "s" : ""} disponible{balance.available > 1 ? "s" : ""}
             </p>
           )}
         </>
       ) : waiting ? (
         <>
-          <Loader2 className="w-12 h-12 animate-spin text-[#dc4256] mx-auto mb-4" />
+          <Loader2 className="w-12 h-12 animate-spin text-[#c0354a] mx-auto mb-4" />
           <h1 className="text-2xl font-bold mb-2">Paiement reçu</h1>
           <p className="text-muted-foreground mb-8" data-testid="text-crediting">
             Vos crédits sont en cours d'ajout, cela ne prend que quelques secondes…

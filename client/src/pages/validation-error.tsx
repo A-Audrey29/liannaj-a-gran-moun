@@ -38,7 +38,7 @@ export default function ValidationError() {
   const isExpired = reason === "expired";
 
   return (
-    <div className="flex items-center justify-center min-h-screen p-4">
+    <div className="flex items-center justify-center min-h-[70dvh] p-4">
       <Card className="w-full max-w-md text-center">
         <CardHeader>
           <div className="flex justify-center mb-4">
@@ -50,7 +50,7 @@ export default function ValidationError() {
               )}
             </div>
           </div>
-          <CardTitle data-testid="text-validation-error-title">
+          <CardTitle as="h1" data-testid="text-validation-error-title">
             {isExpired ? "Lien expiré" : "Lien invalide"}
           </CardTitle>
         </CardHeader>

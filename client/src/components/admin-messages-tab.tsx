@@ -118,18 +118,18 @@ function ConversationsList({ onSelect }: { onSelect: (conv: AdminConversation) =
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-1">
                     <span className="font-semibold text-sm">{senior.firstName} {senior.lastName}</span>
-                    <Badge className="bg-blue-100 text-blue-800 text-[10px] px-1.5 py-0">Senior</Badge>
+                    <Badge className="bg-blue-100 text-blue-800 text-xs px-1.5 py-0">Senior</Badge>
                     <span className="text-muted-foreground text-xs">↔</span>
                     <span className="font-semibold text-sm">{junior.firstName} {junior.lastName}</span>
-                    <Badge className="bg-teal-100 text-teal-800 text-[10px] px-1.5 py-0">Jeune</Badge>
+                    <Badge className="bg-teal-100 text-teal-800 text-xs px-1.5 py-0">Jeune</Badge>
                   </div>
                   <div className="flex items-center justify-between">
                     <p className="text-xs text-muted-foreground truncate">
                       {lastMsg ? lastMsg.content.substring(0, 80) : "Aucun message"}
                     </p>
                     <div className="flex items-center gap-2 shrink-0 ml-2">
-                      <Badge variant="outline" className="text-[10px]">{conv._count.messages} msg</Badge>
-                      {lastMsg && <span className="text-[10px] text-muted-foreground">{formatShort(lastMsg.createdAt)}</span>}
+                      <Badge variant="outline" className="text-xs">{conv._count.messages} msg</Badge>
+                      {lastMsg && <span className="text-xs text-muted-foreground">{formatShort(lastMsg.createdAt)}</span>}
                     </div>
                   </div>
                 </div>
@@ -202,11 +202,11 @@ function ConversationDetail({ conversation, onBack }: { conversation: AdminConve
                       <span className={`text-sm font-semibold ${senderColor}`}>
                         {msg.sender.firstName} {msg.sender.lastName}
                       </span>
-                      <Badge className={`text-[10px] px-1.5 py-0 ${isSenior ? "bg-blue-100 text-blue-800" : "bg-teal-100 text-teal-800"}`}>
+                      <Badge className={`text-xs px-1.5 py-0 ${isSenior ? "bg-blue-100 text-blue-800" : "bg-teal-100 text-teal-800"}`}>
                         {senderLabel}
                       </Badge>
-                      <span className="text-[11px] text-muted-foreground">{formatDate(msg.createdAt)}</span>
-                      <Badge className={`text-[10px] px-1.5 py-0 ${msg.isRead ? "bg-green-100 text-green-700" : "bg-orange-100 text-orange-700"}`}>
+                      <span className="text-xs text-muted-foreground">{formatDate(msg.createdAt)}</span>
+                      <Badge className={`text-xs px-1.5 py-0 ${msg.isRead ? "bg-green-100 text-green-700" : "bg-orange-100 text-orange-700"}`}>
                         {msg.isRead ? "Lu" : "Non lu"}
                       </Badge>
                     </div>
@@ -214,7 +214,7 @@ function ConversationDetail({ conversation, onBack }: { conversation: AdminConve
                       <div className="flex items-center gap-2">
                         <AlertTriangle className="w-3.5 h-3.5 text-red-400" />
                         <p className="text-sm text-red-400 line-through italic">{msg.content}</p>
-                        <Badge className="bg-red-100 text-red-700 text-[10px] px-1.5 py-0">Supprimé par admin</Badge>
+                        <Badge className="bg-red-100 text-red-700 text-xs px-1.5 py-0">Supprimé par admin</Badge>
                       </div>
                     ) : (
                       <p className="text-sm whitespace-pre-wrap break-words">{msg.content}</p>

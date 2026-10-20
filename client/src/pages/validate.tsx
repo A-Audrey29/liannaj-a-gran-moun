@@ -111,7 +111,7 @@ export default function Validate() {
       return <Redirect to={`/validation-error?reason=${status === 410 ? "expired" : "invalid"}`} />;
     }
     return (
-      <div className="flex flex-col items-center justify-center min-h-screen p-4 gap-4 text-center text-lg">
+      <div className="flex flex-col items-center justify-center min-h-[70dvh] p-4 gap-4 text-center text-lg">
         <p data-testid="text-validate-retry">Un problème temporaire empêche d'afficher cette page.</p>
         <Button onClick={() => infoQuery.refetch()} className="h-12 px-6 text-lg" data-testid="button-validate-retry">
           Réessayer
@@ -122,7 +122,7 @@ export default function Validate() {
 
   if (infoQuery.isLoading || !infoQuery.data) {
     return (
-      <div className="flex items-center justify-center min-h-screen p-4">
+      <div className="flex items-center justify-center min-h-[70dvh] p-4">
         <RefreshCw className="h-6 w-6 animate-spin text-muted-foreground" />
       </div>
     );
@@ -134,7 +134,7 @@ export default function Validate() {
   // Junior (validated by a teacher): a single confirmation button.
   if (!isSenior) {
     return (
-      <div className="flex items-center justify-center min-h-screen p-4">
+      <div className="flex items-center justify-center min-h-[70dvh] p-4">
         <Card className="w-full max-w-md text-center">
           <CardHeader>
             <div className="flex justify-center mb-4">
@@ -142,7 +142,7 @@ export default function Validate() {
                 <ShieldCheck className="h-8 w-8 text-primary" />
               </div>
             </div>
-            <CardTitle data-testid="text-validate-title">Valider l'inscription de {info.firstName}</CardTitle>
+            <CardTitle as="h1" data-testid="text-validate-title">Valider l'inscription de {info.firstName}</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             <p className="text-muted-foreground" data-testid="text-validate-message">
@@ -178,10 +178,10 @@ export default function Validate() {
         )}
 
         {info.canCreateAidant ? (
-          <Card className="border-2 border-[#dc4256]/50" data-testid="card-validate-aidant">
+          <Card className="border-2 border-[#c0354a]/50" data-testid="card-validate-aidant">
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-xl">
-                <Heart className="h-6 w-6 text-[#dc4256]" />
+                <Heart className="h-6 w-6 text-[#c0354a]" />
                 Valider et créer mon espace aidant
               </CardTitle>
             </CardHeader>
@@ -257,7 +257,7 @@ export default function Validate() {
                   <Button
                     type="submit"
                     disabled={pending}
-                    className="w-full h-14 text-lg bg-[#dc4256] hover:bg-[#c73848] text-white"
+                    className="w-full h-14 text-lg bg-[#c0354a] hover:bg-[#a82b3d] text-white"
                     data-testid="button-confirm-validation-aidant"
                   >
                     {pending ? <RefreshCw className="h-4 w-4 animate-spin" /> : null}

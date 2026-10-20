@@ -33,7 +33,7 @@ export default function ForgotPasswordPage() {
   const tooManyRequests = mutation.error?.message.startsWith("429");
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4">
+    <div className="min-h-[70dvh] flex items-center justify-center p-4">
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
           <div className="mx-auto mb-4 flex items-center justify-center w-12 h-12 rounded-md bg-primary/10">
@@ -43,7 +43,7 @@ export default function ForgotPasswordPage() {
               <KeyRound className="w-6 h-6 text-primary" />
             )}
           </div>
-          <CardTitle data-testid="text-forgot-title">Mot de passe oublié</CardTitle>
+          <CardTitle as="h1" data-testid="text-forgot-title">Mot de passe oublié</CardTitle>
           <CardDescription>
             {mutation.isSuccess
               ? "Vérifiez votre boîte e-mail."
@@ -68,9 +68,9 @@ export default function ForgotPasswordPage() {
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Email</FormLabel>
-                      <FormControl>
-                        <div className="relative">
-                          <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                      <div className="relative">
+                        <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                        <FormControl>
                           <Input
                             data-testid="input-email"
                             type="email"
@@ -79,8 +79,8 @@ export default function ForgotPasswordPage() {
                             className="pl-10"
                             {...field}
                           />
-                        </div>
-                      </FormControl>
+                        </FormControl>
+                      </div>
                       <FormMessage />
                     </FormItem>
                   )}

@@ -12,7 +12,7 @@ export function MobileTabsMenu({
   activeTab,
   onSelect,
   getBadgeCount,
-  accentClassName = "bg-[#dc4256] text-white",
+  accentClassName = "bg-[#c0354a] text-white",
 }: {
   tabs: readonly MobileTabItem[];
   activeTab: string;

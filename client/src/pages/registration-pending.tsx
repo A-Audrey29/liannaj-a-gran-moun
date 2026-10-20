@@ -9,7 +9,7 @@ export default function RegistrationPending() {
   const emailFailed = new URLSearchParams(useSearch()).get("email") === "echec";
 
   return (
-    <div className="flex items-center justify-center min-h-screen p-4">
+    <div className="flex items-center justify-center min-h-[70dvh] p-4">
       <Card className="w-full max-w-md text-center">
         <CardHeader>
           <div className="flex justify-center mb-4">
@@ -17,7 +17,7 @@ export default function RegistrationPending() {
               <Mail className="h-8 w-8 text-primary" />
             </div>
           </div>
-          <CardTitle data-testid="text-pending-title">Inscription en cours</CardTitle>
+          <CardTitle as="h1" data-testid="text-pending-title">Inscription en cours</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <p className="text-muted-foreground" data-testid="text-pending-message">

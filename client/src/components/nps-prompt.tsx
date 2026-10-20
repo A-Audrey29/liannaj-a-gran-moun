@@ -98,7 +98,7 @@ export function NpsPrompt({ className }: { className?: string }) {
     <>
       <Card className={`border-[#e8d7fe] bg-[#f3eaff] ${className ?? ""}`} data-testid="card-nps-prompt">
         <CardContent className="p-4 flex flex-col sm:flex-row sm:items-center gap-3">
-          <Heart className="w-6 h-6 text-[#8b5cf6] shrink-0" aria-hidden="true" />
+          <Heart className="w-6 h-6 text-[#6d28d9] shrink-0" aria-hidden="true" />
           <div className="flex-1">
             <p className="font-semibold">Votre avis nous aide à progresser</p>
             <p className="text-sm text-muted-foreground">Deux petites questions, moins de deux minutes.</p>
@@ -106,7 +106,7 @@ export function NpsPrompt({ className }: { className?: string }) {
           <div className="flex gap-2">
             <Button
               onClick={() => setOpen(true)}
-              className="rounded-full bg-[#dc4256] hover:bg-[#c73848] text-white"
+              className="rounded-full bg-[#c0354a] hover:bg-[#a82b3d] text-white"
               data-testid="button-nps-open"
             >
               Donner mon avis
@@ -152,7 +152,7 @@ export function NpsPrompt({ className }: { className?: string }) {
                     key={value}
                     value={String(value)}
                     aria-label={`${value} sur ${NPS_MAX_SCORE}`}
-                    className="h-12 w-full text-base font-semibold data-[state=on]:bg-[#dc4256] data-[state=on]:text-white"
+                    className="h-12 w-full text-base font-semibold data-[state=on]:bg-[#c0354a] data-[state=on]:text-white"
                     data-testid={`button-nps-score-${value}`}
                   >
                     {value}
@@ -165,10 +165,11 @@ export function NpsPrompt({ className }: { className?: string }) {
               </div>
             </div>
             <div>
-              <Label className="mb-2 block text-base">
+              <Label htmlFor="nps-reason" className="mb-2 block text-base">
                 Pouvez-vous nous expliquer pourquoi vous avez attribué cette note ? (facultatif)
               </Label>
               <Textarea
+                id="nps-reason"
                 value={reason}
                 onChange={(e) => setReason(e.target.value)}
                 maxLength={1000}
@@ -181,7 +182,7 @@ export function NpsPrompt({ className }: { className?: string }) {
             <Button
               onClick={() => submit.mutate()}
               disabled={submit.isPending || score === null}
-              className="bg-[#dc4256] hover:bg-[#c73848] text-white"
+              className="bg-[#c0354a] hover:bg-[#a82b3d] text-white"
               data-testid="button-nps-submit"
             >
               {submit.isPending ? "Envoi..." : "Envoyer"}

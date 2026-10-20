@@ -1,4 +1,5 @@
 import { useAuth } from "@/hooks/use-auth";
+import { UserAvatar } from "@/components/user-avatar";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, apiErrorCode, apiErrorMessage, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -18,7 +19,6 @@ import StatusBadge from "@/components/status-badge";
 import StarRating from "@/components/star-rating";
 import { ArrowLeft, Calendar, Clock, MapPin, Check, X, Mail, CheckCheck } from "lucide-react";
 import { useState, useEffect } from "react";
-import { getPhotoUrl } from "@/lib/photo-url";
 import type { Relation, User as UserType, Intervention } from "@shared/schema";
 import AvailabilityWeekPicker, { type FreeSlot } from "@/components/availability-week-picker";
 import { fmtTime, fmtTimeRange, fmtDayLong, fmtDayShort } from "@/lib/availability-format";
@@ -28,20 +28,13 @@ import { insufficientCreditsNotice, FREE_FIRST_MEETING_MAX_MINUTES } from "@shar
 type RelationDetail = Relation & { senior: UserType; junior: UserType; interventions: Intervention[] };
 
 function ParticipantCard({ user: u, label }: { user: UserType; label: string }) {
-  const photoSrc = getPhotoUrl(u.profilePhoto);
   return (
     <div className="flex items-start gap-3 bg-muted/40 rounded-xl p-4 border">
       <div className="shrink-0">
-        {photoSrc ? (
-          <img src={photoSrc} alt={u.firstName} className="w-14 h-14 rounded-full object-cover" />
-        ) : (
-          <div className="w-14 h-14 rounded-full bg-[#e8d7fe] flex items-center justify-center text-lg font-bold text-[#8b5cf6]">
-            {u.firstName[0]}{u.lastName[0]}
-          </div>
-        )}
+        <UserAvatar photo={u.profilePhoto} firstName={u.firstName} lastName={u.lastName} className="w-14 h-14" fallbackClassName="text-lg" decorative />
       </div>
       <div className="min-w-0">
-        <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-0.5">{label}</div>
+        <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-0.5">{label}</div>
         <div className="font-semibold text-sm">{u.firstName} {u.lastName}</div>
         {u.city && <div className="text-xs text-muted-foreground">{u.city}</div>}
         {u.bio && <p className="text-xs text-muted-foreground mt-1 line-clamp-3">{u.bio}</p>}
@@ -175,7 +168,7 @@ export default function RelationDetail() {
         <Card className="rounded-2xl border-0 shadow-sm mb-6">
           <CardContent className="py-6">
             <div className="flex items-center gap-4 mb-4">
-              <div className="w-14 h-14 rounded-full bg-[#e8d7fe] flex items-center justify-center text-lg font-bold text-[#8b5cf6]">
+              <div className="w-14 h-14 rounded-full bg-[#e8d7fe] flex items-center justify-center text-lg font-bold text-[#6d28d9]">
                 {partner.firstName[0]}{partner.lastName[0]}
               </div>
               <div>
@@ -193,7 +186,7 @@ export default function RelationDetail() {
             </div>
             {relation.status === "ACTIVE" && (isSenior || isJunior) && (
               <Button
-                className="mt-4 rounded-full bg-[#dc4256] hover:bg-[#c73848] text-white"
+                className="mt-4 rounded-full bg-[#c0354a] hover:bg-[#a82b3d] text-white"
                 onClick={() => setLocation(`/mon-espace?tab=messages&relation=${relation.id}`)}
                 data-testid="button-send-message-detail"
               >
@@ -274,7 +267,7 @@ export default function RelationDetail() {
               </AlertDialogHeader>
               <AlertDialogFooter>
                 <AlertDialogCancel>Annuler</AlertDialogCancel>
-                <AlertDialogAction onClick={() => closeMutation.mutate()} className="bg-[#dc4256] hover:bg-[#c73848]">Confirmer</AlertDialogAction>
+                <AlertDialogAction onClick={() => closeMutation.mutate()} className="bg-[#c0354a] hover:bg-[#a82b3d]">Confirmer</AlertDialogAction>
               </AlertDialogFooter>
             </AlertDialogContent>
           </AlertDialog>
@@ -318,8 +311,8 @@ function InterventionCard({ intervention, relation, user }: { intervention: Inte
   return (
     <Card className="rounded-2xl border-0 shadow-sm" data-testid={`card-intervention-${intervention.id}`}>
       <CardContent className="py-4">
-        <div className="flex items-start justify-between mb-3">
-          <div className="flex items-center gap-4 text-sm">
+        <div className="flex items-start justify-between gap-2 mb-3">
+          <div className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-1 text-sm">
             <div className="flex items-center gap-1.5 text-muted-foreground">
               <Calendar className="w-4 h-4" />
               {fmtDayShort(new Date(intervention.scheduledDate))}
@@ -341,7 +334,7 @@ function InterventionCard({ intervention, relation, user }: { intervention: Inte
         {intervention.tasks.length > 0 && (
           <div className="flex gap-1 flex-wrap mb-3">
             {intervention.tasks.map((t, i) => (
-              <Badge key={i} variant="outline" className="text-[10px] bg-[#f3eaff] px-1.5 py-0">{t}</Badge>
+              <Badge key={i} variant="outline" className="text-xs bg-[#f3eaff] px-1.5 py-0">{t}</Badge>
             ))}
           </div>
         )}
@@ -366,7 +359,7 @@ function InterventionCard({ intervention, relation, user }: { intervention: Inte
         */}
         {intervention.status === "COMPLETED" && (hasSeniorFeedback || hasJuniorFeedback) && (
           <div className="mt-3 space-y-2 pt-3 border-t border-border/50">
-            <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
               {isSenior || isJunior ? "Votre feedback" : "Feedbacks"}
             </p>
             {hasSeniorFeedback && (
@@ -598,7 +591,7 @@ function NewInterventionDialog({
                       onClick={() => toggleTask(task)}
                       className={`px-3 py-1.5 rounded-full text-sm border transition-colors ${
                         selected
-                          ? "bg-[#dc4256] text-white border-[#dc4256]"
+                          ? "bg-[#c0354a] text-white border-[#c0354a]"
                           : "bg-white text-muted-foreground border-border hover:bg-muted"
                       }`}
                       data-testid={`task-${task}`}
@@ -615,7 +608,7 @@ function NewInterventionDialog({
           <Button
             onClick={() => createMutation.mutate()}
             disabled={createMutation.isPending || tooLong || tooShort}
-            className="bg-[#dc4256] hover:bg-[#c73848] text-white"
+            className="bg-[#c0354a] hover:bg-[#a82b3d] text-white"
             data-testid="button-submit-intervention"
           >
             {createMutation.isPending ? "Envoi..." : "Proposer"}
@@ -648,7 +641,7 @@ function FeedbackDialog({ interventionId, relationId }: { interventionId: string
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button size="sm" className="rounded-full bg-orange-500 hover:bg-orange-600 text-white text-xs mt-2" data-testid={`button-feedback-${interventionId}`}>
+        <Button size="sm" className="rounded-full bg-orange-700 hover:bg-orange-800 text-white text-xs mt-2" data-testid={`button-feedback-${interventionId}`}>
           Donner mon feedback
         </Button>
       </DialogTrigger>
@@ -667,7 +660,7 @@ function FeedbackDialog({ interventionId, relationId }: { interventionId: string
           </div>
         </div>
         <DialogFooter>
-          <Button onClick={() => feedbackMutation.mutate()} disabled={feedbackMutation.isPending || rating === 0} className="bg-[#dc4256] hover:bg-[#c73848] text-white" data-testid="button-submit-feedback">
+          <Button onClick={() => feedbackMutation.mutate()} disabled={feedbackMutation.isPending || rating === 0} className="bg-[#c0354a] hover:bg-[#a82b3d] text-white" data-testid="button-submit-feedback">
             {feedbackMutation.isPending ? "Envoi..." : "Envoyer"}
           </Button>
         </DialogFooter>

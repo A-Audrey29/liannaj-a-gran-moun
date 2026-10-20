@@ -124,13 +124,13 @@ function DashboardTab({ senior, relations }: { senior: UserType | null; relation
                   className="text-right hover:opacity-80"
                   data-testid="button-open-ateliers"
                 >
-                  <p className="text-2xl font-bold text-[#dc4256]" data-testid="text-credit-balance">
+                  <p className="text-2xl font-bold text-[#c0354a]" data-testid="text-credit-balance">
                     {Math.max(creditData.available, 0)}
                   </p>
                   <p className="text-xs text-muted-foreground">
                     atelier{creditData.available > 1 ? "s" : ""} disponible{creditData.available > 1 ? "s" : ""}
                   </p>
-                  <p className="text-xs text-[#dc4256] underline">Voir le détail</p>
+                  <p className="text-xs text-[#c0354a] underline">Voir le détail</p>
                 </button>
               )}
             </div>
@@ -148,7 +148,7 @@ function DashboardTab({ senior, relations }: { senior: UserType | null; relation
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
         <Card>
           <CardContent className="pt-5">
-            <p className="text-3xl font-bold text-green-600">{activeRelations.length}</p>
+            <p className="text-3xl font-bold text-green-700">{activeRelations.length}</p>
             <p className="text-sm text-muted-foreground mt-1">Relation{activeRelations.length > 1 ? "s" : ""} active{activeRelations.length > 1 ? "s" : ""}</p>
           </CardContent>
         </Card>
@@ -252,7 +252,7 @@ function SuiviTab({ relations }: { relations: RelationWithUsers[] }) {
                   {r.status === "ACTIVE" && (
                     <Button
                       size="sm"
-                      className="w-full rounded-full text-xs bg-[#8b5cf6] hover:bg-[#7c3aed] text-white mb-2"
+                      className="w-full rounded-full text-xs bg-[#7c3aed] hover:bg-[#7c3aed] text-white mb-2"
                       onClick={() => setLocation(`/relations/${r.id}`)}
                       data-testid={`button-proposer-rencontre-${r.id}`}
                     >
@@ -317,7 +317,7 @@ function PrestationTab({ relations }: { relations: RelationWithUsers[] }) {
               {r.junior.firstName} {r.junior.lastName}
             </p>
             <Button
-              className="bg-[#8b5cf6] hover:bg-[#7c4fe0] text-white"
+              className="bg-[#7c3aed] hover:bg-[#7c4fe0] text-white"
               onClick={() => setLocation(`/relations/${r.id}`)}
               data-testid={`btn-prestation-${r.id}`}
             >
@@ -396,7 +396,7 @@ function ContactTab() {
 
           <Button
             type="submit"
-            className="bg-[#8b5cf6] hover:bg-[#7c3aed] w-full"
+            className="bg-[#7c3aed] hover:bg-[#7c3aed] w-full"
             disabled={sendMut.isPending}
             data-testid="btn-send-contact"
           >
@@ -504,7 +504,7 @@ export default function ReferentHome() {
       )}
       {!isLoading && activeRelations.length > 0 && (
         <Button
-          className="w-full mb-6 rounded-2xl h-14 text-base font-semibold bg-[#8b5cf6] hover:bg-[#7c3aed] text-white shadow-sm"
+          className="w-full mb-6 rounded-2xl h-14 text-base font-semibold bg-[#7c3aed] hover:bg-[#7c3aed] text-white shadow-sm"
           onClick={() => {
             if (activeRelations.length === 1) {
               setLocation(`/relations/${activeRelations[0].id}`);
@@ -518,7 +518,7 @@ export default function ReferentHome() {
         </Button>
       )}
 
-      <MobileTabsMenu tabs={TABS} activeTab={activeTab} onSelect={(id) => selectTab(id as TabId)} accentClassName="bg-[#8b5cf6] text-white" />
+      <MobileTabsMenu tabs={TABS} activeTab={activeTab} onSelect={(id) => selectTab(id as TabId)} accentClassName="bg-[#7c3aed] text-white" />
 
       <div className="hidden md:flex flex-wrap gap-2 mb-8">
         {TABS.map((tab) => {
@@ -529,7 +529,7 @@ export default function ReferentHome() {
               key={tab.id}
               onClick={() => selectTab(tab.id)}
               className={`flex items-center gap-2 px-4 py-2.5 rounded-full text-sm font-medium whitespace-nowrap transition-colors ${
-                isActive ? "bg-[#8b5cf6] text-white" : "bg-white text-muted-foreground hover:bg-muted"
+                isActive ? "bg-[#7c3aed] text-white" : "bg-white text-muted-foreground hover:bg-muted"
               }`}
               data-testid={`tab-${tab.id}`}
             >

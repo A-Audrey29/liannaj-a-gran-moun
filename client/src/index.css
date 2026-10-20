@@ -30,7 +30,7 @@
 
   --sidebar-border: 280 20% 88%;
 
-  --sidebar-primary: 350 68% 56%;
+  --sidebar-primary: 351 57% 48%;
 
   --sidebar-primary-foreground: 0 0% 100%;
 
@@ -38,7 +38,7 @@
 
   --sidebar-accent-foreground: 0 0% 20%;
 
-  --sidebar-ring: 350 68% 56%;
+  --sidebar-ring: 351 57% 48%;
 
   --popover: 0 0% 100%;
 
@@ -46,7 +46,7 @@
 
   --popover-border: 280 15% 88%;
 
-  --primary: 350 68% 56%;
+  --primary: 351 57% 48%;
 
   --primary-foreground: 0 0% 100%;
 
@@ -56,19 +56,19 @@
 
   --muted: 270 20% 93%;
 
-  --muted-foreground: 0 0% 45%;
+  --muted-foreground: 0 0% 38%;
 
   --accent: 270 60% 93%;
 
   --accent-foreground: 270 40% 25%;
 
-  --destructive: 350 68% 56%;
+  --destructive: 351 57% 48%;
 
   --destructive-foreground: 0 0% 100%;
 
   --input: 270 15% 85%;
-  --ring: 350 68% 56%;
-  --chart-1: 350 68% 56%;
+  --ring: 351 57% 48%;
+  --chart-1: 351 57% 48%;
   --chart-2: 270 50% 60%;
   --chart-3: 280 40% 70%;
   --chart-4: 340 60% 65%;
@@ -138,7 +138,7 @@
 
   --sidebar-border: 280 12% 22%;
 
-  --sidebar-primary: 350 68% 56%;
+  --sidebar-primary: 351 57% 48%;
 
   --sidebar-primary-foreground: 0 0% 100%;
 
@@ -146,7 +146,7 @@
 
   --sidebar-accent-foreground: 0 0% 100%;
 
-  --sidebar-ring: 350 68% 56%;
+  --sidebar-ring: 351 57% 48%;
 
   --popover: 280 15% 13%;
 
@@ -154,7 +154,7 @@
 
   --popover-border: 280 12% 22%;
 
-  --primary: 350 68% 56%;
+  --primary: 351 57% 48%;
 
   --primary-foreground: 0 0% 100%;
 
@@ -175,8 +175,8 @@
   --destructive-foreground: 0 0% 100%;
 
   --input: 280 12% 25%;
-  --ring: 350 68% 56%;
-  --chart-1: 350 68% 56%;
+  --ring: 351 57% 48%;
+  --chart-1: 351 57% 48%;
   --chart-2: 270 50% 55%;
   --chart-3: 280 35% 55%;
   --chart-4: 340 60% 60%;
@@ -273,5 +273,17 @@
   .border.active-elevate-2:not(.no-active-interaction-elevate)::after,
   .border.hover-elevate:not(.no-hover-interaction-elevate)::after {
     inset: -1px;
+  }
+}
+
+/* Respect the OS "reduce motion" setting (WCAG 2.3.3): kill non-essential animation. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }
