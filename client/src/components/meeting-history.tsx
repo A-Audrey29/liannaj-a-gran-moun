@@ -164,14 +164,14 @@ export default function MeetingHistory({
 
             {summary.byService.length > 0 && (
               <div>
-                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">
                   Heures par service
                 </p>
                 <div className="flex flex-wrap gap-1.5">
                   {summary.byService.map((s) => (
                     <span
                       key={s.service}
-                      className="inline-block bg-primary/10 text-primary text-[11px] px-2 py-0.5 rounded-full"
+                      className="inline-block bg-primary/10 text-[#a82b3d] text-xs px-2 py-0.5 rounded-full"
                     >
                       {s.service} · {fmtDuration(s.minutes)} ({s.count})
                     </span>
@@ -191,7 +191,7 @@ export default function MeetingHistory({
               onClick={() => setFilter(f.id)}
               className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
                 activeFilter === f.id
-                  ? "bg-[#dc4256] text-white"
+                  ? "bg-[#c0354a] text-white"
                   : "bg-white text-muted-foreground hover:bg-muted border"
               }`}
               data-testid={`filter-history-${f.id}`}
@@ -276,7 +276,7 @@ function MeetingRow({
           <div className="flex items-start justify-between gap-2">
             <div className="min-w-0 flex-1">
               <p className="font-semibold text-sm">{fmtDateLong(date)}</p>
-              <div className="flex items-center gap-3 flex-wrap text-[11px] text-muted-foreground mt-0.5">
+              <div className="flex items-center gap-3 flex-wrap text-xs text-muted-foreground mt-0.5">
                 <span className="flex items-center gap-1">
                   <Clock className="w-3 h-3" />
                   {fmtTime(date)} · {fmtDuration(entry.durationMinutes)}
@@ -297,7 +297,7 @@ function MeetingRow({
                   {entry.tasks.map((task, i) => (
                     <span
                       key={i}
-                      className="inline-block bg-primary/10 text-primary text-[10px] px-2 py-0.5 rounded-full"
+                      className="inline-block bg-primary/10 text-[#a82b3d] text-xs px-2 py-0.5 rounded-full"
                     >
                       {task}
                     </span>
@@ -332,7 +332,7 @@ function MeetingRow({
               <p className="text-xs text-muted-foreground italic">Aucun feedback pour cette rencontre.</p>
             ) : (
               <>
-                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
                   {viewerRole === "SENIOR" || viewerRole === "JUNIOR" ? "Votre feedback" : "Feedbacks"}
                 </p>
                 {hasSeniorFeedback && (

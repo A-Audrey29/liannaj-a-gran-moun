@@ -99,14 +99,14 @@ export default function AvailabilityWeekPicker({ juniorId, juniorName, intervent
       <CardContent className="py-6">
         <div className="flex items-center justify-between mb-4 gap-3 flex-wrap">
           <h3 className="text-base font-bold flex items-center gap-2">
-            <CalendarClock className="w-5 h-5 text-[#8b5cf6]" />
+            <CalendarClock className="w-5 h-5 text-[#6d28d9]" />
             Disponibilités de {juniorName}
           </h3>
           <div className="flex items-center gap-1">
             <Button
               variant="outline"
               size="sm"
-              className="rounded-full h-8 w-8 p-0"
+              className="rounded-full h-11 w-11 p-0 md:h-8 md:w-8 md:min-h-8"
               onClick={() => setWeekStart(addDaysISO(weekStart, -7))}
               aria-label="Semaine précédente"
               data-testid="button-prev-week"
@@ -119,7 +119,7 @@ export default function AvailabilityWeekPicker({ juniorId, juniorName, intervent
             <Button
               variant="outline"
               size="sm"
-              className="rounded-full h-8 w-8 p-0"
+              className="rounded-full h-11 w-11 p-0 md:h-8 md:w-8 md:min-h-8"
               onClick={() => setWeekStart(addDaysISO(weekStart, 7))}
               aria-label="Semaine suivante"
               data-testid="button-next-week"
@@ -149,8 +149,8 @@ export default function AvailabilityWeekPicker({ juniorId, juniorName, intervent
                     <div
                       className={`font-semibold uppercase tracking-wide mb-1.5 transition-all ${
                         isSelectedDay
-                          ? "text-sm text-[#8b5cf6]"
-                          : `text-[11px] ${isToday ? "text-[#8b5cf6]" : "text-muted-foreground"}`
+                          ? "text-sm text-[#6d28d9]"
+                          : `text-xs ${isToday ? "text-[#6d28d9]" : "text-muted-foreground"}`
                       }`}
                     >
                       {fmtDayShortISO(day)}
@@ -200,7 +200,7 @@ export default function AvailabilityWeekPicker({ juniorId, juniorName, intervent
               </p>
             )}
             {pickedSlot && (
-              <p className="text-sm font-medium text-[#8b5cf6] mt-4" data-testid="text-selected-slot-summary">
+              <p className="text-sm font-medium text-[#6d28d9] mt-4" data-testid="text-selected-slot-summary">
                 Vous avez sélectionné le {fmtDayLongMonth(pickedSlot.startAt)} à {fmtTime(pickedSlot.startAt)}
               </p>
             )}

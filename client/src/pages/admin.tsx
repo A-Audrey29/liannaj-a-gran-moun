@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { getPhotoUrl } from "@/lib/photo-url";
+import { UserAvatar } from "@/components/user-avatar";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest, apiErrorMessage } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -185,6 +185,7 @@ function UserCombobox({
             variant="outline"
             role="combobox"
             aria-expanded={open}
+            aria-label={selected ? `${placeholder ?? "Utilisateur"} : ${selected.firstName} ${selected.lastName}` : placeholder ?? "Choisir un utilisateur"}
             className="w-full justify-between font-normal"
             data-testid={testId}
           >
@@ -192,7 +193,7 @@ function UserCombobox({
               <span className="flex items-center gap-2">
                 <Search className="w-4 h-4 text-muted-foreground shrink-0" />
                 <span className="truncate">{selected.firstName} {selected.lastName}</span>
-                <Badge className={`${ROLE_COLORS[selected.role] || ""} text-[10px] px-1.5 py-0`}>{roleLabel(selected.role)}</Badge>
+                <Badge className={`${ROLE_COLORS[selected.role] || ""} text-xs px-1.5 py-0`}>{roleLabel(selected.role)}</Badge>
               </span>
             ) : (
               <span className="flex items-center gap-2 text-muted-foreground">
@@ -221,7 +222,7 @@ function UserCombobox({
                     data-testid={`${testId}-item-${u.id}`}
                   >
                     <span className="flex-1 truncate">{u.firstName} {u.lastName}</span>
-                    <Badge className={`${ROLE_COLORS[u.role] || ""} text-[10px] px-1.5 py-0`}>{roleLabel(u.role)}</Badge>
+                    <Badge className={`${ROLE_COLORS[u.role] || ""} text-xs px-1.5 py-0`}>{roleLabel(u.role)}</Badge>
                   </CommandItem>
                 ))}
               </CommandGroup>
@@ -327,7 +328,7 @@ function UsersTab() {
     <div>
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-xl font-bold">Utilisateurs</h2>
-        <Button size="sm" className="bg-[#dc4256] hover:bg-[#c53a4d]" onClick={() => setCreateOpen(true)} data-testid="button-create-user">
+        <Button size="sm" className="bg-[#c0354a] hover:bg-[#c53a4d]" onClick={() => setCreateOpen(true)} data-testid="button-create-user">
           <UserPlus className="w-4 h-4 mr-1" />
           Créer un utilisateur
         </Button>
@@ -353,7 +354,7 @@ function UsersTab() {
             key={f.id}
             onClick={() => setFilter(f.id)}
             className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
-              filter === f.id ? "bg-[#dc4256] text-white" : "bg-white text-muted-foreground hover:bg-muted border"
+              filter === f.id ? "bg-[#c0354a] text-white" : "bg-white text-muted-foreground hover:bg-muted border"
             }`}
             data-testid={`filter-users-${f.id}`}
           >
@@ -367,7 +368,7 @@ function UsersTab() {
             key={f.id}
             onClick={() => setRoleFilter(f.id)}
             className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
-              roleFilter === f.id ? "bg-[#dc4256] text-white" : "bg-white text-muted-foreground hover:bg-muted border"
+              roleFilter === f.id ? "bg-[#c0354a] text-white" : "bg-white text-muted-foreground hover:bg-muted border"
             }`}
             data-testid={`filter-role-${f.id}`}
           >
@@ -382,7 +383,7 @@ function UsersTab() {
             <div className="flex-1 min-w-0">
               <button
                 onClick={() => openProfile(u)}
-                className="font-medium text-[#dc4256] hover:underline cursor-pointer truncate"
+                className="font-medium text-[#c0354a] hover:underline cursor-pointer truncate"
                 data-testid={`link-user-${u.id}`}
               >
                 {u.firstName} {u.lastName}
@@ -444,7 +445,7 @@ function UsersTab() {
                     <Button
                       size="sm"
                       variant="outline"
-                      className="text-orange-600 border-orange-300 hover:bg-orange-50"
+                      className="text-orange-700 border-orange-300 hover:bg-orange-50"
                       onClick={() => suspendMut.mutate(u.id)}
                       disabled={suspendMut.isPending}
                       data-testid={`btn-suspend-${u.id}`}
@@ -630,13 +631,13 @@ function RelationsTab() {
             key={f.id}
             onClick={() => setFilter(f.id)}
             className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
-              filter === f.id ? "bg-[#dc4256] text-white" : "bg-white text-muted-foreground hover:bg-muted border"
+              filter === f.id ? "bg-[#c0354a] text-white" : "bg-white text-muted-foreground hover:bg-muted border"
             }`}
             data-testid={`filter-relations-${f.id}`}
           >
             {f.label}
             {f.id === "PENDING" && pendingCount > 0 && (
-              <span className="ml-1.5 bg-[#dc4256] text-white text-[10px] px-1.5 py-0.5 rounded-full font-semibold">
+              <span className="ml-1.5 bg-[#c0354a] text-white text-xs px-1.5 py-0.5 rounded-full font-semibold">
                 {pendingCount}
               </span>
             )}
@@ -655,7 +656,7 @@ function RelationsTab() {
               <div className="flex items-center gap-1 flex-wrap">
                 <button
                   onClick={() => openProfile(r.senior)}
-                  className="font-medium text-[#dc4256] hover:underline cursor-pointer"
+                  className="font-medium text-[#c0354a] hover:underline cursor-pointer"
                   data-testid={`link-senior-rel-${r.id}`}
                 >
                   {r.senior.firstName} {r.senior.lastName}
@@ -663,7 +664,7 @@ function RelationsTab() {
                 <span className="text-muted-foreground">↔</span>
                 <button
                   onClick={() => openProfile(r.junior)}
-                  className="font-medium text-[#dc4256] hover:underline cursor-pointer"
+                  className="font-medium text-[#c0354a] hover:underline cursor-pointer"
                   data-testid={`link-junior-rel-${r.id}`}
                 >
                   {r.junior.firstName} {r.junior.lastName}
@@ -785,7 +786,7 @@ function CadrageTab() {
                   the junior's slots. */}
               <Button
                 size="sm"
-                className="bg-[#dc4256] hover:bg-[#c53a4d] text-white"
+                className="bg-[#c0354a] hover:bg-[#c53a4d] text-white"
                 onClick={() => setLocation(`/relations/${r.id}`)}
                 data-testid={`btn-organiser-${r.id}`}
               >
@@ -839,13 +840,7 @@ function ProfileDialog({ user, open, onOpenChange }: { user: SafeUser | null; op
       <DialogContent className="sm:max-w-lg max-h-[80vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-3">
-            {user.profilePhoto ? (
-              <img src={getPhotoUrl(user.profilePhoto)!} alt={`${user.firstName} ${user.lastName}`} className="w-12 h-12 rounded-full object-cover" />
-            ) : (
-              <div className="w-12 h-12 rounded-full bg-[#e8d7fe] flex items-center justify-center text-lg font-bold text-[#8b5cf6]">
-                {user.firstName[0]}{user.lastName[0]}
-              </div>
-            )}
+            <UserAvatar photo={user.profilePhoto} firstName={user.firstName} lastName={user.lastName} className="w-12 h-12" fallbackClassName="text-lg" decorative />
             <span>{user.firstName} {user.lastName}</span>
           </DialogTitle>
         </DialogHeader>
@@ -933,7 +928,7 @@ function TeacherPanel({ teacher }: { teacher: SafeUser }) {
           </Select>
           <Button
             size="sm"
-            className="bg-green-600 hover:bg-green-700 shrink-0"
+            className="bg-green-700 hover:bg-green-800 shrink-0"
             disabled={!assignStudentId || assignMut.isPending}
             onClick={() => assignMut.mutate()}
           >
@@ -948,7 +943,7 @@ function TeacherPanel({ teacher }: { teacher: SafeUser }) {
             {teacherStudents.map((s: SafeUser) => (
               <div key={s.id} className="flex items-center justify-between p-2 rounded bg-muted/40">
                 <div className="flex items-center gap-2">
-                  <img src={getPhotoUrl(s.profilePhoto)} alt="" className="w-8 h-8 rounded-full object-cover" />
+                  <UserAvatar photo={s.profilePhoto} firstName={s.firstName} lastName={s.lastName} className="w-8 h-8" fallbackClassName="text-xs" decorative />
                   <div>
                     <p className="text-sm font-medium">{s.firstName} {s.lastName}</p>
                     {s.schoolName && <p className="text-xs text-muted-foreground">{s.schoolName}</p>}
@@ -1134,7 +1129,7 @@ function NotificationsAdminTab() {
         <button
           onClick={() => setTypeFilter("all")}
           className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
-            typeFilter === "all" ? "bg-[#dc4256] text-white" : "bg-white text-muted-foreground hover:bg-muted border"
+            typeFilter === "all" ? "bg-[#c0354a] text-white" : "bg-white text-muted-foreground hover:bg-muted border"
           }`}
           data-testid="filter-notif-all"
         >
@@ -1145,7 +1140,7 @@ function NotificationsAdminTab() {
             key={t}
             onClick={() => setTypeFilter(t)}
             className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
-              typeFilter === t ? "bg-[#dc4256] text-white" : "bg-white text-muted-foreground hover:bg-muted border"
+              typeFilter === t ? "bg-[#c0354a] text-white" : "bg-white text-muted-foreground hover:bg-muted border"
             }`}
             data-testid={`filter-notif-${t}`}
           >
@@ -1178,7 +1173,7 @@ function NotificationsAdminTab() {
                   <td className="py-3 pr-4">
                     <button
                       onClick={() => openProfile(n.user)}
-                      className="font-medium text-[#dc4256] hover:underline cursor-pointer"
+                      className="font-medium text-[#c0354a] hover:underline cursor-pointer"
                       data-testid={`link-notif-user-${n.id}`}
                     >
                       {n.user.firstName} {n.user.lastName}
@@ -1294,7 +1289,7 @@ function PaiementsTab() {
 
       <div className="flex justify-end mb-4">
         <Button
-          className="bg-[#dc4256] hover:bg-[#c53a4d] text-white"
+          className="bg-[#c0354a] hover:bg-[#c53a4d] text-white"
           onClick={() => setDialogOpen(true)}
           data-testid="btn-new-payment"
         >
@@ -1420,7 +1415,7 @@ function PaiementsTab() {
               </p>
             </div>
             <DialogFooter>
-              <Button type="submit" className="bg-[#dc4256] hover:bg-[#c53a4d]" disabled={createMut.isPending} data-testid="btn-submit-payment">
+              <Button type="submit" className="bg-[#c0354a] hover:bg-[#c53a4d]" disabled={createMut.isPending} data-testid="btn-submit-payment">
                 {createMut.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : null}
                 Enregistrer
               </Button>
@@ -1529,7 +1524,7 @@ function MonCompteTab() {
               data-testid="input-account-email"
             />
           </div>
-          <Button type="submit" className="bg-[#dc4256] hover:bg-[#c53a4d]" disabled={profileMut.isPending} data-testid="btn-save-profile">
+          <Button type="submit" className="bg-[#c0354a] hover:bg-[#c53a4d]" disabled={profileMut.isPending} data-testid="btn-save-profile">
             {profileMut.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : null}
             Enregistrer
           </Button>
@@ -1572,7 +1567,7 @@ function MonCompteTab() {
               data-testid="input-confirm-password"
             />
           </div>
-          <Button type="submit" className="bg-[#dc4256] hover:bg-[#c53a4d]" disabled={passwordMut.isPending} data-testid="btn-change-password">
+          <Button type="submit" className="bg-[#c0354a] hover:bg-[#c53a4d]" disabled={passwordMut.isPending} data-testid="btn-change-password">
             {passwordMut.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : null}
             Modifier le mot de passe
           </Button>
@@ -1694,7 +1689,7 @@ function CreerAdminForm() {
             data-testid="input-admin-password"
           />
         </div>
-        <Button type="submit" className="bg-[#dc4256] hover:bg-[#c53a4d]" disabled={createMut.isPending} data-testid="btn-create-admin">
+        <Button type="submit" className="bg-[#c0354a] hover:bg-[#c53a4d]" disabled={createMut.isPending} data-testid="btn-create-admin">
           {createMut.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : null}
           Créer le compte admin
         </Button>
@@ -1823,7 +1818,7 @@ function CreerReferentForm() {
         </div>
         <Button
           type="submit"
-          className="bg-[#8b5cf6] hover:bg-[#7c3aed]"
+          className="bg-[#7c3aed] hover:bg-[#6d28d9]"
           disabled={createMut.isPending || !formData.linkedSeniorId}
           data-testid="btn-create-referent"
         >
@@ -1940,7 +1935,7 @@ function SignalementsTab() {
                           <p className="text-xs font-semibold text-green-700 uppercase tracking-wide">Action réalisée</p>
                           <p className="text-sm text-green-900">{r.handledNote}</p>
                           {r.handledAt && (
-                            <p className="text-xs text-green-600">
+                            <p className="text-xs text-green-700">
                               Traité le {new Date(r.handledAt).toLocaleDateString("fr-FR", {
                                 day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit",
                               })}
@@ -2087,7 +2082,7 @@ function CreerProfesseurForm() {
         </div>
 
         <Button
-          className="bg-green-600 hover:bg-green-700 w-full"
+          className="bg-green-700 hover:bg-green-800 w-full"
           disabled={!form.email || !form.password || !form.firstName || !form.lastName || createMut.isPending}
           onClick={() => createMut.mutate()}
         >
@@ -2166,14 +2161,14 @@ export default function Admin() {
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
               className={`flex items-center gap-2 px-4 py-2.5 rounded-full text-sm font-medium whitespace-nowrap transition-colors ${
-                isActive ? "bg-[#dc4256] text-white" : "bg-white text-muted-foreground hover:bg-muted"
+                isActive ? "bg-[#c0354a] text-white" : "bg-white text-muted-foreground hover:bg-muted"
               }`}
               data-testid={`tab-admin-${tab.id}`}
             >
               <Icon className="w-4 h-4" />
               {tab.label}
               {count > 0 && (
-                <Badge className={`ml-1 text-[10px] px-1.5 py-0 ${isActive ? "bg-white text-[#dc4256]" : "bg-[#dc4256] text-white"}`}>
+                <Badge className={`ml-1 text-xs px-1.5 py-0 ${isActive ? "bg-white text-[#c0354a]" : "bg-[#c0354a] text-white"}`}>
                   {count}
                 </Badge>
               )}

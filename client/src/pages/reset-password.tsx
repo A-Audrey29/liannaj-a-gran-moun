@@ -67,7 +67,7 @@ export default function ResetPasswordPage() {
   const linkInvalid = !token || mutation.error?.message.startsWith("400");
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4">
+    <div className="min-h-[70dvh] flex items-center justify-center p-4">
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
           <div className="mx-auto mb-4 flex items-center justify-center w-12 h-12 rounded-md bg-primary/10">
@@ -77,7 +77,7 @@ export default function ResetPasswordPage() {
               <KeyRound className="w-6 h-6 text-primary" />
             )}
           </div>
-          <CardTitle data-testid="text-reset-title">
+          <CardTitle as="h1" data-testid="text-reset-title">
             {mutation.isSuccess ? "Mot de passe modifié" : "Nouveau mot de passe"}
           </CardTitle>
           {!mutation.isSuccess && token && (
@@ -108,9 +108,9 @@ export default function ResetPasswordPage() {
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Nouveau mot de passe</FormLabel>
-                      <FormControl>
-                        <div className="relative">
-                          <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                      <div className="relative">
+                        <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                        <FormControl>
                           <Input
                             data-testid="input-new-password"
                             type="password"
@@ -119,8 +119,8 @@ export default function ResetPasswordPage() {
                             className="pl-10"
                             {...field}
                           />
-                        </div>
-                      </FormControl>
+                        </FormControl>
+                      </div>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -131,9 +131,9 @@ export default function ResetPasswordPage() {
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Confirmer le mot de passe</FormLabel>
-                      <FormControl>
-                        <div className="relative">
-                          <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                      <div className="relative">
+                        <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                        <FormControl>
                           <Input
                             data-testid="input-confirm-password"
                             type="password"
@@ -141,8 +141,8 @@ export default function ResetPasswordPage() {
                             className="pl-10"
                             {...field}
                           />
-                        </div>
-                      </FormControl>
+                        </FormControl>
+                      </div>
                       <FormMessage />
                     </FormItem>
                   )}

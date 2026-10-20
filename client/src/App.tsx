@@ -1,3 +1,4 @@
+import { MotionConfig } from "framer-motion";
 import { Switch, Route, useLocation } from "wouter";
 import { lazy, Suspense, useEffect } from "react";
 import { Loader2 } from "lucide-react";
@@ -129,7 +130,10 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <Toaster />
-        <Router />
+        {/* Framer Motion honours the OS "reduce motion" setting. */}
+        <MotionConfig reducedMotion="user">
+          <Router />
+        </MotionConfig>
       </TooltipProvider>
     </QueryClientProvider>
   );

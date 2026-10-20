@@ -75,13 +75,13 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4">
+    <div className="min-h-[70dvh] flex flex-col items-center justify-center p-4">
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
           <div className="mx-auto mb-4 flex items-center justify-center w-12 h-12 rounded-md bg-primary/10">
             <LogIn className="w-6 h-6 text-primary" />
           </div>
-          <CardTitle data-testid="text-login-title">Connexion</CardTitle>
+          <CardTitle as="h1" data-testid="text-login-title">Connexion</CardTitle>
           <CardDescription data-testid="text-login-description">
             Connectez-vous à votre compte {PLATFORM_NAME}
           </CardDescription>
@@ -95,9 +95,9 @@ export default function LoginPage() {
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Email</FormLabel>
-                    <FormControl>
-                      <div className="relative">
-                        <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                    <div className="relative">
+                      <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                      <FormControl>
                         <Input
                           data-testid="input-email"
                           type="email"
@@ -105,8 +105,8 @@ export default function LoginPage() {
                           className="pl-10"
                           {...field}
                         />
-                      </div>
-                    </FormControl>
+                      </FormControl>
+                    </div>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -118,9 +118,9 @@ export default function LoginPage() {
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Mot de passe</FormLabel>
-                    <FormControl>
-                      <div className="relative">
-                        <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                    <div className="relative">
+                      <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                      <FormControl>
                         <Input
                           data-testid="input-password"
                           type="password"
@@ -128,8 +128,8 @@ export default function LoginPage() {
                           className="pl-10"
                           {...field}
                         />
-                      </div>
-                    </FormControl>
+                      </FormControl>
+                    </div>
                     <FormMessage />
                   </FormItem>
                 )}

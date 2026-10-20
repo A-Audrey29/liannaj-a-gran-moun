@@ -52,7 +52,7 @@ export default function Notifications() {
     <div className="max-w-2xl mx-auto px-4 py-8" data-testid="page-notifications">
       <div className="flex items-center justify-between gap-4 flex-wrap mb-6">
         <div className="flex items-center gap-3">
-          <Bell className="w-6 h-6 text-[#dc4256]" />
+          <Bell className="w-6 h-6 text-[#c0354a]" />
           <h1 className="text-2xl font-bold" data-testid="text-notifications-title">Notifications</h1>
           {unreadCount > 0 && (
             <Badge variant="secondary" data-testid="badge-unread-count">
@@ -90,7 +90,7 @@ export default function Notifications() {
           {notifications.map((n) => (
             <Card
               key={n.id}
-              className={`p-4 cursor-pointer transition-colors hover-elevate ${!n.isRead ? "border-[#dc4256]/30 bg-secondary/20" : ""}`}
+              className={`p-4 cursor-pointer transition-colors hover-elevate ${!n.isRead ? "border-[#c0354a]/30 bg-secondary/20" : ""}`}
               onClick={() => {
                 if (!n.isRead) markReadMutation.mutate(n.id);
                 if (n.link) setLocation(n.link);
@@ -102,14 +102,14 @@ export default function Notifications() {
                   <div className="flex items-center gap-2 flex-wrap">
                     <p className="text-sm font-semibold" data-testid={`text-notification-title-${n.id}`}>{n.title}</p>
                     {!n.isRead && (
-                      <span className="w-2 h-2 rounded-full bg-[#dc4256] shrink-0" data-testid={`indicator-unread-${n.id}`} />
+                      <span className="w-2 h-2 rounded-full bg-[#c0354a] shrink-0" data-testid={`indicator-unread-${n.id}`} />
                     )}
                   </div>
                   <p className="text-sm text-muted-foreground mt-1" data-testid={`text-notification-message-${n.id}`}>{n.message}</p>
-                  <p className="text-xs text-muted-foreground/70 mt-1.5" data-testid={`text-notification-time-${n.id}`}>{timeAgo(n.createdAt)}</p>
+                  <p className="text-xs text-muted-foreground mt-1.5" data-testid={`text-notification-time-${n.id}`}>{timeAgo(n.createdAt)}</p>
                 </div>
                 {!n.isRead && (
-                  <Badge variant="outline" className="shrink-0 text-[10px]" data-testid={`badge-unread-${n.id}`}>
+                  <Badge variant="outline" className="shrink-0 text-xs" data-testid={`badge-unread-${n.id}`}>
                     Nouveau
                   </Badge>
                 )}

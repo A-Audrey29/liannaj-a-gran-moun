@@ -3,6 +3,48 @@
 Journal des choix d'architecture et de leurs raisons. Une entrée par décision,
 la plus récente en haut.
 
+## 2026-10-20 — Accessibilité et mobile-first
+
+Public visé : seniors (vue et dextérité réduites) et jeunes (téléphone d'abord).
+
+**Constat.** Audit axe-core (WCAG 2.2 AA) + Playwright sur 63 états en 320 /
+375 / 414 px : zoom bloqué, fenêtre NPS coupée sur petit écran, page profil
+jeune qui défilait en horizontal, boutons-icônes sans nom, rouge de marque
+`#dc4256` à 4,2:1 (il faut 4,5:1).
+
+**Décisions.**
+- **Rouge de marque `#c0354a`** (5,5:1 sur blanc, 4,7:1 sur le fond lavande
+  `#f3eaff`), survol `#a82b3d`. `--primary` suit (`351 57% 48%`). Violet de
+  texte `#6d28d9`, violet de fond `#7c3aed`. Ne pas revenir à `#dc4256` : un
+  test le vérifie. Les e-mails (`server/lib/email-templates.ts`) gardent
+  l'ancien rouge : hors de ce périmètre, à aligner plus tard.
+- **Cibles tactiles 44 px sur mobile, compactes dès `md`** : `Button`,
+  `Input`, `Select`, `Tabs` en `min-h-11 md:min-h-9`. Le desktop garde sa
+  densité.
+- **Dialogues défilants** (`max-h-[calc(100dvh-2rem)] overflow-y-auto`) :
+  un dialogue plus haut que l'écran rendait le bouton « Envoyer » du NPS
+  inatteignable.
+- **Pas de contrôle qui n'existe qu'au survol** : les actions photo étaient
+  en `opacity-0 group-hover`, donc invisibles au doigt.
+- **`UserAvatar` pour toute photo de profil** (repli sur les initiales) :
+  `getPhotoUrl` renvoie `undefined` pour les anciennes URLs ui-avatars, un
+  `<img>` nu affichait alors son texte alternatif.
+- **`Badge` est `whitespace-nowrap`** : pour un texte libre (nom d'atelier),
+  ajouter `h-auto whitespace-normal text-left`. Un badge en `absolute` doit
+  porter `no-default-hover-elevate` (sinon `.hover-elevate` le repasse en
+  `position: relative`).
+- **Texte minimum 12 px** (`text-xs`), jamais `text-[9..11px]`.
+- **Images de la landing en WebP 720 px** (2,9 Mo → 134 Ko), `loading="lazy"`
+  sous la ligne de flottaison.
+
+**Garde-fous.** `tests/accessibilite-mobile.test.ts` (contrôles statiques).
+Avant une mise en production, relancer un passage axe + Playwright sur
+320 / 375 / 414 px : les tests statiques ne voient pas le rendu.
+
+**Non traité.** Cibles tactiles des liens dans le texte courant (24 px WCAG
+atteints, 44 px non), filtres admin à 30 px, titre de page « FEVES - lyannaj a
+gran moun » (nom produit à trancher).
+
 ## 2026-10-19 — Disponibilités du jeune : planning mémorisé, prolongation, rappel
 
 Demande d'Audrey : les disponibilités d'un jeune « expiraient » sans prévenir.

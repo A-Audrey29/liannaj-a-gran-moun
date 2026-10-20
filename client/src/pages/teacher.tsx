@@ -1,9 +1,9 @@
 import { useState } from "react";
+import { UserAvatar } from "@/components/user-avatar";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
-import { getPhotoUrl } from "@/lib/photo-url";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -172,11 +172,7 @@ function StudentCard({
       <CardContent className="pt-4 pb-4">
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-3 min-w-0">
-            <img
-              src={getPhotoUrl(student.profilePhoto)}
-              alt={`${student.firstName} ${student.lastName}`}
-              className="w-12 h-12 rounded-full object-cover shrink-0"
-            />
+            <UserAvatar photo={student.profilePhoto} firstName={student.firstName} lastName={student.lastName} className="w-12 h-12 shrink-0" />
             <div className="min-w-0">
               <p className="font-semibold truncate">
                 {student.firstName} {student.lastName}
@@ -350,7 +346,7 @@ function ProfilSection({
               Annuler
             </Button>
             <Button
-              className="bg-green-600 hover:bg-green-700"
+              className="bg-green-700 hover:bg-green-800"
               disabled={saveMut.isPending}
               onClick={() => saveMut.mutate()}
             >
@@ -397,11 +393,7 @@ function RelationsSection({ data }: { data: StudentDetail }) {
             <CardContent className="pt-5 space-y-4">
               {/* Senior info */}
               <div className="flex items-center gap-3">
-                <img
-                  src={getPhotoUrl(rel.senior.profilePhoto)}
-                  alt={`${rel.senior.firstName} ${rel.senior.lastName}`}
-                  className="w-14 h-14 rounded-full object-cover"
-                />
+                <UserAvatar photo={rel.senior.profilePhoto} firstName={rel.senior.firstName} lastName={rel.senior.lastName} className="w-14 h-14 shrink-0" />
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
                     <p className="font-semibold">
@@ -428,7 +420,7 @@ function RelationsSection({ data }: { data: StudentDetail }) {
               {/* Résumé relation */}
               <div className="grid grid-cols-3 gap-3 pt-2 border-t">
                 <div className="text-center">
-                  <p className="text-xl font-bold text-green-600">{meetingsDone}</p>
+                  <p className="text-xl font-bold text-green-700">{meetingsDone}</p>
                   <p className="text-xs text-muted-foreground">
                     Rencontre{meetingsDone > 1 ? "s" : ""} réalisée{meetingsDone > 1 ? "s" : ""}
                   </p>
@@ -540,7 +532,7 @@ function NotesSection({
           />
           <Button
             size="sm"
-            className="bg-green-600 hover:bg-green-700"
+            className="bg-green-700 hover:bg-green-800"
             disabled={!commentText.trim() || createMut.isPending}
             onClick={() => createMut.mutate()}
           >
@@ -622,7 +614,7 @@ function NotesSection({
               Annuler
             </Button>
             <Button
-              className="bg-green-600 hover:bg-green-700"
+              className="bg-green-700 hover:bg-green-800"
               disabled={!editText.trim() || updateMut.isPending}
               onClick={() => editingComment && updateMut.mutate(editingComment)}
             >
@@ -698,11 +690,7 @@ function StudentDetailView({
       <Card>
         <CardContent className="pt-5">
           <div className="flex items-center gap-4">
-            <img
-              src={getPhotoUrl(student.profilePhoto)}
-              alt={`${student.firstName} ${student.lastName}`}
-              className="w-16 h-16 rounded-full object-cover shrink-0"
-            />
+            <UserAvatar photo={student.profilePhoto} firstName={student.firstName} lastName={student.lastName} className="w-16 h-16 shrink-0" />
             <div className="flex-1 min-w-0">
               <p className="text-xl font-bold">
                 {student.firstName} {student.lastName}
@@ -724,7 +712,7 @@ function StudentDetailView({
               </div>
             </div>
             <div className="text-center shrink-0 hidden sm:block">
-              <p className="text-2xl font-bold text-green-600">{doneCount}</p>
+              <p className="text-2xl font-bold text-green-700">{doneCount}</p>
               <p className="text-xs text-muted-foreground">rencontre{doneCount > 1 ? "s" : ""}</p>
             </div>
           </div>
@@ -737,7 +725,7 @@ function StudentDetailView({
         activeTab={section}
         onSelect={(id) => setSection(id as DetailSection)}
         getBadgeCount={(id) => SECTIONS.find((s) => s.id === id)?.count ?? 0}
-        accentClassName="bg-green-600 text-white"
+        accentClassName="bg-green-700 text-white"
       />
 
       <div className="hidden md:flex gap-2 flex-wrap">
@@ -750,7 +738,7 @@ function StudentDetailView({
               onClick={() => setSection(s.id)}
               className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-colors ${
                 isActive
-                  ? "bg-green-600 text-white"
+                  ? "bg-green-700 text-white"
                   : "bg-white text-muted-foreground hover:bg-muted border border-border"
               }`}
             >
@@ -758,8 +746,8 @@ function StudentDetailView({
               {s.label}
               {s.count !== undefined && s.count > 0 && (
                 <Badge
-                  className={`ml-0.5 text-[10px] px-1.5 py-0 ${
-                    isActive ? "bg-white text-green-600" : "bg-green-600 text-white"
+                  className={`ml-0.5 text-xs px-1.5 py-0 ${
+                    isActive ? "bg-white text-green-700" : "bg-green-700 text-white"
                   }`}
                 >
                   {s.count}
@@ -801,11 +789,7 @@ function MonCompteTab() {
       <Card>
         <CardContent className="pt-6 space-y-3">
           <div className="flex items-center gap-4 mb-4">
-            <img
-              src={getPhotoUrl(user.profilePhoto)}
-              alt={`${user.firstName} ${user.lastName}`}
-              className="w-16 h-16 rounded-full object-cover"
-            />
+            <UserAvatar photo={user.profilePhoto} firstName={user.firstName} lastName={user.lastName} className="w-16 h-16 shrink-0" />
             <div>
               <p className="font-bold text-lg">
                 {user.firstName} {user.lastName}
@@ -883,7 +867,7 @@ export default function TeacherHome() {
         activeTab={activeTab}
         onSelect={(id) => setActiveTab(id as MainTabId)}
         getBadgeCount={(id) => (id === "suivi" ? students.length : 0)}
-        accentClassName="bg-green-600 text-white"
+        accentClassName="bg-green-700 text-white"
       />
 
       <div className="hidden md:flex flex-wrap gap-2 mb-8">
@@ -896,7 +880,7 @@ export default function TeacherHome() {
               onClick={() => setActiveTab(tab.id)}
               className={`flex items-center gap-2 px-4 py-2.5 rounded-full text-sm font-medium whitespace-nowrap transition-colors ${
                 isActive
-                  ? "bg-green-600 text-white"
+                  ? "bg-green-700 text-white"
                   : "bg-white text-muted-foreground hover:bg-muted border border-border"
               }`}
             >
@@ -904,8 +888,8 @@ export default function TeacherHome() {
               {tab.label}
               {tab.id === "suivi" && students.length > 0 && (
                 <Badge
-                  className={`ml-1 text-[10px] px-1.5 py-0 ${
-                    isActive ? "bg-white text-green-600" : "bg-green-600 text-white"
+                  className={`ml-1 text-xs px-1.5 py-0 ${
+                    isActive ? "bg-white text-green-700" : "bg-green-700 text-white"
                   }`}
                 >
                   {students.length}

@@ -4,9 +4,9 @@
   "description": "Plateforme de mise en relation entre seniors et jeunes. Rencontres encadrées et sécurisées.",
   "start_url": "/",
   "display": "standalone",
-  "theme_color": "#dc4256",
+  "theme_color": "#c0354a",
   "background_color": "#fbfbfb",
-  "orientation": "portrait-primary",
+  "orientation": "any",
   "icons": [
     {
       "src": "/favicon.png",

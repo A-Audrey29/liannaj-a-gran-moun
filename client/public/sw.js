@@ -25,10 +25,10 @@ const OFFLINE_PAGE = `<!DOCTYPE html>
       padding: 2rem;
     }
     .container { max-width: 400px; }
-    h1 { font-size: 1.5rem; margin-bottom: 1rem; color: #dc4256; }
+    h1 { font-size: 1.5rem; margin-bottom: 1rem; color: #c0354a; }
     p { font-size: 1rem; line-height: 1.6; color: #666; margin-bottom: 1.5rem; }
     button {
-      background: #dc4256;
+      background: #c0354a;
       color: white;
       border: none;
       padding: 0.75rem 1.5rem;

@@ -148,9 +148,9 @@ export default function SatisfactionTab() {
       </div>
 
       {!rangeValid && (
-        <p className="text-sm text-[#dc4256]">La date de début doit précéder la date de fin.</p>
+        <p className="text-sm text-[#c0354a]">La date de début doit précéder la date de fin.</p>
       )}
-      {isError && <p className="text-sm text-[#dc4256]">Impossible de charger les résultats.</p>}
+      {isError && <p className="text-sm text-[#c0354a]">Impossible de charger les résultats.</p>}
       {isLoading && (
         <div className="flex justify-center py-12">
           <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
@@ -202,7 +202,7 @@ export default function SatisfactionTab() {
                   key={value}
                   onClick={() => setCategory(value)}
                   className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
-                    category === value ? "bg-[#dc4256] text-white" : "bg-white text-muted-foreground hover:bg-muted"
+                    category === value ? "bg-[#c0354a] text-white" : "bg-white text-muted-foreground hover:bg-muted"
                   }`}
                   data-testid={`filter-nps-${value}`}
                 >

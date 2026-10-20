@@ -201,7 +201,7 @@ function RecurringForm() {
             {template?.slots ? (
               <Button
                 size="sm"
-                className="mt-3 rounded-full bg-[#dc4256] hover:bg-[#c73848] text-white"
+                className="mt-3 rounded-full bg-[#c0354a] hover:bg-[#a82b3d] text-white"
                 onClick={() => extend.mutate()}
                 disabled={extend.isPending}
                 data-testid="button-extend-availability"
@@ -264,7 +264,7 @@ function RecurringForm() {
         </div>
 
         <Button
-          className="mt-4 rounded-full bg-[#dc4256] hover:bg-[#c73848] text-white"
+          className="mt-4 rounded-full bg-[#c0354a] hover:bg-[#a82b3d] text-white"
           onClick={() => submit.mutate()}
           disabled={submit.isPending || !anyEnabled}
           data-testid="button-save-recurring"
@@ -383,8 +383,9 @@ function CalendarView({ availabilities }: { availabilities: Availability[] }) {
 
                 <div className="flex items-end gap-2 mb-4 flex-wrap">
                   <div>
-                    <Label className="text-xs text-muted-foreground mb-1 block">Début</Label>
+                    <Label htmlFor="new-slot-start" className="text-xs text-muted-foreground mb-1 block">Début</Label>
                     <Input
+                      id="new-slot-start"
                       type="time"
                       value={newStart}
                       onChange={(e) => setNewStart(e.target.value)}
@@ -393,8 +394,9 @@ function CalendarView({ availabilities }: { availabilities: Availability[] }) {
                     />
                   </div>
                   <div>
-                    <Label className="text-xs text-muted-foreground mb-1 block">Fin</Label>
+                    <Label htmlFor="new-slot-end" className="text-xs text-muted-foreground mb-1 block">Fin</Label>
                     <Input
+                      id="new-slot-end"
                       type="time"
                       value={newEnd}
                       onChange={(e) => setNewEnd(e.target.value)}
@@ -425,7 +427,7 @@ function CalendarView({ availabilities }: { availabilities: Availability[] }) {
                         (h) => (
                           <div
                             key={h}
-                            className="absolute right-1 -translate-y-1/2 text-[10px] text-muted-foreground"
+                            className="absolute right-1 -translate-y-1/2 text-xs text-muted-foreground"
                             style={{ top: (h - GRID_START_HOUR) * PX_PER_HOUR }}
                           >
                             {h}h
@@ -463,12 +465,13 @@ function CalendarView({ availabilities }: { availabilities: Availability[] }) {
                             <Button
                               size="icon"
                               variant="ghost"
-                              className="h-5 w-5 shrink-0 text-muted-foreground hover:text-destructive"
+                              className="h-6 w-6 shrink-0 text-muted-foreground hover:text-destructive md:h-6 md:w-6"
+                              aria-label="Supprimer ce créneau"
                               onClick={() => deleteMutation.mutate(a.id)}
                               disabled={deleteMutation.isPending}
                               data-testid={`button-delete-${a.id}`}
                             >
-                              <Trash2 className="w-3 h-3" />
+                              <Trash2 className="w-3.5 h-3.5" aria-hidden="true" />
                             </Button>
                           </div>
                         );

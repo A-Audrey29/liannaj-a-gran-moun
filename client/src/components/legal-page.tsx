@@ -19,7 +19,7 @@ export function LegalPage({
   children: React.ReactNode;
 }) {
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-[70dvh] bg-background">
       <div className="mx-auto max-w-3xl px-4 py-10">
         <Link href="/">
           <Button variant="ghost" size="sm" className="mb-6 -ml-2" data-testid="link-back-home">
