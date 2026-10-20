@@ -4,10 +4,8 @@ import { apiRequest, apiErrorMessage } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
-import { useAuth } from "@/hooks/use-auth";
 import { Link } from "wouter";
 import { ShoppingCart } from "lucide-react";
-import { CREDIT_OFFERS } from "@shared/credit-offers";
 import { CONTACT_EMAIL } from "@shared/branding";
 
 /** Where a given role writes to the team: in-app for seniors and aidants. */
@@ -36,7 +34,7 @@ export function useCheckout() {
       toast({
         variant: "destructive",
         title: "Erreur",
-        // e.g. 503 "paiement en ligne indisponible": show why, not "réessayez".
+        // e.g. 503 "Le paiement en ligne n'est pas disponible actuellement.": show why, not "réessayez".
         description: apiErrorMessage(err, "Impossible de lancer le paiement. Réessayez."),
       });
     },

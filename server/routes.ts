@@ -370,7 +370,7 @@ async function validateSlot(
 
 const SLOT_CONFLICT_MESSAGE = "Une autre rencontre est déjà prévue sur ce créneau.";
 const LOCK_CONTENTION_MESSAGE = "Une autre action est en cours sur ce créneau, veuillez réessayer dans un instant.";
-const NO_CREDITS_MESSAGE = "Tous les ateliers achetés sont déjà réservés pour des rencontres prévues. Achetez un pack pour en proposer une nouvelle.";
+const NO_CREDITS_MESSAGE = "Tous les ateliers achetés sont déjà réservés pour des rencontres prévues. Achetez un pack pour demander un nouvel atelier.";
 /**
  * Crée la rencontre via createInterventionSafe (verrou + re-check du conflit
  * dans la transaction), pour fermer la fenêtre de course entre validateSlot()

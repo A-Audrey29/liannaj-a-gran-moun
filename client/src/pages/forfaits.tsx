@@ -5,7 +5,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { teamContactHref, useCheckout } from "@/components/credit-offers-card";
 import { CREDIT_OFFERS } from "@shared/credit-offers";
 import { canBuyCredits } from "@shared/credits";
-import { ORGANIZATION_NAME, PLATFORM_NAME } from "@shared/branding";
+import { CONTACT_EMAIL, ORGANIZATION_NAME, PLATFORM_NAME } from "@shared/branding";
 
 /**
  * "Acheter des ateliers": explains how buying works, then lets the buyer pay.
@@ -32,7 +32,7 @@ const MAIN_RULES: Rule[] = [
   },
   {
     title: "L'atelier est annulé",
-    text: "Le senior (ou l'équipe Lyannaj) peut annuler un atelier prévu. Son crédit vous est rendu : vous pourrez l'utiliser pour un autre atelier. Un atelier qui a déjà eu lieu ne peut plus être annulé.",
+    text: "Le senior (ou l'équipe Lyannaj) peut annuler un atelier prévu. Son crédit vous est rendu : vous pourrez l'utiliser pour un autre atelier. Un atelier marqué comme réalisé ne peut plus être annulé.",
   },
   {
     title: "La première rencontre est offerte",
@@ -93,6 +93,11 @@ export default function Forfaits() {
   // here. Any other account (junior, admin, teacher, referent without a linked
   // senior) cannot buy: no buy button and no sentence pointing to "Mes achats".
   const canBuy = !user || canBuyCredits(user);
+  // Seniors and aidants write to the team inside the app; anyone else by e-mail.
+  const helpHref = teamContactHref(user?.role);
+  const helpIsInApp = helpHref.startsWith("/");
+  const helpClass =
+    "inline-flex min-h-12 items-center justify-center gap-2 rounded-full border-2 border-primary px-6 text-lg font-semibold text-primary hover:bg-primary hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2";
   const homePath =
     user?.role === "REFERENT_SENIOR" ? "/espace-referent" : user?.role === "TEACHER" ? "/espace-professeur" : user?.role === "ADMIN" ? "/admin" : "/mon-espace";
 
@@ -111,8 +116,12 @@ export default function Forfaits() {
       <h1 className="text-3xl font-bold mb-4" data-testid="text-forfaits-title">
         Acheter des ateliers
       </h1>
-      <p className="mb-2">Pour faire un atelier avec un jeune, vous utilisez des crédits.</p>
-      <p className="mb-6 font-semibold">1 crédit = 1 atelier.</p>
+      {canBuy && (
+        <>
+          <p className="mb-2">Pour faire un atelier avec un jeune, vous utilisez des crédits.</p>
+          <p className="mb-6 font-semibold">1 crédit = 1 atelier.</p>
+        </>
+      )}
 
       {canBuy && (
         <>
@@ -212,18 +221,22 @@ export default function Forfaits() {
         </>
       )}
 
-      <h2 className="text-2xl font-bold mb-4">Comment vos crédits sont utilisés</h2>
-      <div className="mb-4">
-        <RuleList rules={MAIN_RULES} />
-      </div>
-      <details className="mb-10 group" data-testid="details-forfaits-more">
-        <summary className="cursor-pointer inline-flex items-center min-h-12 px-5 rounded-full border-2 border-gray-300 font-semibold text-gray-900 hover:bg-gray-50">
-          En savoir plus
-        </summary>
-        <div className="mt-4">
-          <RuleList rules={MORE_RULES} />
+      {canBuy && (
+        <>
+        <h2 className="text-2xl font-bold mb-4">Comment vos crédits sont utilisés</h2>
+        <div className="mb-4">
+          <RuleList rules={MAIN_RULES} />
         </div>
-      </details>
+        <details className="mb-10 group" data-testid="details-forfaits-more">
+          <summary className="cursor-pointer inline-flex items-center min-h-12 px-5 rounded-full border-2 border-gray-300 font-semibold text-gray-900 hover:bg-gray-50">
+            En savoir plus
+          </summary>
+          <div className="mt-4">
+            <RuleList rules={MORE_RULES} />
+          </div>
+        </details>
+        </>
+      )}
 
       {canBuy && user && (
         <p className="mb-8" data-testid="text-forfaits-mes-ateliers">
@@ -234,14 +247,18 @@ export default function Forfaits() {
 
       <div className="mb-8 rounded-2xl bg-gray-50 border border-gray-200 p-5" data-testid="box-forfaits-help">
         <p className="font-bold text-gray-900">Une question avant d'acheter ?</p>
-        <p className="mb-3 text-gray-800">L'équipe {PLATFORM_NAME} vous répond.</p>
-        <a
-          href={teamContactHref(user?.role)}
-          className="inline-flex min-h-12 items-center justify-center gap-2 rounded-full border-2 border-primary px-6 text-lg font-semibold text-primary hover:bg-primary hover:text-white"
-          data-testid="link-forfaits-help"
-        >
-          <LifeBuoy className="h-5 w-5" aria-hidden="true" /> Besoin d'aide ?
-        </a>
+        <p className="mb-3 text-gray-800">
+          L'équipe {PLATFORM_NAME} vous répond{helpIsInApp ? "." : ` : ${CONTACT_EMAIL}`}
+        </p>
+        {helpIsInApp ? (
+          <Link href={helpHref} className={helpClass} aria-label="Besoin d'aide pour acheter ? Écrire à l'équipe" data-testid="link-forfaits-help">
+            <LifeBuoy className="h-5 w-5" aria-hidden="true" /> Besoin d'aide ?
+          </Link>
+        ) : (
+          <a href={helpHref} className={helpClass} aria-label="Besoin d'aide pour acheter ? Écrire à l'équipe par e-mail" data-testid="link-forfaits-help">
+            <LifeBuoy className="h-5 w-5" aria-hidden="true" /> Besoin d'aide ?
+          </a>
+        )}
       </div>
     </div>
   );

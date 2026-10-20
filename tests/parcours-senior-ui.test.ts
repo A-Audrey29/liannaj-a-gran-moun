@@ -6,7 +6,7 @@ import { describe, it, expect } from "vitest";
 import fs from "fs";
 import path from "path";
 import { insertInterventionSchema, referentInterventionSchema } from "../shared/schema";
-import { DEFAULT_WORKSHOP_MINUTES } from "../shared/credits";
+import { DEFAULT_WORKSHOP_MINUTES, FREE_FIRST_MEETING_MAX_MINUTES, defaultDurationMinutes } from "../shared/credits";
 import { spaceMenuLinks, homeTabsFor, PURCHASES_PATH } from "../client/src/lib/space-tabs";
 
 const read = (p: string) => fs.readFileSync(path.resolve(import.meta.dirname, "..", p), "utf8");
@@ -94,9 +94,30 @@ describe("atelier : durée par défaut et vocabulaire", () => {
     expect(insertInterventionSchema.parse(base).durationMinutes).toBe(60);
     expect(referentInterventionSchema.parse(base).durationMinutes).toBe(60);
     expect(read("prisma/schema.prisma")).toMatch(/durationMinutes Int\s+@default\(60\)/);
-    const form = read("client/src/pages/relation-detail.tsx");
-    expect(form).not.toMatch(/FREE_FIRST_MEETING_MAX_MINUTES : 120/);
-    expect(form.match(/FREE_FIRST_MEETING_MAX_MINUTES : DEFAULT_WORKSHOP_MINUTES/g)).toHaveLength(3);
+    expect(read("client/src/pages/relation-detail.tsx")).not.toMatch(/: 120\b/);
+  });
+
+  it("le formulaire démarre à 60 min, 30 min pour la 1ère rencontre, sans dépasser le créneau", () => {
+    expect(defaultDurationMinutes(false)).toBe(60);
+    expect(defaultDurationMinutes(true)).toBe(FREE_FIRST_MEETING_MAX_MINUTES);
+    expect(defaultDurationMinutes(false, 240)).toBe(60);
+    expect(defaultDurationMinutes(false, 45)).toBe(45);
+    expect(defaultDurationMinutes(true, 45)).toBe(30);
+    expect(defaultDurationMinutes(false, 30)).toBe(30);
+    expect(defaultDurationMinutes(false, 9999)).toBe(60);
+  });
+
+  it("la migration de la durée par défaut colle au schéma Prisma et se défait", () => {
+    const dir = "prisma/migrations/20261020120000_intervention_default_duration_60";
+    expect(read(`${dir}/migration.sql`)).toMatch(/ALTER COLUMN "durationMinutes" SET DEFAULT 60;/);
+    expect(read(`${dir}/down.sql`)).toMatch(/ALTER COLUMN "durationMinutes" SET DEFAULT 120;/);
+    expect(read("prisma/schema.prisma")).toMatch(/durationMinutes Int\s+@default\(60\)/);
+  });
+
+  it("la page d'achat ne montre les règles de crédits qu'à ceux qui peuvent acheter", () => {
+    const page = read("client/src/pages/forfaits.tsx").replace(/\s+/g, " ");
+    expect(page).toMatch(/\{canBuy && \( <> <h2[^>]*>Comment vos crédits sont utilisés/);
+    expect(page).toMatch(/\{canBuy && \( <> <p className="mb-2">Pour faire un atelier/);
   });
 
   it("la première rencontre offerte garde ses 30 minutes", () => {

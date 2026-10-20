@@ -70,3 +70,13 @@ export const FREE_FIRST_MEETING_MAX_MINUTES = 30;
  * default and server default. The free first meeting keeps its own 30 minutes.
  */
 export const DEFAULT_WORKSHOP_MINUTES = 60;
+
+/**
+ * Length the request form starts with: the free duration for a first meeting,
+ * otherwise the default workshop, never longer than the chosen slot (or the
+ * 8 h server maximum).
+ */
+export function defaultDurationMinutes(isFirst: boolean, slotMinutes?: number): number {
+  const base = isFirst ? FREE_FIRST_MEETING_MAX_MINUTES : DEFAULT_WORKSHOP_MINUTES;
+  return slotMinutes === undefined ? base : Math.min(base, slotMinutes, 480);
+}

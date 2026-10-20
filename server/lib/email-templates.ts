@@ -456,7 +456,7 @@ export function getAvailabilityEndingEmailHtml(
     <p style="margin:0 0 18px;color:#1f1f1f;font-size:15px;line-height:1.6;">Bonjour ${escapeHtml(firstName)},</p>
     <p style="margin:0 0 18px;color:#1f1f1f;font-size:15px;line-height:1.6;">
       Vos disponibilit&eacute;s sur ${escapeHtml(PLATFORM_NAME)} s&rsquo;arr&ecirc;tent le <strong>${escapeHtml(lastDate)}</strong>.
-      Apr&egrave;s cette date, les s&eacute;niors ne pourront plus vous proposer de rencontre.
+      Apr&egrave;s cette date, les s&eacute;niors ne pourront plus vous demander d&rsquo;atelier.
     </p>
     <p style="margin:0 0 18px;color:#1f1f1f;font-size:15px;line-height:1.6;">
       Un clic suffit pour prolonger le m&ecirc;me planning de quelques semaines.
