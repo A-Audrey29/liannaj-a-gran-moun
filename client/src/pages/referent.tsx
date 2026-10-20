@@ -124,13 +124,13 @@ function DashboardTab({ senior, relations }: { senior: UserType | null; relation
                   className="text-right hover:opacity-80"
                   data-testid="button-open-ateliers"
                 >
-                  <p className="text-2xl font-bold text-[#c0354a]" data-testid="text-credit-balance">
+                  <p className="text-2xl font-bold text-primary" data-testid="text-credit-balance">
                     {Math.max(creditData.available, 0)}
                   </p>
                   <p className="text-xs text-muted-foreground">
                     atelier{creditData.available > 1 ? "s" : ""} disponible{creditData.available > 1 ? "s" : ""}
                   </p>
-                  <p className="text-xs text-[#c0354a] underline">Voir le détail</p>
+                  <p className="text-xs text-primary underline">Voir le détail</p>
                 </button>
               )}
             </div>

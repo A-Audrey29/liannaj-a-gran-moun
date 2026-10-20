@@ -114,7 +114,7 @@ export default function Forfaits() {
             )}
             {canBuy && (
               <Button
-                className="mt-auto h-14 text-lg bg-[#c0354a] hover:bg-[#c53a4d] text-white"
+                className="mt-auto h-14 text-lg bg-primary hover:bg-[#c53a4d] text-white"
                 onClick={() => setLocation(buyPath)}
                 data-testid={`button-forfait-${offer.id}`}
               >
@@ -159,7 +159,7 @@ export default function Forfaits() {
         <p className="font-bold text-gray-900">Une question avant d'acheter ?</p>
         <p className="text-gray-800 mb-2">
           L'équipe {PLATFORM_NAME} vous répond :{" "}
-          <a href={teamContactHref(user?.role)} className="font-semibold text-[#c0354a] underline" data-testid="link-forfaits-help">
+          <a href={teamContactHref(user?.role)} className="font-semibold text-primary underline" data-testid="link-forfaits-help">
             {user && (user.role === "SENIOR" || user.role === "REFERENT_SENIOR") ? "écrire à l'équipe" : CONTACT_EMAIL}
           </a>
         </p>
@@ -170,7 +170,7 @@ export default function Forfaits() {
 
       {canBuy && (
         <Button
-          className="w-full md:w-auto h-14 px-8 text-lg bg-[#c0354a] hover:bg-[#c53a4d] text-white"
+          className="w-full md:w-auto h-14 px-8 text-lg bg-primary hover:bg-[#c53a4d] text-white"
           onClick={() => setLocation(buyPath)}
           data-testid="button-forfaits-buy"
         >

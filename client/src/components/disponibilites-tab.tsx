@@ -201,7 +201,7 @@ function RecurringForm() {
             {template?.slots ? (
               <Button
                 size="sm"
-                className="mt-3 rounded-full bg-[#c0354a] hover:bg-[#a82b3d] text-white"
+                className="mt-3 rounded-full bg-primary hover:bg-primary/90 text-white"
                 onClick={() => extend.mutate()}
                 disabled={extend.isPending}
                 data-testid="button-extend-availability"
@@ -264,7 +264,7 @@ function RecurringForm() {
         </div>
 
         <Button
-          className="mt-4 rounded-full bg-[#c0354a] hover:bg-[#a82b3d] text-white"
+          className="mt-4 rounded-full bg-primary hover:bg-primary/90 text-white"
           onClick={() => submit.mutate()}
           disabled={submit.isPending || !anyEnabled}
           data-testid="button-save-recurring"

@@ -70,13 +70,13 @@ export default function MesAteliers() {
       <Card className="rounded-2xl border-0 shadow-sm mb-6">
         <CardContent className="py-6">
           <div className="flex items-center gap-3">
-            <BookOpen className="w-8 h-8 text-[#c0354a]" />
+            <BookOpen className="w-8 h-8 text-primary" />
             <div>
               <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Ateliers disponibles</p>
               {balanceLoading ? (
                 <Skeleton className="h-8 w-24 mt-1" />
               ) : balanceError || !balanceData ? (
-                <p className="text-sm text-[#c0354a] mt-1" data-testid="text-balance-error">
+                <p className="text-sm text-primary mt-1" data-testid="text-balance-error">
                   Impossible de charger votre solde. Réessayez dans un instant.
                 </p>
               ) : (
@@ -118,7 +118,7 @@ export default function MesAteliers() {
 
       <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">Historique</h2>
       {historyError ? (
-        <p className="text-center py-12 text-[#c0354a]" data-testid="text-history-error">
+        <p className="text-center py-12 text-primary" data-testid="text-history-error">
           Impossible de charger l'historique. Réessayez dans un instant.
         </p>
       ) : historyLoading ? (
@@ -145,7 +145,7 @@ export default function MesAteliers() {
                 <p className="text-xs text-muted-foreground">{entry.reason}</p>
                 <p className="text-xs text-muted-foreground mt-0.5">{formatDate(entry.createdAt)}</p>
               </div>
-              <span className={`text-sm font-bold shrink-0 ${entry.amount > 0 ? "text-green-700" : "text-[#c0354a]"}`}>
+              <span className={`text-sm font-bold shrink-0 ${entry.amount > 0 ? "text-green-700" : "text-primary"}`}>
                 {entry.amount > 0 ? "+" : ""}{entry.amount}
               </span>
             </div>

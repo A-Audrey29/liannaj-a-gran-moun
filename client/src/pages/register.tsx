@@ -711,7 +711,7 @@ function PhotoUploadField({
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       className={`border-2 border-dashed rounded-xl p-6 text-center transition-colors ${
-        isDragging ? "border-[#c0354a] bg-red-50" : "border-border"
+        isDragging ? "border-primary bg-red-50" : "border-border"
       }`}
       data-testid="dropzone-photo"
     >

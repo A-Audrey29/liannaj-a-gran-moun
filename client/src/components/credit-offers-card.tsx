@@ -73,7 +73,7 @@ export function OffersGrid() {
       {online === false && (
         <p className="text-sm rounded-lg bg-[#f3eaff] px-3 py-2" data-testid="text-buy-via-team">
           Pour acheter des ateliers,{" "}
-          <a href={teamContactHref(user?.role)} className="font-semibold text-[#c0354a] underline">
+          <a href={teamContactHref(user?.role)} className="font-semibold text-primary underline">
             écrivez à l'équipe
           </a>
           . Elle vous indique comment régler et ajoute vos ateliers à votre compte.
@@ -89,7 +89,7 @@ export function CreditOffersCard() {
       <CardContent className="pt-6 space-y-3">
         <p className="font-semibold">Acheter des ateliers</p>
         <OffersGrid />
-        <Link href="/forfaits" className="inline-block text-sm underline text-[#c0354a]" data-testid="link-forfaits">
+        <Link href="/forfaits" className="inline-block text-sm underline text-primary" data-testid="link-forfaits">
           Comment fonctionnent les forfaits ?
         </Link>
       </CardContent>

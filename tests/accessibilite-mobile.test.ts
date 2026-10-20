@@ -71,6 +71,19 @@ describe("contraste des couleurs de marque (AA = 4.5)", () => {
     expect(offenders).toEqual([]);
   });
 
+  it("le rouge de marque passe par les jetons du theme (bg-primary, text-primary), pas par une valeur en dur", () => {
+    // Un `bg-[#c0354a]` n'existe dans le CSS qu'apres recompilation de Tailwind : sur un
+    // serveur de dev demarre avant, le bouton perdait son fond (texte blanc sur blanc).
+    const offenders = tsxFiles.filter((f) => /(?:bg|text|border|fill|ring)-\[#c0354a\]/.test(read(f)));
+    expect(offenders).toEqual([]);
+  });
+
+  it("l'export CSV de l'historique est reserve a l'admin", () => {
+    expect(read("client/src/components/meeting-history.tsx")).toContain("showExport = false");
+    const offenders = tsxFiles.filter((f) => !f.endsWith("admin.tsx") && /<MeetingHistory[^>]*showExport/.test(read(f).replace(/\s+/g, " ")));
+    expect(offenders).toEqual([]);
+  });
+
   it("n'utilise plus l'ancien rouge #dc4256 ni le violet #8b5cf6 en texte", () => {
     const offenders = tsxFiles.filter((f) => /#dc4256|text-\[#8b5cf6\]/i.test(read(f)));
     expect(offenders).toEqual([]);

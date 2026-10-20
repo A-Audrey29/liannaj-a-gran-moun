@@ -186,7 +186,7 @@ export default function RelationDetail() {
             </div>
             {relation.status === "ACTIVE" && (isSenior || isJunior) && (
               <Button
-                className="mt-4 rounded-full bg-[#c0354a] hover:bg-[#a82b3d] text-white"
+                className="mt-4 rounded-full bg-primary hover:bg-primary/90 text-white"
                 onClick={() => setLocation(`/mon-espace?tab=messages&relation=${relation.id}`)}
                 data-testid="button-send-message-detail"
               >
@@ -267,7 +267,7 @@ export default function RelationDetail() {
               </AlertDialogHeader>
               <AlertDialogFooter>
                 <AlertDialogCancel>Annuler</AlertDialogCancel>
-                <AlertDialogAction onClick={() => closeMutation.mutate()} className="bg-[#c0354a] hover:bg-[#a82b3d]">Confirmer</AlertDialogAction>
+                <AlertDialogAction onClick={() => closeMutation.mutate()} className="bg-primary hover:bg-primary/90">Confirmer</AlertDialogAction>
               </AlertDialogFooter>
             </AlertDialogContent>
           </AlertDialog>
@@ -591,7 +591,7 @@ function NewInterventionDialog({
                       onClick={() => toggleTask(task)}
                       className={`px-3 py-1.5 rounded-full text-sm border transition-colors ${
                         selected
-                          ? "bg-[#c0354a] text-white border-[#c0354a]"
+                          ? "bg-primary text-white border-primary"
                           : "bg-white text-muted-foreground border-border hover:bg-muted"
                       }`}
                       data-testid={`task-${task}`}
@@ -608,7 +608,7 @@ function NewInterventionDialog({
           <Button
             onClick={() => createMutation.mutate()}
             disabled={createMutation.isPending || tooLong || tooShort}
-            className="bg-[#c0354a] hover:bg-[#a82b3d] text-white"
+            className="bg-primary hover:bg-primary/90 text-white"
             data-testid="button-submit-intervention"
           >
             {createMutation.isPending ? "Envoi..." : "Proposer"}
@@ -660,7 +660,7 @@ function FeedbackDialog({ interventionId, relationId }: { interventionId: string
           </div>
         </div>
         <DialogFooter>
-          <Button onClick={() => feedbackMutation.mutate()} disabled={feedbackMutation.isPending || rating === 0} className="bg-[#c0354a] hover:bg-[#a82b3d] text-white" data-testid="button-submit-feedback">
+          <Button onClick={() => feedbackMutation.mutate()} disabled={feedbackMutation.isPending || rating === 0} className="bg-primary hover:bg-primary/90 text-white" data-testid="button-submit-feedback">
             {feedbackMutation.isPending ? "Envoi..." : "Envoyer"}
           </Button>
         </DialogFooter>
