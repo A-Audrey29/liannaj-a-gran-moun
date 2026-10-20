@@ -55,6 +55,9 @@ describe("achat d'ateliers", () => {
     expect(page).toMatch(/const checkout = useCheckout\(\)/);
     expect(page).toMatch(/checkout\.mutate\(offer\.id\)/);
     expect(page).toContain("Acheter en confiance");
+    // Ecrite comme si le paiement etait branche : pas de repli "ecrivez a l'equipe" pour acheter.
+    expect(page).not.toMatch(/pas encore ouvert|Demander à l'équipe|useOnlinePayment/);
+    expect(page).toContain("Besoin d'aide ?");
   });
 });
 

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation } from "@tanstack/react-query";
 import { apiRequest, apiErrorMessage } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -15,18 +15,6 @@ export function teamContactHref(role: string | undefined): string {
   if (role === "SENIOR") return "/mon-espace?tab=aide";
   if (role === "REFERENT_SENIOR") return "/espace-referent?tab=contact";
   return `mailto:${CONTACT_EMAIL}`;
-}
-
-/**
- * Online payment is open only when a provider is configured on the server.
- * Until then the offers stay visible but buying goes through the team.
- */
-export function useOnlinePayment(): boolean | undefined {
-  const { data } = useQuery<{ online: boolean }>({
-    queryKey: ["/api/credits/payment-status"],
-    staleTime: 5 * 60 * 1000,
-  });
-  return data?.online;
 }
 
 /** Starts a checkout for one offer and sends the buyer to the payment page. */

@@ -1,11 +1,11 @@
 import { Link, useLocation } from "wouter";
-import { ArrowLeft, ShieldCheck } from "lucide-react";
+import { ArrowLeft, LifeBuoy, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/use-auth";
-import { teamContactHref, useCheckout, useOnlinePayment } from "@/components/credit-offers-card";
+import { teamContactHref, useCheckout } from "@/components/credit-offers-card";
 import { CREDIT_OFFERS } from "@shared/credit-offers";
 import { canBuyCredits } from "@shared/credits";
-import { CONTACT_EMAIL, ORGANIZATION_NAME, PLATFORM_NAME } from "@shared/branding";
+import { ORGANIZATION_NAME, PLATFORM_NAME } from "@shared/branding";
 
 /**
  * "Acheter des ateliers": explains how buying works, then lets the buyer pay.
@@ -93,7 +93,6 @@ export default function Forfaits() {
   // here. Any other account (junior, admin, teacher, referent without a linked
   // senior) cannot buy: no buy button and no sentence pointing to "Mes achats".
   const canBuy = !user || canBuyCredits(user);
-  const online = useOnlinePayment();
   const homePath =
     user?.role === "REFERENT_SENIOR" ? "/espace-referent" : user?.role === "TEACHER" ? "/espace-professeur" : user?.role === "ADMIN" ? "/admin" : "/mon-espace";
 
@@ -123,16 +122,10 @@ export default function Forfaits() {
               Un seul atelier, ou un pack pour en faire plusieurs. Le prix est affiché avant tout paiement.
             </Step>
             <Step n={2} title="Vous payez">
-              {online === false ? (
-                <span data-testid="text-forfaits-payment">
-                  Le paiement en ligne n'est pas encore ouvert. Vous écrivez à l'équipe : elle vous indique comment régler.
-                </span>
-              ) : (
-                <span data-testid="text-forfaits-payment">
-                  Vous payez par carte bancaire. Vous êtes envoyé sur la page de paiement de notre prestataire : vos
-                  coordonnées bancaires ne passent jamais par {PLATFORM_NAME}.
-                </span>
-              )}
+              <span data-testid="text-forfaits-payment">
+                Vous payez par carte bancaire. Vous êtes envoyé sur la page de paiement de notre prestataire : vos
+                coordonnées bancaires ne passent jamais par {PLATFORM_NAME}.
+              </span>
             </Step>
             <Step n={3} title="Vos ateliers sont ajoutés">
               Vos crédits apparaissent dans « Mes achats ». Vous pouvez ensuite proposer une rencontre à un jeune.
@@ -172,7 +165,7 @@ export default function Forfaits() {
                     Me connecter pour acheter
                   </Button>
                 )}
-                {canBuy && user && online === true && (
+                {canBuy && user && (
                   <Button
                     className="mt-auto h-14 text-lg"
                     disabled={checkout.isPending}
@@ -181,15 +174,6 @@ export default function Forfaits() {
                   >
                     {checkout.isPending && checkout.variables === offer.id ? "Redirection…" : "Acheter"}
                   </Button>
-                )}
-                {canBuy && user && online === false && (
-                  <a
-                    href={teamContactHref(user.role)}
-                    className="mt-auto inline-flex h-14 items-center justify-center rounded-md border-2 border-primary px-4 text-lg font-semibold text-primary hover:bg-primary hover:text-white"
-                    data-testid={`button-forfait-${offer.id}`}
-                  >
-                    Demander à l'équipe
-                  </a>
                 )}
               </div>
             ))}
@@ -203,13 +187,7 @@ export default function Forfaits() {
       )}
       {canBuy && (
         <>
-          {canBuy && user && online === false && (
-            <p className="mb-10 rounded-2xl bg-[#f3eaff] p-4" data-testid="text-buy-via-team">
-              Le paiement en ligne n'est pas encore ouvert. Cliquez sur « Demander à l'équipe » : elle vous indique comment
-              régler et ajoute vos ateliers à votre compte.
-            </p>
-          )}
-          {canBuy && user && online !== false && <div className="mb-10" />}
+          <div className="mb-10" />
 
           <h2 className="mb-4 flex items-center gap-2 text-2xl font-bold">
             <ShieldCheck className="h-6 w-6 text-[#6d28d9]" aria-hidden="true" /> Acheter en confiance
@@ -256,12 +234,14 @@ export default function Forfaits() {
 
       <div className="mb-8 rounded-2xl bg-gray-50 border border-gray-200 p-5" data-testid="box-forfaits-help">
         <p className="font-bold text-gray-900">Une question avant d'acheter ?</p>
-        <p className="text-gray-800">
-          L'équipe {PLATFORM_NAME} vous répond :{" "}
-          <a href={teamContactHref(user?.role)} className="font-semibold text-primary underline" data-testid="link-forfaits-help">
-            {user && (user.role === "SENIOR" || user.role === "REFERENT_SENIOR") ? "écrire à l'équipe" : CONTACT_EMAIL}
-          </a>
-        </p>
+        <p className="mb-3 text-gray-800">L'équipe {PLATFORM_NAME} vous répond.</p>
+        <a
+          href={teamContactHref(user?.role)}
+          className="inline-flex min-h-12 items-center justify-center gap-2 rounded-full border-2 border-primary px-6 text-lg font-semibold text-primary hover:bg-primary hover:text-white"
+          data-testid="link-forfaits-help"
+        >
+          <LifeBuoy className="h-5 w-5" aria-hidden="true" /> Besoin d'aide ?
+        </a>
       </div>
     </div>
   );

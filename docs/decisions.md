@@ -11,8 +11,12 @@ Retours d'Audrey après recette du profil senior sur mobile.
 liste des forfaits : un seul bouton « Acheter des ateliers » mène à `/forfaits`,
 qui devient la page d'achat (3 étapes : choisir, payer, retrouver ses crédits
 dans « Mes achats » ; bloc « Acheter en confiance » ; règles des crédits). Le
-paiement se lance depuis cette page (`useCheckout`), ou « Demander à l'équipe »
-tant que le paiement en ligne est fermé. Chaque phrase de la page doit rester
+paiement se lance depuis cette page (`useCheckout`). La page est écrite comme
+si le prestataire était branché (mise en production prévue avec le paiement) :
+pas de « paiement pas encore ouvert », pas de « demander à l'équipe » pour
+acheter, seulement un bouton « Besoin d'aide ? ». Cela remplace la décision
+« Achat sans prestataire » du 2026-10-13 côté interface ; sans prestataire
+(dev/QA) le bouton « Acheter » affiche l'erreur 503 du serveur. Chaque phrase de la page doit rester
 vraie par rapport au code (voir le commentaire en tête de `forfaits.tsx`).
 
 **Menu burger jamais sans issue.** `client/src/lib/space-tabs.ts` est la source

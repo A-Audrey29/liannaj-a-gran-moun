@@ -109,10 +109,13 @@ npm run db:push    # prisma db push — NE PAS utiliser sur la base Neon avec do
   passer par le contrat `server/lib/payment-provider.ts`
   (impl : `stripe-provider.ts`). Webhook (`/api/webhooks/payment`) vérifie la
   signature sur `req.rawBody` (capturé dans `server/app.ts`), jamais le body
-  JSON déjà parsé. Sans prestataire configuré, `GET /api/credits/payment-status`
-  renvoie `online: false` : les boutons « Acheter » deviennent « écrivez à
-  l'équipe » et l'admin saisit le paiement (onglet Paiements). Détail complet
-  dans `docs/decisions.md`.
+  JSON déjà parsé. L'interface d'achat (`/forfaits`) est écrite
+  comme si le prestataire était branché (décision du 2026-10-20) : toujours
+  un bouton « Acheter », jamais de « paiement pas encore ouvert » ni de
+  « demander à l'équipe » pour acheter (seulement un bouton « Besoin d'aide ? »).
+  Sans prestataire (dev/QA), `POST /api/credits/checkout` répond 503 et le
+  bouton affiche ce message. L'admin peut toujours saisir un paiement hors ligne
+  (onglet Paiements). Détail dans `docs/decisions.md`.
 - **Compte aidant** (`REFERENT_SENIOR`, appelé « aidant » dans l'interface) :
   l'aidant l'ouvre lui-même depuis le lien de validation de l'inscription du
   senior (`POST /api/validate` + champ `aidant`), avec l'adresse qui a reçu
