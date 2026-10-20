@@ -3,6 +3,43 @@
 Journal des choix d'architecture et de leurs raisons. Une entrée par décision,
 la plus récente en haut.
 
+## 2026-10-20 — Parcours senior : achat guidé, menu toujours accessible, demande de suppression
+
+Retours d'Audrey après recette du profil senior sur mobile.
+
+**Achat d'ateliers.** Le tableau de bord et « Mes achats » n'affichent plus la
+liste des forfaits : un seul bouton « Acheter des ateliers » mène à `/forfaits`,
+qui devient la page d'achat (3 étapes : choisir, payer, retrouver ses crédits
+dans « Mes achats » ; bloc « Acheter en confiance » ; règles des crédits). Le
+paiement se lance depuis cette page (`useCheckout`), ou « Demander à l'équipe »
+tant que le paiement en ligne est fermé. Chaque phrase de la page doit rester
+vraie par rapport au code (voir le commentaire en tête de `forfaits.tsx`).
+
+**Menu burger jamais sans issue.** `client/src/lib/space-tabs.ts` est la source
+unique des onglets par rôle. Sur une page sans onglets (Mes achats, une
+rencontre, notifications…), le burger liste les onglets de l'espace
+(`/mon-espace?tab=…`, `/mes-ateliers` pour « Mes achats »). Seniors, jeunes et
+aidants ; admin et professeur n'ont pas de sous-pages.
+
+**Demande de suppression de compte.** `POST /api/account/deletion-request`
+(Zod `{ confirmed: true }`). Aucune suppression automatique : la demande est
+un `Report` (`reason: ACCOUNT_DELETION`) visible dans « Signalements », plus
+un e-mail aux admins. Pas de migration : `Report.reason` est une chaîne
+libre. Alternative écartée : une table `AccountDeletionRequest` (migration
+inutile tant que le volume est de quelques demandes). Une seule demande
+ouverte par personne. La fenêtre de confirmation prévient que les ateliers non
+utilisés sont perdus (le solde est affiché pour un senior).
+
+**Couleur de marque par jetons.** `bg-primary` / `text-primary`, plus de
+`bg-[#c0354a]` : `twMerge` retirait `bg-primary` du `<Button>` et, tant que
+Tailwind n'avait pas recompilé, le bouton perdait son fond (texte blanc sur
+blanc). Après un changement de couleur ou de config Tailwind, redémarrer le
+serveur de dev.
+
+**Divers.** « Exporter CSV » de l'historique des rencontres : admin seulement.
+« Trouver un profil » s'ouvre sur le carrousel. Pas de « Proposer une
+rencontre » sur « Mes informations ».
+
 ## 2026-10-20 — Accessibilité et mobile-first
 
 Public visé : seniors (vue et dextérité réduites) et jeunes (téléphone d'abord).

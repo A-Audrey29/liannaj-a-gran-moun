@@ -4,8 +4,8 @@ import { useLocation } from "wouter";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { AlertTriangle, ArrowLeft, BookOpen, ShoppingCart } from "lucide-react";
-import { OffersGrid } from "@/components/credit-offers-card";
+import { AlertTriangle, ArrowLeft, BookOpen } from "lucide-react";
+import { BuyAteliersButton } from "@/components/credit-offers-card";
 import { canBuyCredits, type CreditBalanceResponse, type CreditHistoryEntry } from "@shared/credits";
 
 function formatDate(d: string | Date) {
@@ -107,14 +107,9 @@ export default function MesAteliers() {
         </CardContent>
       </Card>
 
-      <Card className="rounded-2xl border-0 shadow-sm mb-6" data-testid="card-buy-ateliers">
-        <CardContent className="pt-6 space-y-3">
-          <p className="font-semibold flex items-center gap-2">
-            <ShoppingCart className="w-4 h-4" /> Acheter des ateliers
-          </p>
-          <OffersGrid />
-        </CardContent>
-      </Card>
+      <div className="mb-8" data-testid="card-buy-ateliers">
+        <BuyAteliersButton className="w-full sm:w-auto h-12 px-6 text-base" />
+      </div>
 
       <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">Historique</h2>
       {historyError ? (

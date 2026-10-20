@@ -1,8 +1,10 @@
 import { useAuth } from "@/hooks/use-auth";
+import { AccountDeletionRequest } from "@/components/account-deletion-request";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useLocation } from "wouter";
+import { REFERENT_TABS } from "@/lib/space-tabs";
 import { UserAvatar } from "@/components/user-avatar";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -70,15 +72,7 @@ function formatDate(d: string | Date) {
   return `${fmtDayLongMonthYear(date)} à ${fmtTime(date)}`;
 }
 
-const TABS = [
-  { id: "dashboard", label: "Tableau de bord", icon: LayoutGrid },
-  { id: "suivi", label: "Suivi des ateliers", icon: Calendar },
-  { id: "prestation", label: "Demander un atelier", icon: Plus },
-  // Navigates to /mes-ateliers (see selectTab), same page as the senior's tab.
-  { id: "ateliers", label: "Mes achats", icon: BookOpen },
-  { id: "contact", label: "Contacter l'équipe", icon: Mail },
-  { id: "profil", label: "Mon compte", icon: User },
-] as const;
+const TABS = REFERENT_TABS;
 
 type TabId = typeof TABS[number]["id"];
 
@@ -442,6 +436,7 @@ function ProfilTab() {
       <p className="text-xs text-muted-foreground text-center">
         Pour modifier vos informations, contactez l'équipe FEVES.
       </p>
+      <AccountDeletionRequest />
     </div>
   );
 }

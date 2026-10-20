@@ -5,6 +5,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 import { Link } from "wouter";
+import { ShoppingCart } from "lucide-react";
 import { CREDIT_OFFERS } from "@shared/credit-offers";
 import { CONTACT_EMAIL } from "@shared/branding";
 
@@ -27,11 +28,10 @@ export function useOnlinePayment(): boolean | undefined {
   return data?.online;
 }
 
-export function OffersGrid() {
+/** Starts a checkout for one offer and sends the buyer to the payment page. */
+export function useCheckout() {
   const { toast } = useToast();
-  const { user } = useAuth();
-  const online = useOnlinePayment();
-  const mutation = useMutation({
+  return useMutation({
     mutationFn: async (offerId: string) => {
       const res = await apiRequest("POST", "/api/credits/checkout", { offerId });
       return res.json() as Promise<{ url: string }>;
@@ -48,51 +48,29 @@ export function OffersGrid() {
       });
     },
   });
-
-  return (
-    <div className="space-y-3">
-      {CREDIT_OFFERS.map((offer) => (
-        <div key={offer.id} className="flex items-center justify-between gap-3">
-          <div>
-            <p className="text-sm font-semibold" data-testid={`text-offer-name-${offer.id}`}>{offer.name}</p>
-            <p className="text-sm">{offer.label}</p>
-            <p className="text-xs text-muted-foreground">{offer.priceEuros} €</p>
-          </div>
-          {online && (
-            <Button
-              size="sm"
-              disabled={mutation.isPending}
-              onClick={() => mutation.mutate(offer.id)}
-              data-testid={`button-buy-${offer.id}`}
-            >
-              Acheter
-            </Button>
-          )}
-        </div>
-      ))}
-      {online === false && (
-        <p className="text-sm rounded-lg bg-[#f3eaff] px-3 py-2" data-testid="text-buy-via-team">
-          Pour acheter des ateliers,{" "}
-          <a href={teamContactHref(user?.role)} className="font-semibold text-primary underline">
-            écrivez à l'équipe
-          </a>
-          . Elle vous indique comment régler et ajoute vos ateliers à votre compte.
-        </p>
-      )}
-    </div>
-  );
 }
 
+/** Dashboard entry point: one clear button to the page that explains how buying works. */
 export function CreditOffersCard() {
   return (
     <Card data-testid="card-credit-offers">
       <CardContent className="pt-6 space-y-3">
         <p className="font-semibold">Acheter des ateliers</p>
-        <OffersGrid />
-        <Link href="/forfaits" className="inline-block text-sm underline text-primary" data-testid="link-forfaits">
-          Comment fonctionnent les forfaits ?
-        </Link>
+        <p className="text-sm text-muted-foreground">1 crédit = 1 atelier. Choisissez un forfait, on vous explique chaque étape.</p>
+        <BuyAteliersButton className="w-full sm:w-auto" />
       </CardContent>
     </Card>
+  );
+}
+
+export const BUY_ATELIERS_PATH = "/forfaits";
+
+export function BuyAteliersButton({ className }: { className?: string }) {
+  return (
+    <Link href={BUY_ATELIERS_PATH}>
+      <Button className={`rounded-full ${className ?? ""}`} data-testid="button-buy-ateliers">
+        <ShoppingCart className="w-4 h-4 mr-2" aria-hidden="true" /> Acheter des ateliers
+      </Button>
+    </Link>
   );
 }

@@ -118,6 +118,12 @@ npm run db:push    # prisma db push — NE PAS utiliser sur la base Neon avec do
   senior (`POST /api/validate` + champ `aidant`), avec l'adresse qui a reçu
   le lien (`validatorEmail`) — jamais une adresse venant de la requête. Les
   autres cas passent par l'admin. Détail dans `docs/decisions.md`.
+- **UI mobile/a11y** : couleur de marque via `bg-primary` / `text-primary` (jamais
+  `bg-[#hex]` : `twMerge` retire `bg-primary` du `<Button>`), texte ≥ 12 px,
+  cibles tactiles 44 px, `<img>` de photo de profil via `UserAvatar`. Garde-fous :
+  `tests/accessibilite-mobile.test.ts`. Détail dans `docs/decisions.md`.
+- **Suppression de compte** : jamais automatique. `POST /api/account/deletion-request`
+  dépose une demande chez les admins (onglet Signalements) ; un humain supprime.
 - **NPS** (exigence du financeur): réponses dans `NpsResponse`, **jamais** en
   colonne d'`Intervention` (les routes à masquage de feedback la
   sérialiseraient). Éligibilité décidée côté serveur seulement (rôle senior /

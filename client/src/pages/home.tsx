@@ -27,6 +27,8 @@ import type { Relation, User as UserType, Intervention, Category } from "@shared
 import MessagesTab from "@/components/messages-tab";
 import MeetingHistory from "@/components/meeting-history";
 import DisponibilitesTab from "@/components/disponibilites-tab";
+import { AccountDeletionRequest } from "@/components/account-deletion-request";
+import { homeTabsFor } from "@/lib/space-tabs";
 import { MobileTabsMenu } from "@/components/mobile-tabs-menu";
 import { useSSE } from "@/hooks/use-sse";
 import { useUnreadMessageCount } from "@/hooks/use-unread-count";
@@ -39,18 +41,6 @@ import { isUpcomingOrOngoing } from "@shared/meeting-check";
 
 type RelationWithUsers = Relation & { senior: UserType; junior: UserType; interventions?: Intervention[] };
 type MatchSuggestion = { user: UserType; commonCategories: string[]; isRecommended: boolean; isFavorite: boolean };
-
-const ALL_TABS = [
-  { id: "dashboard", label: "Tableau de bord", icon: LayoutGrid },
-  { id: "rencontres", label: "Mes rencontres", icon: Calendar },
-  { id: "disponibilites", label: "Mes disponibilités", icon: CalendarClock },
-  // Navigates to /mes-ateliers (see setActiveTab); senior only.
-  { id: "ateliers", label: "Mes achats", icon: BookOpen },
-  { id: "messages", label: "Messagerie", icon: Mail },
-  { id: "demandes", label: "Trouver un profil", icon: MessageCircle },
-  { id: "profil", label: "Mes informations", icon: User },
-  { id: "aide", label: "Aide", icon: HelpCircle },
-] as const;
 
 type InterventionWithPartner = Intervention & { partnerName: string; relationId: string };
 
@@ -94,14 +84,7 @@ export default function Home() {
   const [savedTab, setActiveTabState] = useState<string>("dashboard");
   const [openRelationId, setOpenRelationId] = useState<string | null>(null);
   const isNotAdmin = user?.role !== "ADMIN";
-  const tabs = (user?.role === "ADMIN"
-    ? ALL_TABS.filter((t) => t.id !== "profil" && t.id !== "messages" && t.id !== "aide" && t.id !== "disponibilites")
-    : user?.role === "JUNIOR"
-    ? ALL_TABS.filter((t) => t.id !== "aide").map((t) =>
-        t.id === "demandes" ? { ...t, label: "Demandes reçues" } : t
-      )
-    : ALL_TABS.filter((t) => t.id !== "aide" && t.id !== "disponibilites")
-  ).filter((t) => t.id !== "ateliers" || user?.role === "SENIOR");
+  const tabs = homeTabsFor(user?.role);
   // An unknown tab for this role (link from another space, stale state)
   // would render an empty page: fall back to the dashboard.
   const activeTab = savedTab === "aide" || tabs.some((t) => t.id === savedTab) ? savedTab : "dashboard";
@@ -1230,6 +1213,8 @@ function ProfilTab({ user }: { user: AuthUser | null }) {
       >
         Déconnexion
       </Button>
+
+      <AccountDeletionRequest />
     </div>
   );
 }

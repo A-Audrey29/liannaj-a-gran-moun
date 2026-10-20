@@ -20,12 +20,13 @@ import {
   getInterventionConfirmedEmailHtml,
   getFeedbackReminderEmailHtml,
   getNewReportEmailHtml,
+  getNewAdminNotificationEmailHtml,
   getCreditPurchaseConfirmedEmailHtml,
   getNegativeCreditBalanceEmailHtml,
   getPasswordResetEmailHtml,
   escapeHtml,
 } from "./lib/email-templates";
-import { insertUserSchema, createRelationSchema, insertInterventionSchema, feedbackSchema, createPaymentSchema, checkoutSchema, changePasswordSchema, forgotPasswordSchema, resetPasswordSchema, createAdminSchema, insertReportSchema, createAvailabilitySchema, createRecurringAvailabilitiesSchema, extendAvailabilitiesSchema, createDateExceptionSchema, updateUserCategoriesSchema, meetingHistoryQuerySchema, npsSchema, npsQuerySchema, creditsQuerySchema, checkoutStatusQuerySchema, validateRegistrationSchema, COMPLETED_STATUSES } from "../shared/schema";
+import { accountDeletionRequestSchema, insertUserSchema, createRelationSchema, insertInterventionSchema, feedbackSchema, createPaymentSchema, checkoutSchema, changePasswordSchema, forgotPasswordSchema, resetPasswordSchema, createAdminSchema, insertReportSchema, createAvailabilitySchema, createRecurringAvailabilitiesSchema, extendAvailabilitiesSchema, createDateExceptionSchema, updateUserCategoriesSchema, meetingHistoryQuerySchema, npsSchema, npsQuerySchema, creditsQuerySchema, checkoutStatusQuerySchema, validateRegistrationSchema, COMPLETED_STATUSES } from "../shared/schema";
 import { creditOwnerId } from "../shared/credits";
 import type { CreditBalanceResponse, CreditHistoryEntry, CheckoutStatusResponse } from "../shared/credits";
 import type { MeetingHistoryEntry, MeetingHistoryResponse, MeetingHistorySummary, Role } from "../shared/schema";
@@ -243,6 +244,9 @@ function buildMeetingSummary(entries: MeetingHistoryEntry[]): MeetingHistorySumm
 }
 
 const isDev = process.env.NODE_ENV !== "production";
+
+/** `Report.reason` of an account-deletion request (shown in the admin "Signalements" tab). */
+const ACCOUNT_DELETION_REASON = "ACCOUNT_DELETION";
 
 // Durée de validité du lien de validation d'inscription (7 jours).
 const VALIDATION_TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000;
@@ -3107,6 +3111,57 @@ export async function registerRoutes(
     } catch (err) {
       console.error("[PAYMENT_WEBHOOK] Erreur passagère, Stripe va réessayer:", err);
       res.status(500).send();
+    }
+  });
+
+  // A user asks the team to delete their account. Nothing is deleted here: the
+  // request lands in the admin's "Signalements" tab (and by e-mail) so a person
+  // can check it and act. Unused credits are lost, hence the explicit confirmation.
+  app.post("/api/account/deletion-request", requireAuth, async (req, res) => {
+    try {
+      const parsed = accountDeletionRequestSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: "Confirmation requise", errors: parsed.error.flatten().fieldErrors });
+      }
+      const user = req.user as any;
+      if (user.role === "ADMIN") {
+        return res.status(403).json({ message: "Un compte administrateur ne se supprime pas par cette demande." });
+      }
+
+      // A second click (or a second tab) must not pile up requests.
+      const existing = await storage.findOpenReportByReason(user.id, ACCOUNT_DELETION_REASON);
+      if (existing) {
+        return res.json({ alreadyRequested: true, message: "Votre demande a déjà été envoyée à l'équipe." });
+      }
+
+      // Credits belong to the senior (an aidant's request does not touch them).
+      const credits = user.role === "SENIOR" ? await storage.getCreditBalance(user.id) : null;
+      const creditsLine = credits !== null ? `Ateliers non utilisés : ${Math.max(credits, 0)}.` : "";
+      const userName = `${user.firstName} ${user.lastName}`;
+      await storage.createReport({
+        reporterId: user.id,
+        reason: ACCOUNT_DELETION_REASON,
+        message: `[Demande de suppression de compte] ${userName} (${user.email}, ${user.role}). ${creditsLine}`.trim(),
+      });
+
+      const adminUrl = `${getPublicBaseUrl()}/admin`;
+      for (const admin of await storage.getAdmins()) {
+        sendEmail({
+          to: admin.email,
+          subject: `Demande de suppression de compte — ${PLATFORM_NAME}`,
+          htmlContent: getNewAdminNotificationEmailHtml(
+            admin.firstName,
+            userName,
+            `demande la suppression de son compte (${user.email}, ${user.role}). ${creditsLine}`.trim(),
+            adminUrl,
+          ),
+        }).catch((err) => console.error("[ACCOUNT_DELETION] Error sending to admin:", err));
+      }
+
+      res.status(201).json({ message: `Votre demande a été envoyée à l'équipe ${PLATFORM_NAME}.` });
+    } catch (err) {
+      console.error("[ACCOUNT_DELETION] Error:", err);
+      res.status(500).json({ message: "Erreur lors de l'envoi de la demande" });
     }
   });
 

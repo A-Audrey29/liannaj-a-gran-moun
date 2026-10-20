@@ -452,6 +452,15 @@ export const referentContactSchema = z.object({
   message: z.string().min(10, "Message trop court").max(2000),
 });
 
+/**
+ * Demande de suppression de compte : la confirmation explicite (les ateliers
+ * non utilises seront perdus) est exigee aussi cote serveur, pas seulement
+ * par la fenetre du client.
+ */
+export const accountDeletionRequestSchema = z.object({
+  confirmed: z.literal(true, { errorMap: () => ({ message: "Confirmation requise" }) }),
+});
+
 export type CreateReferentInput = z.infer<typeof createReferentSchema>;
 export type ReferentInterventionInput = z.infer<typeof referentInterventionSchema>;
 export type ReferentContactInput = z.infer<typeof referentContactSchema>;

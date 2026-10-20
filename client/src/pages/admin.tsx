@@ -1849,6 +1849,7 @@ const REPORT_REASON_LABELS: Record<string, string> = {
   PERSON: "Problème avec une personne",
   QUESTION: "Question sur l'application",
   OTHER: "Autre chose",
+  ACCOUNT_DELETION: "Demande de suppression de compte",
 };
 
 function SignalementsTab() {

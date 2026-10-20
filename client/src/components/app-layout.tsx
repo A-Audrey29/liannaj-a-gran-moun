@@ -10,6 +10,7 @@ import { Menu } from "lucide-react";
 import { useState } from "react";
 import { usePageTabsRegistry } from "@/lib/page-tabs-context";
 import { Badge } from "@/components/ui/badge";
+import { spaceMenuLinks } from "@/lib/space-tabs";
 
 function NavLinks({ authenticated, role, onClick }: { authenticated: boolean; role?: string; onClick?: () => void }) {
   const [location] = useLocation();
@@ -51,6 +52,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const { toast } = useToast();
   const [mobileOpen, setMobileOpen] = useState(false);
   const pageTabs = usePageTabsRegistry();
+  // Pages without tabs (Mes achats, a meeting, notifications...) still get the
+  // space menu, so the burger is never a dead end.
+  const spaceLinks = !pageTabs && isAuthenticated ? spaceMenuLinks(user?.role) : [];
 
   const handleLogout = async () => {
     try {
@@ -104,6 +108,30 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 <SheetTitle className="sr-only">Menu</SheetTitle>
                 <div className="flex flex-col gap-4 pt-8">
                   <NavLinks authenticated={isAuthenticated} role={user?.role} onClick={() => setMobileOpen(false)} />
+
+                  {spaceLinks.length > 0 && (
+                    <div className="flex flex-col gap-2 mt-4 pt-4 border-t border-border/50" data-testid="menu-space-links">
+                      {spaceLinks.map((item) => {
+                        const Icon = item.icon;
+                        const isActive = location === item.href;
+                        return (
+                          <Link
+                            key={item.id}
+                            href={item.href}
+                            onClick={() => setMobileOpen(false)}
+                            aria-current={isActive ? "page" : undefined}
+                            className={`flex items-center gap-2 px-4 py-2.5 min-h-11 rounded-full text-sm font-medium transition-colors ${
+                              isActive ? "bg-primary text-white" : "bg-white text-muted-foreground hover:bg-muted"
+                            }`}
+                            data-testid={`menu-link-${item.id}`}
+                          >
+                            <Icon className="w-4 h-4" aria-hidden="true" />
+                            {item.label}
+                          </Link>
+                        );
+                      })}
+                    </div>
+                  )}
 
                   {pageTabs && (
                     <div className="flex flex-col gap-2 mt-4 pt-4 border-t border-border/50">

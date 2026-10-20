@@ -281,6 +281,7 @@ export interface IStorage {
   getReports(): Promise<(Report & { reporter: User; target: User | null })[]>;
   getOpenReportCount(): Promise<number>;
   updateReportStatus(id: string, status: string, handledNote: string): Promise<Report>;
+  findOpenReportByReason(reporterId: string, reason: string): Promise<Report | null>;
 
   getNpsIneligibility(user: NpsRespondent): Promise<NpsIneligibleReason | null>;
   /**
@@ -1289,6 +1290,10 @@ class DatabaseStorage implements IStorage {
       include: { reporter: true, target: true },
       orderBy: { createdAt: "desc" },
     }) as any;
+  }
+
+  async findOpenReportByReason(reporterId: string, reason: string): Promise<Report | null> {
+    return prisma.report.findFirst({ where: { reporterId, reason, status: "OPEN" } });
   }
 
   async getOpenReportCount(): Promise<number> {
