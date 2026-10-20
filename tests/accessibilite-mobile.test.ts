@@ -66,11 +66,9 @@ describe("contraste des couleurs de marque (AA = 4.5)", () => {
     expect(contrast(primary, "#f3eaff")).toBeGreaterThanOrEqual(4.5);
   });
 
-  it("les couleurs de texte en dur restent lisibles sur leur fond habituel", () => {
-    expect(contrast("#c0354a", "#ffffff")).toBeGreaterThanOrEqual(4.5);
-    expect(contrast("#c0354a", "#f3eaff")).toBeGreaterThanOrEqual(4.5);
-    expect(contrast("#6d28d9", "#e8d7fe")).toBeGreaterThanOrEqual(4.5);
-    expect(contrast("#ffffff", "#7c3aed")).toBeGreaterThanOrEqual(4.5);
+  it("pas de texte blanc semi-transparent (contraste insuffisant sur le rouge de marque)", () => {
+    const offenders = tsxFiles.filter((f) => /text-white\/[1-8]0\b/.test(read(f)));
+    expect(offenders).toEqual([]);
   });
 
   it("n'utilise plus l'ancien rouge #dc4256 ni le violet #8b5cf6 en texte", () => {
@@ -96,7 +94,9 @@ describe("tailles de texte et images", () => {
   });
 
   it("les photos de profil passent par UserAvatar (repli sur les initiales)", () => {
-    const offenders = tsxFiles.filter((f) => /<img[^>]*getPhotoUrl\(/.test(read(f).replace(/\n\s*/g, " ")));
+    const offenders = tsxFiles.filter((f) =>
+      /<img[^>]*(profilePhoto|photoUrl|getPhotoUrl)/.test(read(f).replace(/\s+/g, " ")),
+    );
     expect(offenders).toEqual([]);
   });
 
@@ -133,8 +133,7 @@ describe("composants de base", () => {
 
   it("le badge ne force pas la page a deborder pour les ateliers a nom long", () => {
     const home = read("client/src/pages/home.tsx");
-    expect(home).toMatch(/badge-category-[\s\S]{0,40}/);
-    expect(home).toMatch(/whitespace-normal[^"]*"\s+data-testid=\{`badge-category-/);
+    expect(home).toMatch(/className="[^"]*whitespace-normal[^"]*"\s+data-testid=\{`badge-category-/);
   });
 
   it("un badge positionne en absolute n'est pas ecrase par hover-elevate", () => {

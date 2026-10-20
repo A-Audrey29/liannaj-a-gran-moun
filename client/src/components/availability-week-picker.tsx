@@ -106,7 +106,7 @@ export default function AvailabilityWeekPicker({ juniorId, juniorName, intervent
             <Button
               variant="outline"
               size="sm"
-              className="rounded-full h-8 w-8 p-0"
+              className="rounded-full h-11 w-11 p-0 md:h-8 md:w-8 md:min-h-8"
               onClick={() => setWeekStart(addDaysISO(weekStart, -7))}
               aria-label="Semaine précédente"
               data-testid="button-prev-week"
@@ -119,7 +119,7 @@ export default function AvailabilityWeekPicker({ juniorId, juniorName, intervent
             <Button
               variant="outline"
               size="sm"
-              className="rounded-full h-8 w-8 p-0"
+              className="rounded-full h-11 w-11 p-0 md:h-8 md:w-8 md:min-h-8"
               onClick={() => setWeekStart(addDaysISO(weekStart, 7))}
               aria-label="Semaine suivante"
               data-testid="button-next-week"

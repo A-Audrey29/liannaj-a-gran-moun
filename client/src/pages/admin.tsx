@@ -928,7 +928,7 @@ function TeacherPanel({ teacher }: { teacher: SafeUser }) {
           </Select>
           <Button
             size="sm"
-            className="bg-green-700 hover:bg-green-700 shrink-0"
+            className="bg-green-700 hover:bg-green-800 shrink-0"
             disabled={!assignStudentId || assignMut.isPending}
             onClick={() => assignMut.mutate()}
           >
@@ -1818,7 +1818,7 @@ function CreerReferentForm() {
         </div>
         <Button
           type="submit"
-          className="bg-[#7c3aed] hover:bg-[#7c3aed]"
+          className="bg-[#7c3aed] hover:bg-[#6d28d9]"
           disabled={createMut.isPending || !formData.linkedSeniorId}
           data-testid="btn-create-referent"
         >
@@ -2082,7 +2082,7 @@ function CreerProfesseurForm() {
         </div>
 
         <Button
-          className="bg-green-700 hover:bg-green-700 w-full"
+          className="bg-green-700 hover:bg-green-800 w-full"
           disabled={!form.email || !form.password || !form.firstName || !form.lastName || createMut.isPending}
           onClick={() => createMut.mutate()}
         >

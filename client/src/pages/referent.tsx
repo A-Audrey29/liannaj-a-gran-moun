@@ -252,7 +252,7 @@ function SuiviTab({ relations }: { relations: RelationWithUsers[] }) {
                   {r.status === "ACTIVE" && (
                     <Button
                       size="sm"
-                      className="w-full rounded-full text-xs bg-[#7c3aed] hover:bg-[#7c3aed] text-white mb-2"
+                      className="w-full rounded-full text-xs bg-[#7c3aed] hover:bg-[#6d28d9] text-white mb-2"
                       onClick={() => setLocation(`/relations/${r.id}`)}
                       data-testid={`button-proposer-rencontre-${r.id}`}
                     >
@@ -317,7 +317,7 @@ function PrestationTab({ relations }: { relations: RelationWithUsers[] }) {
               {r.junior.firstName} {r.junior.lastName}
             </p>
             <Button
-              className="bg-[#7c3aed] hover:bg-[#7c4fe0] text-white"
+              className="bg-[#7c3aed] hover:bg-[#6d28d9] text-white"
               onClick={() => setLocation(`/relations/${r.id}`)}
               data-testid={`btn-prestation-${r.id}`}
             >
@@ -396,7 +396,7 @@ function ContactTab() {
 
           <Button
             type="submit"
-            className="bg-[#7c3aed] hover:bg-[#7c3aed] w-full"
+            className="bg-[#7c3aed] hover:bg-[#6d28d9] w-full"
             disabled={sendMut.isPending}
             data-testid="btn-send-contact"
           >
@@ -504,7 +504,7 @@ export default function ReferentHome() {
       )}
       {!isLoading && activeRelations.length > 0 && (
         <Button
-          className="w-full mb-6 rounded-2xl h-14 text-base font-semibold bg-[#7c3aed] hover:bg-[#7c3aed] text-white shadow-sm"
+          className="w-full mb-6 rounded-2xl h-14 text-base font-semibold bg-[#7c3aed] hover:bg-[#6d28d9] text-white shadow-sm"
           onClick={() => {
             if (activeRelations.length === 1) {
               setLocation(`/relations/${activeRelations[0].id}`);

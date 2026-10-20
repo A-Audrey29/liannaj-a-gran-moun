@@ -28,6 +28,8 @@ export function UserAvatar({
     <Avatar className={className}>
       <AvatarImage src={getPhotoUrl(photo)} alt={decorative ? "" : `${firstName} ${lastName}`} className="object-cover" />
       <AvatarFallback
+        // Photo expected: wait a moment so the initials do not flash before it loads.
+        delayMs={getPhotoUrl(photo) ? 300 : 0}
         aria-hidden={decorative ? true : undefined}
         className={`bg-[#e8d7fe] text-[#6d28d9] font-bold ${fallbackClassName}`}
       >

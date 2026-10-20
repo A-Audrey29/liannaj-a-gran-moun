@@ -801,7 +801,7 @@ function DemandesTab({ relations, isLoading, user }: { relations?: RelationWithU
                         data-testid={`card-suggestion-${s.user.id}`}
                       >
                         <div className="relative w-full h-56 bg-muted">
-                          <PhotoAvatar photo={s.user.profilePhoto} firstName={s.user.firstName} lastName={s.user.lastName} className="w-full h-full rounded-none" fallbackClassName="rounded-none text-4xl" decorative />
+                          <PhotoAvatar photo={s.user.profilePhoto} firstName={s.user.firstName} lastName={s.user.lastName} className="w-full h-full rounded-none after:hidden" fallbackClassName="rounded-none text-4xl" decorative />
                           <button
                             onClick={() => toggleFavoriteMutation.mutate({ juniorId: s.user.id, isFavorite: s.isFavorite })}
                             disabled={toggleFavoriteMutation.isPending}

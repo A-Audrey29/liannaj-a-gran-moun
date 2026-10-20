@@ -465,7 +465,7 @@ function CalendarView({ availabilities }: { availabilities: Availability[] }) {
                             <Button
                               size="icon"
                               variant="ghost"
-                              className="h-6 w-6 shrink-0 text-muted-foreground hover:text-destructive"
+                              className="h-6 w-6 shrink-0 text-muted-foreground hover:text-destructive md:h-6 md:w-6"
                               aria-label="Supprimer ce créneau"
                               onClick={() => deleteMutation.mutate(a.id)}
                               disabled={deleteMutation.isPending}

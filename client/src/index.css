@@ -278,7 +278,8 @@
 
 /* Respect the OS "reduce motion" setting (WCAG 2.3.3): kill non-essential animation. */
 @media (prefers-reduced-motion: reduce) {
-  *,
+  /* Spinners keep turning: a frozen loader looks like a hung page. */
+  *:not(.animate-spin),
   *::before,
   *::after {
     animation-duration: 0.01ms !important;

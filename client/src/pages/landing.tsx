@@ -40,7 +40,7 @@ export default function Landing() {
       <nav aria-label="Sommaire" className="bg-white border-b border-[#c9a4e8]/40" data-testid="nav-sommaire">
         <div className="max-w-6xl mx-auto px-4 py-3">
           <p className="text-sm font-semibold text-gray-700 mb-2">Sur cette page :</p>
-          <ul className="flex gap-2 overflow-x-auto pb-1 md:flex-wrap md:overflow-visible">
+          <ul className="flex gap-2 overflow-x-auto px-0.5 py-1 md:flex-wrap md:overflow-visible">
             {SOMMAIRE.map((item) => (
               <li key={item.id} className="shrink-0">
                 <a

@@ -346,7 +346,7 @@ function ProfilSection({
               Annuler
             </Button>
             <Button
-              className="bg-green-700 hover:bg-green-700"
+              className="bg-green-700 hover:bg-green-800"
               disabled={saveMut.isPending}
               onClick={() => saveMut.mutate()}
             >
@@ -532,7 +532,7 @@ function NotesSection({
           />
           <Button
             size="sm"
-            className="bg-green-700 hover:bg-green-700"
+            className="bg-green-700 hover:bg-green-800"
             disabled={!commentText.trim() || createMut.isPending}
             onClick={() => createMut.mutate()}
           >
@@ -614,7 +614,7 @@ function NotesSection({
               Annuler
             </Button>
             <Button
-              className="bg-green-700 hover:bg-green-700"
+              className="bg-green-700 hover:bg-green-800"
               disabled={!editText.trim() || updateMut.isPending}
               onClick={() => editingComment && updateMut.mutate(editingComment)}
             >

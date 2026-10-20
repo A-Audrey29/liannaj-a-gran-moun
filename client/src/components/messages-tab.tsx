@@ -203,8 +203,8 @@ function ChatView({ conversation, userId, onBack }: {
   return (
     <div className="flex flex-col h-[70vh] min-h-[420px] md:h-[700px]" data-testid="chat-view">
       <div className="flex items-center gap-3 p-4 border-b bg-white">
-        <button onClick={onBack} className="md:hidden" data-testid="button-back-chat">
-          <ArrowLeft className="w-5 h-5" />
+        <button onClick={onBack} className="md:hidden -m-2 flex h-11 w-11 items-center justify-center" aria-label="Retour aux conversations" data-testid="button-back-chat">
+          <ArrowLeft className="w-5 h-5" aria-hidden="true" />
         </button>
         <Avatar photo={conversation.partner.profilePhoto} name={partnerName} />
         <div>
@@ -245,11 +245,11 @@ function ChatView({ conversation, userId, onBack }: {
                 >
                   <p className="text-[15px] leading-relaxed whitespace-pre-wrap break-words">{msg.content}</p>
                   <div className={`flex items-center gap-1 mt-1 ${isMine ? "justify-end" : "justify-start"}`}>
-                    <span className={`text-xs ${isMine ? "text-white/70" : "text-muted-foreground"}`}>
+                    <span className={`text-xs ${isMine ? "text-white/90" : "text-muted-foreground"}`}>
                       {formatTime(msg.createdAt)}
                     </span>
                     {isMine && msg.isRead && (
-                      <CheckCheck className="w-3.5 h-3.5 text-white/70" />
+                      <CheckCheck className="w-3.5 h-3.5 text-white/90" aria-label="Lu" />
                     )}
                   </div>
                 </div>
