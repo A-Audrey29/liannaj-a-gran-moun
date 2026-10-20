@@ -5,6 +5,8 @@
 import { describe, it, expect } from "vitest";
 import fs from "fs";
 import path from "path";
+import { insertInterventionSchema, referentInterventionSchema } from "../shared/schema";
+import { DEFAULT_WORKSHOP_MINUTES } from "../shared/credits";
 import { spaceMenuLinks, homeTabsFor, PURCHASES_PATH } from "../client/src/lib/space-tabs";
 
 const read = (p: string) => fs.readFileSync(path.resolve(import.meta.dirname, "..", p), "utf8");
@@ -62,7 +64,7 @@ describe("achat d'ateliers", () => {
 });
 
 describe("espace senior : divers", () => {
-  it("'Proposer une rencontre' n'apparait pas sur 'Mes informations'", () => {
+  it("'Demander un atelier' n'apparait pas sur 'Mes informations'", () => {
     expect(read("client/src/pages/home.tsx")).toMatch(/activeTab !== "profil" && !relLoading && proposableRelations/);
   });
 
@@ -82,5 +84,31 @@ describe("espace senior : divers", () => {
     // L'etat "envoyee" vient du serveur : il survit au changement d'onglet.
     expect(c).toContain("/api/account/deletion-request");
     expect(c).not.toMatch(/useState\(false\)[\s\S]{0,40}setSent/);
+  });
+});
+
+describe("atelier : durée par défaut et vocabulaire", () => {
+  it("un atelier sans durée choisie dure 60 minutes (serveur, formulaire, base)", () => {
+    expect(DEFAULT_WORKSHOP_MINUTES).toBe(60);
+    const base = { relationId: "r1", scheduledDate: new Date(Date.now() + 86_400_000).toISOString() };
+    expect(insertInterventionSchema.parse(base).durationMinutes).toBe(60);
+    expect(referentInterventionSchema.parse(base).durationMinutes).toBe(60);
+    expect(read("prisma/schema.prisma")).toMatch(/durationMinutes Int\s+@default\(60\)/);
+    const form = read("client/src/pages/relation-detail.tsx");
+    expect(form).not.toMatch(/FREE_FIRST_MEETING_MAX_MINUTES : 120/);
+    expect(form.match(/FREE_FIRST_MEETING_MAX_MINUTES : DEFAULT_WORKSHOP_MINUTES/g)).toHaveLength(3);
+  });
+
+  it("la première rencontre offerte garde ses 30 minutes", () => {
+    expect(read("shared/credits.ts")).toContain("FREE_FIRST_MEETING_MAX_MINUTES = 30");
+  });
+
+  it("le senior et l'aidant « demandent un atelier » (plus de « proposer une rencontre »)", () => {
+    for (const f of ["home", "referent"]) {
+      const src = read(`client/src/pages/${f}.tsx`);
+      expect(src, f).toContain("Demander un atelier");
+      expect(src, f).not.toMatch(/Proposer une rencontre/);
+    }
+    expect(read("client/src/pages/relation-detail.tsx")).toContain('"Demander un atelier"');
   });
 });

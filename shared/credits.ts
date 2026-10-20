@@ -64,3 +64,9 @@ export interface CheckoutStatusResponse {
  * (decision 2026-10-12). Shared so the form defaults to a free duration.
  */
 export const FREE_FIRST_MEETING_MAX_MINUTES = 30;
+
+/**
+ * Length of a workshop when nobody chose one (decision 2026-10-20): form
+ * default and server default. The free first meeting keeps its own 30 minutes.
+ */
+export const DEFAULT_WORKSHOP_MINUTES = 60;

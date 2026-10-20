@@ -215,7 +215,7 @@ model Intervention {
   relation        Relation           @relation(fields: [relationId], references: [id], onDelete: Cascade)
 
   scheduledDate   DateTime
-  durationMinutes Int                @default(120)
+  durationMinutes Int                @default(60)
   location        String?
   status          InterventionStatus @default(PROPOSED)
   tasks           String[]           @default([])

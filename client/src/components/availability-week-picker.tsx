@@ -133,8 +133,8 @@ export default function AvailabilityWeekPicker({ juniorId, juniorName, intervent
           <Skeleton className="h-32 rounded-xl" />
         ) : declaredNothing ? (
           <p className="text-sm text-muted-foreground">
-            {juniorName} n'a pas encore indiqué ses disponibilités. Vous pourrez proposer une
-            rencontre dès qu'il ou elle en aura déclaré.
+            {juniorName} n'a pas encore indiqué ses disponibilités. Vous pourrez demander un
+            atelier dès qu'il ou elle en aura déclaré.
           </p>
         ) : (
           <>
@@ -196,7 +196,7 @@ export default function AvailabilityWeekPicker({ juniorId, juniorName, intervent
             )}
             {onPickSlot && hasAnySlotThisWeek && !pickedSlot && (
               <p className="text-xs text-muted-foreground mt-4">
-                Cliquez un créneau vert pour proposer une rencontre.
+                Cliquez un créneau vert pour demander un atelier.
               </p>
             )}
             {pickedSlot && (

@@ -23,7 +23,7 @@ import type { Relation, User as UserType, Intervention } from "@shared/schema";
 import AvailabilityWeekPicker, { type FreeSlot } from "@/components/availability-week-picker";
 import { fmtTime, fmtTimeRange, fmtDayLong, fmtDayShort } from "@/lib/availability-format";
 import { ATELIERS } from "@shared/ateliers";
-import { insufficientCreditsNotice, FREE_FIRST_MEETING_MAX_MINUTES } from "@shared/credits";
+import { insufficientCreditsNotice, FREE_FIRST_MEETING_MAX_MINUTES, DEFAULT_WORKSHOP_MINUTES } from "@shared/credits";
 
 type RelationDetail = Relation & { senior: UserType; junior: UserType; interventions: Intervention[] };
 
@@ -424,7 +424,7 @@ function NewInterventionDialog({
   const { user } = useAuth();
   const [, navigate] = useLocation();
   const [startTime, setStartTime] = useState("");
-  const [duration, setDuration] = useState(String(isFirst ? FREE_FIRST_MEETING_MAX_MINUTES : 120));
+  const [duration, setDuration] = useState(String(isFirst ? FREE_FIRST_MEETING_MAX_MINUTES : DEFAULT_WORKSHOP_MINUTES));
   const [location, setLocation] = useState("");
   const [tasks, setTasks] = useState<string[]>([]);
 
@@ -447,7 +447,7 @@ function NewInterventionDialog({
       const slotMinutes = Math.floor((slot.endAt.getTime() - slot.startAt.getTime()) / 60_000);
       setStartTime(slot.startAt.toISOString());
       // First meeting: default to the free duration, a longer one costs a credit.
-      const defaultMinutes = isFirst ? FREE_FIRST_MEETING_MAX_MINUTES : 120;
+      const defaultMinutes = isFirst ? FREE_FIRST_MEETING_MAX_MINUTES : DEFAULT_WORKSHOP_MINUTES;
       setDuration(String(Math.min(defaultMinutes, Math.min(slotMinutes, 480))));
     }
   }, [slot]);
@@ -477,8 +477,8 @@ function NewInterventionDialog({
       queryClient.invalidateQueries({ queryKey: ["/api/relations", relationId] });
       queryClient.invalidateQueries({ queryKey: ["/api/referent/relations"] });
       queryClient.invalidateQueries({ queryKey: [`/api/users`] });
-      toast({ title: isFirst ? "1ère rencontre proposée !" : "Rencontre proposée !" });
-      setDuration(String(isFirst ? FREE_FIRST_MEETING_MAX_MINUTES : 120));
+      toast({ title: isFirst ? "1ère rencontre proposée !" : "Atelier demandé !" });
+      setDuration(String(isFirst ? FREE_FIRST_MEETING_MAX_MINUTES : DEFAULT_WORKSHOP_MINUTES));
       setLocation("");
       setTasks([]);
       onClose();
@@ -519,7 +519,7 @@ function NewInterventionDialog({
     <Dialog open={slot !== null} onOpenChange={(o) => !o && onClose()}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>{isFirst ? "Organiser la 1ère rencontre" : "Proposer une rencontre"}</DialogTitle>
+          <DialogTitle>{isFirst ? "Organiser la 1ère rencontre" : "Demander un atelier"}</DialogTitle>
         </DialogHeader>
         {slot && (
           <div className="space-y-4">
@@ -611,7 +611,7 @@ function NewInterventionDialog({
             className="bg-primary hover:bg-primary/90 text-white"
             data-testid="button-submit-intervention"
           >
-            {createMutation.isPending ? "Envoi..." : "Proposer"}
+            {createMutation.isPending ? "Envoi..." : isFirst ? "Proposer" : "Demander l'atelier"}
           </Button>
         </DialogFooter>
       </DialogContent>

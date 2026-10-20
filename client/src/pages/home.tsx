@@ -212,7 +212,7 @@ export default function Home() {
           }}
           data-testid="button-proposer-rencontre-permanent"
         >
-          <Calendar className="w-5 h-5 mr-2" /> Proposer une rencontre
+          <Calendar className="w-5 h-5 mr-2" /> Demander un atelier
         </Button>
       )}
       {user?.role === "SENIOR" && !relLoading && counts.activeRelations.length === 0 && activeTab !== "demandes" && (

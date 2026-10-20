@@ -94,6 +94,7 @@ npx tsx prisma/seed.ts
 | `20261007111325_add_meeting_check_reminder` | Valeur `MEETING_CHECK` sur l'enum `NotificationType`, colonne `Intervention.meetingCheckReminderSentAt` (idempotence de la relance « la rencontre a-t-elle eu lieu ? »). Additive. Appliquée sur Neon avant d'avoir son rollback : celui-ci est dans `down.sql` (le `migration.sql` n'est plus modifiable, son empreinte est vérifiée par Prisma). Postgres ne sachant pas retirer une valeur d'enum, le rollback recrée le type. |
 | `20261008120000_add_nps_response` | Table `NpsResponse` (NPS 0-10 + motif) avec deux `CHECK` (note 0-10, rôle SENIOR/REFERENT_SENIOR) que Prisma ne sait pas exprimer. Additive. Rollback : `DROP TABLE "NpsResponse"` (en commentaire de fin). |
 | `20261012120000_add_intervention_is_free` | Colonne `Intervention.isFree` (rencontre gratuite décidée à la création, voir `docs/decisions.md` 2026-10-12) + rattrapage des rencontres encore prévues. Additive, rollback dans `down.sql`. |
+| `20261020120000_intervention_default_duration_60` | Valeur par défaut de `Intervention.durationMinutes` : 120 → 60 (décision du 2026-10-20). Seul le défaut de colonne change, les rencontres existantes gardent leur durée. Rollback dans `down.sql`. |
 
 > **Note sur la table `session`** : elle est créée par `connect-pg-simple` et
 > n'existe pas dans `schema.prisma` (aucun accès via le client Prisma). Une

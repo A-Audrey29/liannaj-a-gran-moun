@@ -128,7 +128,7 @@ export default function Forfaits() {
               </span>
             </Step>
             <Step n={3} title="Vos ateliers sont ajoutés">
-              Vos crédits apparaissent dans « Mes achats ». Vous pouvez ensuite proposer une rencontre à un jeune.
+              Vos crédits apparaissent dans « Mes achats ». Vous pouvez ensuite demander un atelier à un jeune.
             </Step>
           </ol>
 

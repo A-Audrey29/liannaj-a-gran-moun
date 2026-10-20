@@ -3,6 +3,18 @@
 Journal des choix d'architecture et de leurs raisons. Une entrée par décision,
 la plus récente en haut.
 
+## 2026-10-20 — Un atelier dure 60 minutes par défaut, « Demander un atelier »
+
+**Décision.** Sans durée choisie, un atelier dure **60 minutes** (avant : 120) :
+formulaire (`relation-detail.tsx`), schémas Zod serveur et défaut de colonne
+(migration `20261020120000`, réversible, seul le défaut change). Constante
+partagée `DEFAULT_WORKSHOP_MINUTES` (`shared/credits.ts`). La première rencontre
+offerte garde ses 30 minutes (au-delà elle coûte un crédit).
+
+**Vocabulaire.** Le senior et l'aidant « demandent un atelier » (bouton,
+fenêtre, message de confirmation) au lieu de « proposer une rencontre ».
+Les statuts (`Proposée`, `Confirmée`…) ne changent pas.
+
 ## 2026-10-20 — Parcours senior : achat guidé, menu toujours accessible, demande de suppression
 
 Retours d'Audrey après recette du profil senior sur mobile.

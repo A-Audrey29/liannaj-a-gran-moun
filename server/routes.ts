@@ -1252,7 +1252,7 @@ export async function registerRoutes(
         }
       } else if (relation.status === "ACTIVE") {
         if (relation.seniorId !== user.id && user.role !== "ADMIN") {
-          return res.status(403).json({ message: "Seul le Senior peut proposer une rencontre" });
+          return res.status(403).json({ message: "Seul le Senior peut demander un atelier" });
         }
       } else {
         return res.status(400).json({ message: "La relation n'est pas dans un état permettant de créer une rencontre" });

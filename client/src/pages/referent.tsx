@@ -250,7 +250,7 @@ function SuiviTab({ relations }: { relations: RelationWithUsers[] }) {
                       onClick={() => setLocation(`/relations/${r.id}`)}
                       data-testid={`button-proposer-rencontre-${r.id}`}
                     >
-                      Proposer une rencontre à {r.junior.firstName}
+                      Demander un atelier avec {r.junior.firstName}
                     </Button>
                   )}
                   <p className="text-xs text-muted-foreground text-center py-1">
@@ -509,7 +509,7 @@ export default function ReferentHome() {
           }}
           data-testid="button-proposer-rencontre-permanent"
         >
-          <Calendar className="w-5 h-5 mr-2" /> Proposer une rencontre
+          <Calendar className="w-5 h-5 mr-2" /> Demander un atelier
         </Button>
       )}
 
