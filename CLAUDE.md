@@ -109,15 +109,24 @@ npm run db:push    # prisma db push — NE PAS utiliser sur la base Neon avec do
   passer par le contrat `server/lib/payment-provider.ts`
   (impl : `stripe-provider.ts`). Webhook (`/api/webhooks/payment`) vérifie la
   signature sur `req.rawBody` (capturé dans `server/app.ts`), jamais le body
-  JSON déjà parsé. Sans prestataire configuré, `GET /api/credits/payment-status`
-  renvoie `online: false` : les boutons « Acheter » deviennent « écrivez à
-  l'équipe » et l'admin saisit le paiement (onglet Paiements). Détail complet
-  dans `docs/decisions.md`.
+  JSON déjà parsé. L'interface d'achat (`/forfaits`) est écrite
+  comme si le prestataire était branché (décision du 2026-10-20) : toujours
+  un bouton « Acheter », jamais de « paiement pas encore ouvert » ni de
+  « demander à l'équipe » pour acheter (seulement un bouton « Besoin d'aide ? »).
+  Sans prestataire (dev/QA), `POST /api/credits/checkout` répond 503 et le
+  bouton affiche ce message. L'admin peut toujours saisir un paiement hors ligne
+  (onglet Paiements). Détail dans `docs/decisions.md`.
 - **Compte aidant** (`REFERENT_SENIOR`, appelé « aidant » dans l'interface) :
   l'aidant l'ouvre lui-même depuis le lien de validation de l'inscription du
   senior (`POST /api/validate` + champ `aidant`), avec l'adresse qui a reçu
   le lien (`validatorEmail`) — jamais une adresse venant de la requête. Les
   autres cas passent par l'admin. Détail dans `docs/decisions.md`.
+- **UI mobile/a11y** : couleur de marque via `bg-primary` / `text-primary` (jamais
+  `bg-[#hex]` : `twMerge` retire `bg-primary` du `<Button>`), texte ≥ 12 px,
+  cibles tactiles 44 px, `<img>` de photo de profil via `UserAvatar`. Garde-fous :
+  `tests/accessibilite-mobile.test.ts`. Détail dans `docs/decisions.md`.
+- **Suppression de compte** : jamais automatique. `POST /api/account/deletion-request`
+  dépose une demande chez les admins (onglet Signalements) ; un humain supprime.
 - **NPS** (exigence du financeur): réponses dans `NpsResponse`, **jamais** en
   colonne d'`Intervention` (les routes à masquage de feedback la
   sérialiseraient). Éligibilité décidée côté serveur seulement (rôle senior /

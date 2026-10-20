@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { AccountDeletionRequest } from "@/components/account-deletion-request";
 import { UserAvatar } from "@/components/user-avatar";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -812,6 +813,7 @@ function MonCompteTab() {
       <p className="text-xs text-muted-foreground text-center mt-4">
         Pour modifier vos informations, contactez l'équipe FEVES.
       </p>
+      <AccountDeletionRequest />
     </div>
   );
 }

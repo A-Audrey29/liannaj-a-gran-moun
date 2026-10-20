@@ -72,7 +72,7 @@ export default function DisponibilitesTab() {
       <Card className="rounded-2xl border-0 shadow-sm bg-[#f3eaff]">
         <CardContent className="py-4">
           <p className="text-sm text-[#5b3a94]">
-            Indiquez vos jours et horaires habituels. Les séniors et l'équipe verront quand vous êtes disponible pour proposer une rencontre.
+            Indiquez vos jours et horaires habituels. Les séniors et l'équipe verront quand vous êtes disponible pour demander un atelier.
           </p>
         </CardContent>
       </Card>
@@ -194,14 +194,14 @@ function RecurringForm() {
               {daysLeft !== null && daysLeft <= 15 && <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />}
               <span>
                 {daysLeft !== null && daysLeft <= 0
-                  ? <>Vos créneaux se sont arrêtés le <strong>{fmtDayLongMonth(lastDay)}</strong> : les séniors ne peuvent plus vous proposer de rencontre.</>
+                  ? <>Vos créneaux se sont arrêtés le <strong>{fmtDayLongMonth(lastDay)}</strong> : les séniors ne peuvent plus vous demander d'atelier.</>
                   : <>Vos créneaux vont jusqu'au <strong>{fmtDayLongMonth(lastDay)}</strong>.</>}
               </span>
             </p>
             {template?.slots ? (
               <Button
                 size="sm"
-                className="mt-3 rounded-full bg-[#c0354a] hover:bg-[#a82b3d] text-white"
+                className="mt-3 rounded-full bg-primary hover:bg-primary/90 text-white"
                 onClick={() => extend.mutate()}
                 disabled={extend.isPending}
                 data-testid="button-extend-availability"
@@ -264,7 +264,7 @@ function RecurringForm() {
         </div>
 
         <Button
-          className="mt-4 rounded-full bg-[#c0354a] hover:bg-[#a82b3d] text-white"
+          className="mt-4 rounded-full bg-primary hover:bg-primary/90 text-white"
           onClick={() => submit.mutate()}
           disabled={submit.isPending || !anyEnabled}
           data-testid="button-save-recurring"

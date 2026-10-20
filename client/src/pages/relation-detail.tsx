@@ -23,7 +23,7 @@ import type { Relation, User as UserType, Intervention } from "@shared/schema";
 import AvailabilityWeekPicker, { type FreeSlot } from "@/components/availability-week-picker";
 import { fmtTime, fmtTimeRange, fmtDayLong, fmtDayShort } from "@/lib/availability-format";
 import { ATELIERS } from "@shared/ateliers";
-import { insufficientCreditsNotice, FREE_FIRST_MEETING_MAX_MINUTES } from "@shared/credits";
+import { insufficientCreditsNotice, FREE_FIRST_MEETING_MAX_MINUTES, defaultDurationMinutes } from "@shared/credits";
 
 type RelationDetail = Relation & { senior: UserType; junior: UserType; interventions: Intervention[] };
 
@@ -186,7 +186,7 @@ export default function RelationDetail() {
             </div>
             {relation.status === "ACTIVE" && (isSenior || isJunior) && (
               <Button
-                className="mt-4 rounded-full bg-[#c0354a] hover:bg-[#a82b3d] text-white"
+                className="mt-4 rounded-full bg-primary hover:bg-primary/90 text-white"
                 onClick={() => setLocation(`/mon-espace?tab=messages&relation=${relation.id}`)}
                 data-testid="button-send-message-detail"
               >
@@ -267,7 +267,7 @@ export default function RelationDetail() {
               </AlertDialogHeader>
               <AlertDialogFooter>
                 <AlertDialogCancel>Annuler</AlertDialogCancel>
-                <AlertDialogAction onClick={() => closeMutation.mutate()} className="bg-[#c0354a] hover:bg-[#a82b3d]">Confirmer</AlertDialogAction>
+                <AlertDialogAction onClick={() => closeMutation.mutate()} className="bg-primary hover:bg-primary/90">Confirmer</AlertDialogAction>
               </AlertDialogFooter>
             </AlertDialogContent>
           </AlertDialog>
@@ -424,7 +424,7 @@ function NewInterventionDialog({
   const { user } = useAuth();
   const [, navigate] = useLocation();
   const [startTime, setStartTime] = useState("");
-  const [duration, setDuration] = useState(String(isFirst ? FREE_FIRST_MEETING_MAX_MINUTES : 120));
+  const [duration, setDuration] = useState(String(defaultDurationMinutes(isFirst)));
   const [location, setLocation] = useState("");
   const [tasks, setTasks] = useState<string[]>([]);
 
@@ -447,8 +447,7 @@ function NewInterventionDialog({
       const slotMinutes = Math.floor((slot.endAt.getTime() - slot.startAt.getTime()) / 60_000);
       setStartTime(slot.startAt.toISOString());
       // First meeting: default to the free duration, a longer one costs a credit.
-      const defaultMinutes = isFirst ? FREE_FIRST_MEETING_MAX_MINUTES : 120;
-      setDuration(String(Math.min(defaultMinutes, Math.min(slotMinutes, 480))));
+      setDuration(String(defaultDurationMinutes(isFirst, slotMinutes)));
     }
   }, [slot]);
 
@@ -477,8 +476,8 @@ function NewInterventionDialog({
       queryClient.invalidateQueries({ queryKey: ["/api/relations", relationId] });
       queryClient.invalidateQueries({ queryKey: ["/api/referent/relations"] });
       queryClient.invalidateQueries({ queryKey: [`/api/users`] });
-      toast({ title: isFirst ? "1ère rencontre proposée !" : "Rencontre proposée !" });
-      setDuration(String(isFirst ? FREE_FIRST_MEETING_MAX_MINUTES : 120));
+      toast({ title: isFirst ? "1ère rencontre proposée !" : "Atelier demandé !" });
+      setDuration(String(defaultDurationMinutes(isFirst)));
       setLocation("");
       setTasks([]);
       onClose();
@@ -504,7 +503,7 @@ function NewInterventionDialog({
         return;
       }
       toast({
-        title: "Proposition refusée",
+        title: "Demande refusée",
         description: apiErrorMessage(err, "Ce créneau n'est pas disponible."),
         variant: "destructive",
       });
@@ -519,7 +518,7 @@ function NewInterventionDialog({
     <Dialog open={slot !== null} onOpenChange={(o) => !o && onClose()}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>{isFirst ? "Organiser la 1ère rencontre" : "Proposer une rencontre"}</DialogTitle>
+          <DialogTitle>{isFirst ? "Organiser la 1ère rencontre" : "Demander un atelier"}</DialogTitle>
         </DialogHeader>
         {slot && (
           <div className="space-y-4">
@@ -591,7 +590,7 @@ function NewInterventionDialog({
                       onClick={() => toggleTask(task)}
                       className={`px-3 py-1.5 rounded-full text-sm border transition-colors ${
                         selected
-                          ? "bg-[#c0354a] text-white border-[#c0354a]"
+                          ? "bg-primary text-white border-primary"
                           : "bg-white text-muted-foreground border-border hover:bg-muted"
                       }`}
                       data-testid={`task-${task}`}
@@ -608,10 +607,10 @@ function NewInterventionDialog({
           <Button
             onClick={() => createMutation.mutate()}
             disabled={createMutation.isPending || tooLong || tooShort}
-            className="bg-[#c0354a] hover:bg-[#a82b3d] text-white"
+            className="bg-primary hover:bg-primary/90 text-white"
             data-testid="button-submit-intervention"
           >
-            {createMutation.isPending ? "Envoi..." : "Proposer"}
+            {createMutation.isPending ? "Envoi..." : isFirst ? "Proposer" : "Demander l'atelier"}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -660,7 +659,7 @@ function FeedbackDialog({ interventionId, relationId }: { interventionId: string
           </div>
         </div>
         <DialogFooter>
-          <Button onClick={() => feedbackMutation.mutate()} disabled={feedbackMutation.isPending || rating === 0} className="bg-[#c0354a] hover:bg-[#a82b3d] text-white" data-testid="button-submit-feedback">
+          <Button onClick={() => feedbackMutation.mutate()} disabled={feedbackMutation.isPending || rating === 0} className="bg-primary hover:bg-primary/90 text-white" data-testid="button-submit-feedback">
             {feedbackMutation.isPending ? "Envoi..." : "Envoyer"}
           </Button>
         </DialogFooter>

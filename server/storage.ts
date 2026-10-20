@@ -281,6 +281,13 @@ export interface IStorage {
   getReports(): Promise<(Report & { reporter: User; target: User | null })[]>;
   getOpenReportCount(): Promise<number>;
   updateReportStatus(id: string, status: string, handledNote: string): Promise<Report>;
+  findOpenReportByReason(reporterId: string, reason: string): Promise<Report | null>;
+  /**
+   * Files a report unless the same person already has an open one for that
+   * reason. The check and the insert run under a per-user advisory lock, so
+   * two concurrent requests cannot both create one.
+   */
+  createReportOnce(data: { reporterId: string; reason: string; message: string }): Promise<{ report: Report; created: boolean }>;
 
   getNpsIneligibility(user: NpsRespondent): Promise<NpsIneligibleReason | null>;
   /**
@@ -1289,6 +1296,19 @@ class DatabaseStorage implements IStorage {
       include: { reporter: true, target: true },
       orderBy: { createdAt: "desc" },
     }) as any;
+  }
+
+  async createReportOnce(data: { reporterId: string; reason: string; message: string }): Promise<{ report: Report; created: boolean }> {
+    return prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`report:${data.reporterId}:${data.reason}`}))`;
+      const existing = await tx.report.findFirst({ where: { reporterId: data.reporterId, reason: data.reason, status: "OPEN" } });
+      if (existing) return { report: existing, created: false };
+      return { report: await tx.report.create({ data }), created: true };
+    });
+  }
+
+  async findOpenReportByReason(reporterId: string, reason: string): Promise<Report | null> {
+    return prisma.report.findFirst({ where: { reporterId, reason, status: "OPEN" } });
   }
 
   async getOpenReportCount(): Promise<number> {

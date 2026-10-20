@@ -106,7 +106,7 @@ export function NpsPrompt({ className }: { className?: string }) {
           <div className="flex gap-2">
             <Button
               onClick={() => setOpen(true)}
-              className="rounded-full bg-[#c0354a] hover:bg-[#a82b3d] text-white"
+              className="rounded-full bg-primary hover:bg-primary/90 text-white"
               data-testid="button-nps-open"
             >
               Donner mon avis
@@ -152,7 +152,7 @@ export function NpsPrompt({ className }: { className?: string }) {
                     key={value}
                     value={String(value)}
                     aria-label={`${value} sur ${NPS_MAX_SCORE}`}
-                    className="h-12 w-full text-base font-semibold data-[state=on]:bg-[#c0354a] data-[state=on]:text-white"
+                    className="h-12 w-full text-base font-semibold data-[state=on]:bg-primary data-[state=on]:text-white"
                     data-testid={`button-nps-score-${value}`}
                   >
                     {value}
@@ -182,7 +182,7 @@ export function NpsPrompt({ className }: { className?: string }) {
             <Button
               onClick={() => submit.mutate()}
               disabled={submit.isPending || score === null}
-              className="bg-[#c0354a] hover:bg-[#a82b3d] text-white"
+              className="bg-primary hover:bg-primary/90 text-white"
               data-testid="button-nps-submit"
             >
               {submit.isPending ? "Envoi..." : "Envoyer"}

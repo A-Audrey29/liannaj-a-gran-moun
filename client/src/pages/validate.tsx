@@ -178,10 +178,10 @@ export default function Validate() {
         )}
 
         {info.canCreateAidant ? (
-          <Card className="border-2 border-[#c0354a]/50" data-testid="card-validate-aidant">
+          <Card className="border-2 border-primary/50" data-testid="card-validate-aidant">
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-xl">
-                <Heart className="h-6 w-6 text-[#c0354a]" />
+                <Heart className="h-6 w-6 text-primary" />
                 Valider et créer mon espace aidant
               </CardTitle>
             </CardHeader>
@@ -257,7 +257,7 @@ export default function Validate() {
                   <Button
                     type="submit"
                     disabled={pending}
-                    className="w-full h-14 text-lg bg-[#c0354a] hover:bg-[#a82b3d] text-white"
+                    className="w-full h-14 text-lg bg-primary hover:bg-primary/90 text-white"
                     data-testid="button-confirm-validation-aidant"
                   >
                     {pending ? <RefreshCw className="h-4 w-4 animate-spin" /> : null}

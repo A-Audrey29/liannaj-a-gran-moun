@@ -25,7 +25,7 @@ import { isMeetingEnded, isMeetingOverdue, isUpcomingOrOngoing } from "../shared
 const MEETING_CHECK_LOCK_ID = 4_812_358;
 
 const HEURE = 60 * 60 * 1000;
-/** Bien au-dela du delai de 24h apres la fin (duree par defaut : 2h). */
+/** Bien au-dela du delai de 24h apres la fin (un atelier dure 1 a 2h). */
 const IL_Y_A_3_JOURS = () => new Date(Date.now() - 3 * 24 * HEURE);
 const DEMAIN = () => new Date(Date.now() + 24 * HEURE);
 

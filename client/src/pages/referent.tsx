@@ -1,8 +1,10 @@
 import { useAuth } from "@/hooks/use-auth";
+import { AccountDeletionRequest } from "@/components/account-deletion-request";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useLocation } from "wouter";
+import { REFERENT_TABS } from "@/lib/space-tabs";
 import { UserAvatar } from "@/components/user-avatar";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -70,15 +72,7 @@ function formatDate(d: string | Date) {
   return `${fmtDayLongMonthYear(date)} à ${fmtTime(date)}`;
 }
 
-const TABS = [
-  { id: "dashboard", label: "Tableau de bord", icon: LayoutGrid },
-  { id: "suivi", label: "Suivi des ateliers", icon: Calendar },
-  { id: "prestation", label: "Demander un atelier", icon: Plus },
-  // Navigates to /mes-ateliers (see selectTab), same page as the senior's tab.
-  { id: "ateliers", label: "Mes achats", icon: BookOpen },
-  { id: "contact", label: "Contacter l'équipe", icon: Mail },
-  { id: "profil", label: "Mon compte", icon: User },
-] as const;
+const TABS = REFERENT_TABS;
 
 type TabId = typeof TABS[number]["id"];
 
@@ -124,13 +118,13 @@ function DashboardTab({ senior, relations }: { senior: UserType | null; relation
                   className="text-right hover:opacity-80"
                   data-testid="button-open-ateliers"
                 >
-                  <p className="text-2xl font-bold text-[#c0354a]" data-testid="text-credit-balance">
+                  <p className="text-2xl font-bold text-primary" data-testid="text-credit-balance">
                     {Math.max(creditData.available, 0)}
                   </p>
                   <p className="text-xs text-muted-foreground">
                     atelier{creditData.available > 1 ? "s" : ""} disponible{creditData.available > 1 ? "s" : ""}
                   </p>
-                  <p className="text-xs text-[#c0354a] underline">Voir le détail</p>
+                  <p className="text-xs text-primary underline">Voir le détail</p>
                 </button>
               )}
             </div>
@@ -256,7 +250,7 @@ function SuiviTab({ relations }: { relations: RelationWithUsers[] }) {
                       onClick={() => setLocation(`/relations/${r.id}`)}
                       data-testid={`button-proposer-rencontre-${r.id}`}
                     >
-                      Proposer une rencontre à {r.junior.firstName}
+                      Demander un atelier avec {r.junior.firstName}
                     </Button>
                   )}
                   <p className="text-xs text-muted-foreground text-center py-1">
@@ -442,6 +436,7 @@ function ProfilTab() {
       <p className="text-xs text-muted-foreground text-center">
         Pour modifier vos informations, contactez l'équipe FEVES.
       </p>
+      <AccountDeletionRequest />
     </div>
   );
 }
@@ -514,7 +509,7 @@ export default function ReferentHome() {
           }}
           data-testid="button-proposer-rencontre-permanent"
         >
-          <Calendar className="w-5 h-5 mr-2" /> Proposer une rencontre
+          <Calendar className="w-5 h-5 mr-2" /> Demander un atelier
         </Button>
       )}
 

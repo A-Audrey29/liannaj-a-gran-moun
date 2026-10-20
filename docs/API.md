@@ -109,6 +109,14 @@ Valide l'inscription (clic humain). Pour un senior, peut créer en même temps l
 - **Erreurs** : 400 `invalid` (token manquant) / `aidant_invalid` (champs aidant) / `aidant_not_allowed` (pas un senior) ; 404 `invalid` ; 409 `aidant_exists` (adresse déjà utilisée, l'inscription reste en attente) ; 410 `expired`
 - **Notes** : l'adresse du compte aidant est toujours le `validatorEmail` du senior, jamais une valeur de la requête. Activation du senior + création de l'aidant dans une seule transaction.
 
+### `POST /api/account/deletion-request`
+Demande de suppression de son compte. **Rien n'est supprimé** : la demande arrive chez les admins (onglet « Signalements », `reason: "ACCOUNT_DELETION"`, + e-mail), qui la traitent à la main.
+- **Auth** : Oui (sauf ADMIN : 403)
+- **Body** : `{ confirmed: true }` — la confirmation (« les ateliers non utilisés seront perdus ») est exigée côté serveur
+- **Réponse 201** : `{ message }` — **200** `{ alreadyRequested: true, message }` si une demande ouverte existe déjà (pas de doublon)
+- **Erreurs** : 400 confirmation absente ou différente de `true` ; 401 non connecté ; 403 admin
+- **Notes** : pour un senior, le message de la demande indique son solde d'ateliers.
+
 ---
 
 ## Catégories

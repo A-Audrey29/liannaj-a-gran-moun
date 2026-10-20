@@ -1,18 +1,19 @@
-import { useLocation } from "wouter";
+import { Link, useLocation } from "wouter";
+import { ArrowLeft, LifeBuoy, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/use-auth";
-import { teamContactHref, useOnlinePayment } from "@/components/credit-offers-card";
+import { teamContactHref, useCheckout } from "@/components/credit-offers-card";
 import { CREDIT_OFFERS } from "@shared/credit-offers";
 import { canBuyCredits } from "@shared/credits";
 import { CONTACT_EMAIL, ORGANIZATION_NAME, PLATFORM_NAME } from "@shared/branding";
 
 /**
- * Public sales page for the credit offers, written for seniors: short
- * sentences, large text (>= 18 px), large buttons.
+ * "Acheter des ateliers": explains how buying works, then lets the buyer pay.
+ * Written for seniors: short sentences, large text (>= 18 px), large buttons.
  *
  * Every sentence describing a credit rule must match the code (reservation
  * and debit: server/storage.ts; cancellation: server/routes.ts; who may buy:
- * shared/credits.ts).
+ * shared/credits.ts; payment redirect: useCheckout).
  * Names and prices come from CREDIT_OFFERS only, never hard-coded here.
  */
 
@@ -31,7 +32,7 @@ const MAIN_RULES: Rule[] = [
   },
   {
     title: "L'atelier est annulé",
-    text: "Vous (ou l'équipe Lyannaj) pouvez annuler un atelier prévu. Son crédit vous est rendu : vous pourrez l'utiliser pour un autre atelier. Un atelier qui a déjà eu lieu ne peut plus être annulé.",
+    text: "Le senior (ou l'équipe Lyannaj) peut annuler un atelier prévu. Son crédit vous est rendu : vous pourrez l'utiliser pour un autre atelier. Un atelier marqué comme réalisé ne peut plus être annulé.",
   },
   {
     title: "La première rencontre est offerte",
@@ -50,133 +51,215 @@ const MORE_RULES: Rule[] = [
   },
 ];
 
-/** Where "Une question ?" leads: the in-app help for buyers, e-mail otherwise. */
 function RuleList({ rules }: { rules: Rule[] }) {
   return (
-    <ol className="space-y-4">
+    <ul className="space-y-4">
       {rules.map((rule) => (
         <li key={rule.title} className="rounded-2xl bg-gray-50 border border-gray-200 p-5">
           <p className="font-bold text-gray-900">{rule.title}</p>
           <p className="text-gray-800">{rule.text}</p>
         </li>
       ))}
-    </ol>
+    </ul>
+  );
+}
+
+function Step({ n, title, children }: { n: number; title: string; children: React.ReactNode }) {
+  return (
+    <li className="flex gap-4 rounded-2xl border-2 border-[#c9a4e8] bg-white p-5" data-testid={`step-achat-${n}`}>
+      <span
+        className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-primary text-xl font-bold text-white"
+        aria-hidden="true"
+      >
+        {n}
+      </span>
+      <div>
+        <p className="font-bold text-gray-900">
+          <span className="sr-only">Étape {n} : </span>
+          {title}
+        </p>
+        <p className="text-gray-800">{children}</p>
+      </div>
+    </li>
   );
 }
 
 export default function Forfaits() {
   const { user } = useAuth();
   const [, setLocation] = useLocation();
+  const checkout = useCheckout();
 
-  // Logged out: log in first. Senior or referent linked to a senior: the page
-  // that holds the purchase card. Any other account (junior, admin, teacher,
-  // referent without a linked senior) cannot buy: no buy button and no
-  // sentence pointing to "Mes achats".
+  // Logged out: log in first. Senior or referent linked to a senior: buys
+  // here. Any other account (junior, admin, teacher, referent without a linked
+  // senior) cannot buy: no buy button and no sentence pointing to "Mes achats".
   const canBuy = !user || canBuyCredits(user);
-  const online = useOnlinePayment();
-  const buyPath = user ? "/mes-ateliers" : "/login";
+  // Seniors and aidants write to the team inside the app; anyone else by e-mail.
+  const helpHref = teamContactHref(user?.role);
+  const helpIsInApp = helpHref.startsWith("/");
+  const helpClass =
+    "inline-flex min-h-12 items-center justify-center gap-2 rounded-full border-2 border-primary px-6 text-lg font-semibold text-primary hover:bg-primary hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2";
+  const homePath =
+    user?.role === "REFERENT_SENIOR" ? "/espace-referent" : user?.role === "TEACHER" ? "/espace-professeur" : user?.role === "ADMIN" ? "/admin" : "/mon-espace";
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-8 text-lg leading-relaxed text-foreground">
+      {user && (
+        <button
+          onClick={() => setLocation(homePath)}
+          className="mb-6 flex min-h-11 items-center gap-2 text-base text-muted-foreground transition-colors hover:text-foreground"
+          data-testid="button-back"
+        >
+          <ArrowLeft className="h-4 w-4" aria-hidden="true" /> Retour à mon espace
+        </button>
+      )}
+
       <h1 className="text-3xl font-bold mb-4" data-testid="text-forfaits-title">
-        Nos forfaits d'ateliers
+        Acheter des ateliers
       </h1>
-      <p className="mb-2">
-        Pour faire un atelier avec un jeune, vous utilisez des crédits.
-      </p>
-      <p className="mb-6 font-semibold">1 crédit = 1 atelier.</p>
+      {canBuy && (
+        <>
+          <p className="mb-2">Pour faire un atelier avec un jeune, vous utilisez des crédits.</p>
+          <p className="mb-6 font-semibold">1 crédit = 1 atelier.</p>
+        </>
+      )}
 
-      <div className="mb-8 rounded-2xl border-2 border-[#c9a4e8] bg-[#f3eaff] p-5" data-testid="box-forfaits-aidant">
-        <p className="font-bold text-gray-900">Vous accompagnez un proche ?</p>
-        <p className="text-gray-800">
-          Vous pouvez acheter un forfait pour lui. Les crédits arrivent directement sur son compte. Vous suivez ses
-          ateliers depuis votre espace aidant.
-        </p>
-      </div>
+      {canBuy && (
+        <>
+          <h2 className="text-2xl font-bold mb-4">Comment ça se passe ?</h2>
+          <ol className="mb-10 space-y-3" data-testid="list-etapes-achat">
+            <Step n={1} title="Vous choisissez un forfait">
+              Un seul atelier, ou un pack pour en faire plusieurs. Le prix est affiché avant tout paiement.
+            </Step>
+            <Step n={2} title="Vous payez">
+              <span data-testid="text-forfaits-payment">
+                Vous payez par carte bancaire. Vous êtes envoyé sur la page de paiement de notre prestataire : vos
+                coordonnées bancaires ne passent jamais par {PLATFORM_NAME}.
+              </span>
+            </Step>
+            <Step n={3} title="Vos ateliers sont ajoutés">
+              Vos crédits apparaissent dans « Mes achats ». Vous pouvez ensuite demander un atelier à un jeune.
+            </Step>
+          </ol>
 
-      <h2 className="text-2xl font-bold mb-4">Choisissez votre forfait</h2>
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-10">
-        {CREDIT_OFFERS.map((offer) => (
-          <div
-            key={offer.id}
-            className="rounded-2xl border-2 border-gray-300 bg-white p-6 flex flex-col gap-2"
-            data-testid={`card-forfait-${offer.id}`}
-          >
-            <p className="text-2xl font-bold text-gray-900">{offer.name}</p>
-            <p>
-              {offer.credits} atelier{offer.credits > 1 ? "s" : ""}
+          <div className="mb-8 rounded-2xl border-2 border-[#c9a4e8] bg-[#f3eaff] p-5" data-testid="box-forfaits-aidant">
+            <p className="font-bold text-gray-900">Vous accompagnez un proche ?</p>
+            <p className="text-gray-800">
+              Vous pouvez acheter un forfait pour lui. Les crédits arrivent directement sur son compte. Vous suivez ses
+              ateliers depuis votre espace aidant.
             </p>
-            <p className="text-3xl font-bold text-gray-900">{formatEuros(offer.priceEuros)} €</p>
-            {offer.credits > 1 && (
-              <p className="text-gray-700">
-                soit {formatEuros(offer.priceEuros / offer.credits)} € l'atelier
-              </p>
-            )}
-            {canBuy && (
-              <Button
-                className="mt-auto h-14 text-lg bg-[#c0354a] hover:bg-[#c53a4d] text-white"
-                onClick={() => setLocation(buyPath)}
-                data-testid={`button-forfait-${offer.id}`}
-              >
-                Acheter
-              </Button>
-            )}
           </div>
-        ))}
-      </div>
+
+          <h2 className="text-2xl font-bold mb-4">Choisissez votre forfait</h2>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+            {CREDIT_OFFERS.map((offer) => (
+              <div
+                key={offer.id}
+                className="rounded-2xl border-2 border-gray-300 bg-white p-6 flex flex-col gap-2"
+                data-testid={`card-forfait-${offer.id}`}
+              >
+                <p className="text-2xl font-bold text-gray-900">{offer.name}</p>
+                <p>
+                  {offer.credits} atelier{offer.credits > 1 ? "s" : ""}
+                </p>
+                <p className="text-3xl font-bold text-gray-900">{formatEuros(offer.priceEuros)} €</p>
+                {offer.credits > 1 && (
+                  <p className="text-gray-700">soit {formatEuros(offer.priceEuros / offer.credits)} € l'atelier</p>
+                )}
+                {canBuy && !user && (
+                  <Button
+                    className="mt-auto h-14 text-lg"
+                    onClick={() => setLocation("/login")}
+                    data-testid={`button-forfait-${offer.id}`}
+                  >
+                    Me connecter pour acheter
+                  </Button>
+                )}
+                {canBuy && user && (
+                  <Button
+                    className="mt-auto h-14 text-lg"
+                    disabled={checkout.isPending}
+                    onClick={() => checkout.mutate(offer.id)}
+                    data-testid={`button-forfait-${offer.id}`}
+                  >
+                    {checkout.isPending && checkout.variables === offer.id ? "Redirection…" : "Acheter"}
+                  </Button>
+                )}
+              </div>
+            ))}
+          </div>
+        </>
+      )}
       {!canBuy && (
         <p className="mb-10 font-semibold" data-testid="text-forfaits-not-buyer">
           Seuls les seniors et les référents liés à un senior achètent des forfaits.
         </p>
       )}
-
-      <h2 className="text-2xl font-bold mb-4">Comment vos crédits sont utilisés</h2>
-      <div className="mb-4">
-        <RuleList rules={MAIN_RULES} />
-      </div>
-      <details className="mb-10 group" data-testid="details-forfaits-more">
-        <summary className="cursor-pointer inline-flex items-center min-h-12 px-5 rounded-full border-2 border-gray-300 font-semibold text-gray-900 hover:bg-gray-50">
-          En savoir plus
-        </summary>
-        <div className="mt-4">
-          <RuleList rules={MORE_RULES} />
-        </div>
-      </details>
-
-      <h2 className="text-2xl font-bold mb-4">Payer</h2>
-      <p className="mb-2" data-testid="text-forfaits-payment">
-        {online === false
-          ? "Le paiement en ligne n'est pas encore ouvert : écrivez à l'équipe, elle vous indique comment régler et ajoute vos ateliers à votre compte."
-          : "Le paiement se fait en ligne, par carte bancaire."}
-      </p>
       {canBuy && (
+        <>
+          <div className="mb-10" />
+
+          <h2 className="mb-4 flex items-center gap-2 text-2xl font-bold">
+            <ShieldCheck className="h-6 w-6 text-[#6d28d9]" aria-hidden="true" /> Acheter en confiance
+          </h2>
+          <ul className="mb-10 list-disc space-y-2 pl-6" data-testid="list-confiance-achat">
+            <li>Sans abonnement : vous achetez seulement ce dont vous avez besoin.</li>
+            <li>Le prix de chaque forfait est affiché avant de payer.</li>
+            <li>La première rencontre avec chaque nouveau jeune est offerte (30 minutes ou moins).</li>
+            <li>Un atelier annulé vous rend son crédit.</li>
+            <li>
+              {PLATFORM_NAME} est portée par l'association {ORGANIZATION_NAME} et financée par la CGRR Agirc-Arrco.
+            </li>
+            <li>
+              Les détails sont dans les{" "}
+              <Link href="/cgv" className="font-semibold text-primary underline" data-testid="link-forfaits-cgv">
+                conditions de vente
+              </Link>
+              .
+            </li>
+          </ul>
+
+        </>
+      )}
+
+      {canBuy && (
+        <>
+        <h2 className="text-2xl font-bold mb-4">Comment vos crédits sont utilisés</h2>
+        <div className="mb-4">
+          <RuleList rules={MAIN_RULES} />
+        </div>
+        <details className="mb-10 group" data-testid="details-forfaits-more">
+          <summary className="cursor-pointer inline-flex items-center min-h-12 px-5 rounded-full border-2 border-gray-300 font-semibold text-gray-900 hover:bg-gray-50">
+            En savoir plus
+          </summary>
+          <div className="mt-4">
+            <RuleList rules={MORE_RULES} />
+          </div>
+        </details>
+        </>
+      )}
+
+      {canBuy && user && (
         <p className="mb-8" data-testid="text-forfaits-mes-ateliers">
-          Vous voyez vos crédits à tout moment dans « Mes achats ».
+          Vous voyez vos crédits à tout moment dans{" "}
+          <Link href="/mes-ateliers" className="font-semibold text-primary underline">« Mes achats »</Link>.
         </p>
       )}
 
       <div className="mb-8 rounded-2xl bg-gray-50 border border-gray-200 p-5" data-testid="box-forfaits-help">
         <p className="font-bold text-gray-900">Une question avant d'acheter ?</p>
-        <p className="text-gray-800 mb-2">
-          L'équipe {PLATFORM_NAME} vous répond :{" "}
-          <a href={teamContactHref(user?.role)} className="font-semibold text-[#c0354a] underline" data-testid="link-forfaits-help">
-            {user && (user.role === "SENIOR" || user.role === "REFERENT_SENIOR") ? "écrire à l'équipe" : CONTACT_EMAIL}
+        <p className="mb-3 text-gray-800">
+          L'équipe {PLATFORM_NAME} vous répond{helpIsInApp ? "." : ` : ${CONTACT_EMAIL}`}
+        </p>
+        {helpIsInApp ? (
+          <Link href={helpHref} className={helpClass} aria-label="Besoin d'aide pour acheter ? Écrire à l'équipe" data-testid="link-forfaits-help">
+            <LifeBuoy className="h-5 w-5" aria-hidden="true" /> Besoin d'aide ?
+          </Link>
+        ) : (
+          <a href={helpHref} className={helpClass} aria-label="Besoin d'aide pour acheter ? Écrire à l'équipe par e-mail" data-testid="link-forfaits-help">
+            <LifeBuoy className="h-5 w-5" aria-hidden="true" /> Besoin d'aide ?
           </a>
-        </p>
-        <p className="text-gray-700">
-          {PLATFORM_NAME} est portée par l'association {ORGANIZATION_NAME} et financée par la CGRR Agirc-Arrco.
-        </p>
+        )}
       </div>
-
-      {canBuy && (
-        <Button
-          className="w-full md:w-auto h-14 px-8 text-lg bg-[#c0354a] hover:bg-[#c53a4d] text-white"
-          onClick={() => setLocation(buyPath)}
-          data-testid="button-forfaits-buy"
-        >
-          {user ? "Acheter un forfait" : "Me connecter pour acheter"}
-        </Button>
-      )}
     </div>
   );
 }

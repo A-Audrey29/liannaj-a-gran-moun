@@ -124,7 +124,7 @@ function ConversationList({ conversations, isLoading, onSelect, userId }: {
                   {lastMsg ? (isMine ? `Vous: ${lastMsg.content}` : lastMsg.content) : "Démarrer la conversation"}
                 </p>
                 {conv.unreadCount > 0 && (
-                  <Badge className="ml-2 bg-[#c0354a] text-white text-xs px-1.5 py-0 shrink-0" data-testid={`unread-badge-${conv.id}`}>
+                  <Badge className="ml-2 bg-primary text-white text-xs px-1.5 py-0 shrink-0" data-testid={`unread-badge-${conv.id}`}>
                     {conv.unreadCount}
                   </Badge>
                 )}
@@ -238,7 +238,7 @@ function ChatView({ conversation, userId, onBack }: {
                 <div
                   className={`max-w-[80%] px-4 py-2.5 rounded-2xl ${
                     isMine
-                      ? "bg-[#c0354a] text-white rounded-br-md"
+                      ? "bg-primary text-white rounded-br-md"
                       : "bg-white text-foreground border rounded-bl-md shadow-sm"
                   }`}
                   data-testid={`message-${msg.id}`}
@@ -279,7 +279,7 @@ function ChatView({ conversation, userId, onBack }: {
             disabled={!message.trim() || sendMsg.isPending}
             size="icon"
             aria-label="Envoyer le message"
-            className="rounded-full bg-[#c0354a] hover:bg-[#a82b3d] shrink-0"
+            className="rounded-full bg-primary hover:bg-primary/90 shrink-0"
             data-testid="button-send-message"
           >
             <Send className="w-4 h-4" />

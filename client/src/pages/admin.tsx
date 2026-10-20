@@ -328,7 +328,7 @@ function UsersTab() {
     <div>
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-xl font-bold">Utilisateurs</h2>
-        <Button size="sm" className="bg-[#c0354a] hover:bg-[#c53a4d]" onClick={() => setCreateOpen(true)} data-testid="button-create-user">
+        <Button size="sm" className="bg-primary hover:bg-primary/90" onClick={() => setCreateOpen(true)} data-testid="button-create-user">
           <UserPlus className="w-4 h-4 mr-1" />
           Créer un utilisateur
         </Button>
@@ -354,7 +354,7 @@ function UsersTab() {
             key={f.id}
             onClick={() => setFilter(f.id)}
             className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
-              filter === f.id ? "bg-[#c0354a] text-white" : "bg-white text-muted-foreground hover:bg-muted border"
+              filter === f.id ? "bg-primary text-white" : "bg-white text-muted-foreground hover:bg-muted border"
             }`}
             data-testid={`filter-users-${f.id}`}
           >
@@ -368,7 +368,7 @@ function UsersTab() {
             key={f.id}
             onClick={() => setRoleFilter(f.id)}
             className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
-              roleFilter === f.id ? "bg-[#c0354a] text-white" : "bg-white text-muted-foreground hover:bg-muted border"
+              roleFilter === f.id ? "bg-primary text-white" : "bg-white text-muted-foreground hover:bg-muted border"
             }`}
             data-testid={`filter-role-${f.id}`}
           >
@@ -383,7 +383,7 @@ function UsersTab() {
             <div className="flex-1 min-w-0">
               <button
                 onClick={() => openProfile(u)}
-                className="font-medium text-[#c0354a] hover:underline cursor-pointer truncate"
+                className="font-medium text-primary hover:underline cursor-pointer truncate"
                 data-testid={`link-user-${u.id}`}
               >
                 {u.firstName} {u.lastName}
@@ -631,13 +631,13 @@ function RelationsTab() {
             key={f.id}
             onClick={() => setFilter(f.id)}
             className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
-              filter === f.id ? "bg-[#c0354a] text-white" : "bg-white text-muted-foreground hover:bg-muted border"
+              filter === f.id ? "bg-primary text-white" : "bg-white text-muted-foreground hover:bg-muted border"
             }`}
             data-testid={`filter-relations-${f.id}`}
           >
             {f.label}
             {f.id === "PENDING" && pendingCount > 0 && (
-              <span className="ml-1.5 bg-[#c0354a] text-white text-xs px-1.5 py-0.5 rounded-full font-semibold">
+              <span className="ml-1.5 bg-primary text-white text-xs px-1.5 py-0.5 rounded-full font-semibold">
                 {pendingCount}
               </span>
             )}
@@ -656,7 +656,7 @@ function RelationsTab() {
               <div className="flex items-center gap-1 flex-wrap">
                 <button
                   onClick={() => openProfile(r.senior)}
-                  className="font-medium text-[#c0354a] hover:underline cursor-pointer"
+                  className="font-medium text-primary hover:underline cursor-pointer"
                   data-testid={`link-senior-rel-${r.id}`}
                 >
                   {r.senior.firstName} {r.senior.lastName}
@@ -664,7 +664,7 @@ function RelationsTab() {
                 <span className="text-muted-foreground">↔</span>
                 <button
                   onClick={() => openProfile(r.junior)}
-                  className="font-medium text-[#c0354a] hover:underline cursor-pointer"
+                  className="font-medium text-primary hover:underline cursor-pointer"
                   data-testid={`link-junior-rel-${r.id}`}
                 >
                   {r.junior.firstName} {r.junior.lastName}
@@ -786,7 +786,7 @@ function CadrageTab() {
                   the junior's slots. */}
               <Button
                 size="sm"
-                className="bg-[#c0354a] hover:bg-[#c53a4d] text-white"
+                className="bg-primary hover:bg-primary/90 text-white"
                 onClick={() => setLocation(`/relations/${r.id}`)}
                 data-testid={`btn-organiser-${r.id}`}
               >
@@ -1032,6 +1032,7 @@ function RencontresTab() {
       </div>
 
       <MeetingHistory
+        showExport
         key={searchUserId ?? "all"}
         scope={searchUserId ? { kind: "user", userId: searchUserId } : { kind: "me" }}
         viewerRole="ADMIN"
@@ -1129,7 +1130,7 @@ function NotificationsAdminTab() {
         <button
           onClick={() => setTypeFilter("all")}
           className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
-            typeFilter === "all" ? "bg-[#c0354a] text-white" : "bg-white text-muted-foreground hover:bg-muted border"
+            typeFilter === "all" ? "bg-primary text-white" : "bg-white text-muted-foreground hover:bg-muted border"
           }`}
           data-testid="filter-notif-all"
         >
@@ -1140,7 +1141,7 @@ function NotificationsAdminTab() {
             key={t}
             onClick={() => setTypeFilter(t)}
             className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
-              typeFilter === t ? "bg-[#c0354a] text-white" : "bg-white text-muted-foreground hover:bg-muted border"
+              typeFilter === t ? "bg-primary text-white" : "bg-white text-muted-foreground hover:bg-muted border"
             }`}
             data-testid={`filter-notif-${t}`}
           >
@@ -1173,7 +1174,7 @@ function NotificationsAdminTab() {
                   <td className="py-3 pr-4">
                     <button
                       onClick={() => openProfile(n.user)}
-                      className="font-medium text-[#c0354a] hover:underline cursor-pointer"
+                      className="font-medium text-primary hover:underline cursor-pointer"
                       data-testid={`link-notif-user-${n.id}`}
                     >
                       {n.user.firstName} {n.user.lastName}
@@ -1289,7 +1290,7 @@ function PaiementsTab() {
 
       <div className="flex justify-end mb-4">
         <Button
-          className="bg-[#c0354a] hover:bg-[#c53a4d] text-white"
+          className="bg-primary hover:bg-primary/90 text-white"
           onClick={() => setDialogOpen(true)}
           data-testid="btn-new-payment"
         >
@@ -1415,7 +1416,7 @@ function PaiementsTab() {
               </p>
             </div>
             <DialogFooter>
-              <Button type="submit" className="bg-[#c0354a] hover:bg-[#c53a4d]" disabled={createMut.isPending} data-testid="btn-submit-payment">
+              <Button type="submit" className="bg-primary hover:bg-primary/90" disabled={createMut.isPending} data-testid="btn-submit-payment">
                 {createMut.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : null}
                 Enregistrer
               </Button>
@@ -1524,7 +1525,7 @@ function MonCompteTab() {
               data-testid="input-account-email"
             />
           </div>
-          <Button type="submit" className="bg-[#c0354a] hover:bg-[#c53a4d]" disabled={profileMut.isPending} data-testid="btn-save-profile">
+          <Button type="submit" className="bg-primary hover:bg-primary/90" disabled={profileMut.isPending} data-testid="btn-save-profile">
             {profileMut.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : null}
             Enregistrer
           </Button>
@@ -1567,7 +1568,7 @@ function MonCompteTab() {
               data-testid="input-confirm-password"
             />
           </div>
-          <Button type="submit" className="bg-[#c0354a] hover:bg-[#c53a4d]" disabled={passwordMut.isPending} data-testid="btn-change-password">
+          <Button type="submit" className="bg-primary hover:bg-primary/90" disabled={passwordMut.isPending} data-testid="btn-change-password">
             {passwordMut.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : null}
             Modifier le mot de passe
           </Button>
@@ -1689,7 +1690,7 @@ function CreerAdminForm() {
             data-testid="input-admin-password"
           />
         </div>
-        <Button type="submit" className="bg-[#c0354a] hover:bg-[#c53a4d]" disabled={createMut.isPending} data-testid="btn-create-admin">
+        <Button type="submit" className="bg-primary hover:bg-primary/90" disabled={createMut.isPending} data-testid="btn-create-admin">
           {createMut.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : null}
           Créer le compte admin
         </Button>
@@ -1848,6 +1849,7 @@ const REPORT_REASON_LABELS: Record<string, string> = {
   PERSON: "Problème avec une personne",
   QUESTION: "Question sur l'application",
   OTHER: "Autre chose",
+  ACCOUNT_DELETION: "Demande de suppression de compte",
 };
 
 function SignalementsTab() {
@@ -2161,14 +2163,14 @@ export default function Admin() {
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
               className={`flex items-center gap-2 px-4 py-2.5 rounded-full text-sm font-medium whitespace-nowrap transition-colors ${
-                isActive ? "bg-[#c0354a] text-white" : "bg-white text-muted-foreground hover:bg-muted"
+                isActive ? "bg-primary text-white" : "bg-white text-muted-foreground hover:bg-muted"
               }`}
               data-testid={`tab-admin-${tab.id}`}
             >
               <Icon className="w-4 h-4" />
               {tab.label}
               {count > 0 && (
-                <Badge className={`ml-1 text-xs px-1.5 py-0 ${isActive ? "bg-white text-[#c0354a]" : "bg-[#c0354a] text-white"}`}>
+                <Badge className={`ml-1 text-xs px-1.5 py-0 ${isActive ? "bg-white text-primary" : "bg-primary text-white"}`}>
                   {count}
                 </Badge>
               )}

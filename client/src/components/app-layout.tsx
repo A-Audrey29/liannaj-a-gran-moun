@@ -10,6 +10,7 @@ import { Menu } from "lucide-react";
 import { useState } from "react";
 import { usePageTabsRegistry } from "@/lib/page-tabs-context";
 import { Badge } from "@/components/ui/badge";
+import { spaceMenuLinks } from "@/lib/space-tabs";
 
 function NavLinks({ authenticated, role, onClick }: { authenticated: boolean; role?: string; onClick?: () => void }) {
   const [location] = useLocation();
@@ -21,7 +22,7 @@ function NavLinks({ authenticated, role, onClick }: { authenticated: boolean; ro
           <Button variant="outline" size="sm" className="rounded-full text-sm" data-testid="link-connexion">Connexion</Button>
         </Link>
         <Link href="/register" onClick={onClick}>
-          <Button size="sm" className="rounded-full bg-[#c0354a] hover:bg-[#a82b3d] text-white text-sm" data-testid="link-inscription">Inscription</Button>
+          <Button size="sm" className="rounded-full bg-primary hover:bg-primary/90 text-white text-sm" data-testid="link-inscription">Inscription</Button>
         </Link>
       </>
     );
@@ -38,7 +39,7 @@ function NavLinks({ authenticated, role, onClick }: { authenticated: boolean; ro
 
   return (
     <>
-      <Link href={href} onClick={onClick} className={`text-sm font-medium hover:text-[#c0354a] transition-colors ${location === href ? "text-[#c0354a]" : ""}`} data-testid={testId}>
+      <Link href={href} onClick={onClick} className={`text-sm font-medium hover:text-primary transition-colors ${location === href ? "text-primary" : ""}`} data-testid={testId}>
         {label}
       </Link>
     </>
@@ -51,6 +52,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const { toast } = useToast();
   const [mobileOpen, setMobileOpen] = useState(false);
   const pageTabs = usePageTabsRegistry();
+  // Pages without tabs (Mes achats, a meeting, notifications...) still get the
+  // space menu, so the burger is never a dead end.
+  const spaceLinks = !pageTabs && isAuthenticated ? spaceMenuLinks(user?.role) : [];
 
   const handleLogout = async () => {
     try {
@@ -64,7 +68,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     <div className="min-h-[100dvh] flex flex-col bg-background">
       <a
         href="#main-content"
-        className="sr-only focus:not-sr-only focus:fixed focus:left-2 focus:top-2 focus:z-[100] focus:rounded-md focus:bg-white focus:px-4 focus:py-2 focus:text-sm focus:font-medium focus:text-[#c0354a] focus:shadow-lg focus:ring-2 focus:ring-ring"
+        className="sr-only focus:not-sr-only focus:fixed focus:left-2 focus:top-2 focus:z-[100] focus:rounded-md focus:bg-white focus:px-4 focus:py-2 focus:text-sm focus:font-medium focus:text-primary focus:shadow-lg focus:ring-2 focus:ring-ring"
         data-testid="link-skip-to-content"
       >
         Aller au contenu
@@ -72,7 +76,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       <header className="sticky top-0 z-50 bg-white border-b border-border/50">
         <div className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
           <Link href="/" className="inline-flex min-h-11 items-center" data-testid="link-home-logo">
-            <span className="font-serif font-bold tracking-tight text-[#c0354a] text-xl md:text-2xl">{PLATFORM_TAGLINE}</span>
+            <span className="font-serif font-bold tracking-tight text-primary text-xl md:text-2xl">{PLATFORM_TAGLINE}</span>
           </Link>
 
           <nav aria-label="Navigation principale" className="hidden md:flex items-center gap-4">
@@ -104,6 +108,30 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 <SheetTitle className="sr-only">Menu</SheetTitle>
                 <div className="flex flex-col gap-4 pt-8">
                   <NavLinks authenticated={isAuthenticated} role={user?.role} onClick={() => setMobileOpen(false)} />
+
+                  {spaceLinks.length > 0 && (
+                    <div className="flex flex-col gap-2 mt-4 pt-4 border-t border-border/50" data-testid="menu-space-links">
+                      {spaceLinks.map((item) => {
+                        const Icon = item.icon;
+                        const isActive = location === item.href;
+                        return (
+                          <Link
+                            key={item.id}
+                            href={item.href}
+                            onClick={() => setMobileOpen(false)}
+                            aria-current={isActive ? "page" : undefined}
+                            className={`flex items-center gap-2 px-4 py-2.5 min-h-11 rounded-full text-sm font-medium transition-colors ${
+                              isActive ? "bg-primary text-white" : "bg-white text-muted-foreground hover:bg-muted"
+                            }`}
+                            data-testid={`menu-link-${item.id}`}
+                          >
+                            <Icon className="w-4 h-4" aria-hidden="true" />
+                            {item.label}
+                          </Link>
+                        );
+                      })}
+                    </div>
+                  )}
 
                   {pageTabs && (
                     <div className="flex flex-col gap-2 mt-4 pt-4 border-t border-border/50">

@@ -45,7 +45,7 @@ export default function Landing() {
               <li key={item.id} className="shrink-0">
                 <a
                   href={`#${item.id}`}
-                  className="inline-flex items-center min-h-11 px-4 rounded-full bg-[#f3eaff] text-base font-medium text-[#c0354a] hover:bg-[#e8d7fe] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#c0354a]"
+                  className="inline-flex items-center min-h-11 px-4 rounded-full bg-[#f3eaff] text-base font-medium text-primary hover:bg-[#e8d7fe] focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
                   data-testid={`link-sommaire-${item.id}`}
                 >
                   {item.label}
@@ -59,14 +59,14 @@ export default function Landing() {
       <section className="bg-[#f3eaff] py-12 md:py-20">
         <div className="max-w-6xl mx-auto px-4 flex flex-col md:flex-row items-center gap-8">
           <div className="flex-1 text-center md:text-left">
-            <h1 className="text-3xl md:text-5xl font-bold text-[#c0354a] leading-tight mb-6" data-testid="text-hero-title">
+            <h1 className="text-3xl md:text-5xl font-bold text-primary leading-tight mb-6" data-testid="text-hero-title">
               GRAN É JENN MOUN.
             </h1>
             <p className="text-gray-700 text-lg md:text-xl mb-8 max-w-lg">
               Une expérience d’entraide intergénérationnelle fondée sur la confiance, les liens tissés et la solidarité engagée.
             </p>
             <Link href="/register">
-              <Button size="lg" className="rounded-full bg-[#c0354a] hover:bg-[#a82b3d] text-white px-8 text-base" data-testid="button-hero-register">
+              <Button size="lg" className="rounded-full bg-primary hover:bg-primary/90 text-white px-8 text-base" data-testid="button-hero-register">
                 CRÉER UN COMPTE
               </Button>
             </Link>
@@ -92,7 +92,7 @@ export default function Landing() {
             </div>
           </div>
           <div className="flex-1">
-            <h2 className="text-2xl md:text-4xl font-bold text-[#c0354a] mb-4" data-testid="text-section-confiance">JAN OU KA RANJÉ KABANN AW SÉ JAN OU KA DÒMI</h2>
+            <h2 className="text-2xl md:text-4xl font-bold text-primary mb-4" data-testid="text-section-confiance">JAN OU KA RANJÉ KABANN AW SÉ JAN OU KA DÒMI</h2>
             <p className="text-lg text-gray-700 font-medium mb-4">
               Une confiance qui se construit et se partage
             </p>
@@ -114,9 +114,9 @@ export default function Landing() {
       <section id="pour-qui" className="scroll-mt-20 py-12 md:py-16 bg-[#f3eaff]">
         <div className="max-w-6xl mx-auto px-4">
           <div className="flex items-center justify-between mb-10">
-            <h2 className="text-2xl md:text-4xl font-bold text-[#c0354a]" data-testid="text-section-pourqui">POUR QUI</h2>
+            <h2 className="text-2xl md:text-4xl font-bold text-primary" data-testid="text-section-pourqui">POUR QUI</h2>
             <Link href="/register">
-              <Button variant="outline" className="rounded-full border-[#c0354a] text-[#c0354a] hover:bg-[#c0354a] hover:text-white" data-testid="button-pourqui-register">
+              <Button variant="outline" className="rounded-full border-primary text-primary hover:bg-primary hover:text-white" data-testid="button-pourqui-register">
                 CRÉER UN COMPTE
               </Button>
             </Link>
@@ -138,7 +138,7 @@ export default function Landing() {
             </div>
             <div
               id="aidants"
-              className="scroll-mt-20 bg-white rounded-2xl p-6 text-center shadow-sm ring-2 ring-[#c0354a]/40"
+              className="scroll-mt-20 bg-white rounded-2xl p-6 text-center shadow-sm ring-2 ring-primary/40"
               data-testid="card-landing-aidant"
             >
               <div className="w-16 h-16 mx-auto mb-4 bg-[#e8d7fe] rounded-full flex items-center justify-center">
@@ -152,7 +152,7 @@ export default function Landing() {
               <Link href="/register?profil=aidant">
                 <Button
                   variant="outline"
-                  className="mt-4 h-auto min-h-12 whitespace-normal rounded-full border-[#c0354a] px-4 py-2 text-center text-[#c0354a] text-base hover:bg-[#c0354a] hover:text-white"
+                  className="mt-4 h-auto min-h-12 whitespace-normal rounded-full border-primary px-4 py-2 text-center text-primary text-base hover:bg-primary hover:text-white"
                   data-testid="button-landing-aidant"
                 >
                   Ouvrir mon espace aidant
@@ -171,7 +171,7 @@ export default function Landing() {
             </div>
           </div>
           <div className="flex-1">
-            <h2 className="text-2xl md:text-4xl font-bold text-[#c0354a] mb-4" data-testid="text-section-rencontre">PRAN TI BAN LA SIZÉ</h2>
+            <h2 className="text-2xl md:text-4xl font-bold text-primary mb-4" data-testid="text-section-rencontre">PRAN TI BAN LA SIZÉ</h2>
             <p className="text-lg text-gray-700 font-medium mb-4">
               Prenez place — la première rencontre, c'est nous qui l'organisons.
             </p>
@@ -193,7 +193,7 @@ export default function Landing() {
             </div>
           </div>
           <div className="flex-1">
-            <h2 className="text-2xl md:text-4xl font-bold text-[#c0354a] mb-4" data-testid="text-section-discussion">PAWÒL KA FÈ CHIMEN</h2>
+            <h2 className="text-2xl md:text-4xl font-bold text-primary mb-4" data-testid="text-section-discussion">PAWÒL KA FÈ CHIMEN</h2>
             <p className="text-lg text-gray-700 font-medium mb-4">
               Les mots font leur chemin — un espace pour échanger en confiance.
             </p>
@@ -209,7 +209,7 @@ export default function Landing() {
 
       <section id="comment-ca-marche" className="scroll-mt-20 py-12 md:py-20 bg-white">
         <div className="max-w-4xl mx-auto px-4 text-center">
-          <h2 className="text-2xl md:text-4xl font-bold text-[#c0354a] mb-2" data-testid="text-section-comment">COMMENT ÇA MARCHE</h2>
+          <h2 className="text-2xl md:text-4xl font-bold text-primary mb-2" data-testid="text-section-comment">COMMENT ÇA MARCHE</h2>
           <p className="text-lg text-gray-700 mb-12">Quatre étapes simples pour créer un lien intergénérationnel durable.</p>
 
           <div className="space-y-6">
@@ -233,7 +233,7 @@ export default function Landing() {
       <section id="tarifs" className="scroll-mt-20 py-12 md:py-16 bg-[#f3eaff]">
         {/* Names and prices come from CREDIT_OFFERS only, never hard-coded. */}
         <div className="max-w-4xl mx-auto px-4">
-          <h2 className="text-2xl md:text-4xl font-bold text-[#c0354a] mb-2 text-center" data-testid="text-section-tarifs">TARIFS</h2>
+          <h2 className="text-2xl md:text-4xl font-bold text-primary mb-2 text-center" data-testid="text-section-tarifs">TARIFS</h2>
           <p className="text-lg md:text-xl font-semibold text-foreground mb-8 text-center">1 crédit = 1 atelier avec un jeune</p>
           <ul className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
             {CREDIT_OFFERS.map((offer) => (
@@ -261,14 +261,14 @@ export default function Landing() {
           </ul>
           <div className="flex flex-col items-center gap-4">
             <Link href="/forfaits">
-              <Button className="h-14 px-8 rounded-full bg-[#c0354a] hover:bg-[#a82b3d] text-white text-lg" data-testid="button-landing-forfaits">
+              <Button className="h-14 px-8 rounded-full bg-primary hover:bg-primary/90 text-white text-lg" data-testid="button-landing-forfaits">
                 Voir le détail des forfaits
               </Button>
             </Link>
             <p className="text-lg text-gray-700 flex items-center gap-2" data-testid="text-landing-contact">
               <Mail className="w-5 h-5 shrink-0" aria-hidden="true" />
               Une question ?{" "}
-              <a href={`mailto:${CONTACT_EMAIL}`} className="font-semibold text-[#c0354a] underline">
+              <a href={`mailto:${CONTACT_EMAIL}`} className="font-semibold text-primary underline">
                 {CONTACT_EMAIL}
               </a>
             </p>

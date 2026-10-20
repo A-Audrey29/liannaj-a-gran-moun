@@ -68,7 +68,7 @@ export default function MeetingHistory({
   scope,
   viewerRole,
   renderActions,
-  showExport = true,
+  showExport = false,
   emptyLabel = "Aucune rencontre",
   exportLabel,
 }: MeetingHistoryProps) {
@@ -191,7 +191,7 @@ export default function MeetingHistory({
               onClick={() => setFilter(f.id)}
               className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
                 activeFilter === f.id
-                  ? "bg-[#c0354a] text-white"
+                  ? "bg-primary text-white"
                   : "bg-white text-muted-foreground hover:bg-muted border"
               }`}
               data-testid={`filter-history-${f.id}`}

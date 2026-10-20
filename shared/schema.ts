@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { NPS_MIN_SCORE, NPS_MAX_SCORE } from "./nps";
+import { DEFAULT_WORKSHOP_MINUTES } from "./credits";
 
 export type Role = "ADMIN" | "SENIOR" | "JUNIOR" | "REFERENT_SENIOR" | "TEACHER";
 export type UserStatus = "PENDING_VALIDATION" | "ACTIVE" | "SUSPENDED" | "BANNED";
@@ -235,7 +236,7 @@ const isoDateTime = z
 export const insertInterventionSchema = z.object({
   relationId: z.string().min(1),
   scheduledDate: isoDateTime,
-  durationMinutes: z.number().min(30).max(480).default(120),
+  durationMinutes: z.number().min(30).max(480).default(DEFAULT_WORKSHOP_MINUTES),
   location: z.string().optional(),
   tasks: z.array(z.string()).default([]),
 });
@@ -442,7 +443,7 @@ export const createReferentSchema = z.object({
 export const referentInterventionSchema = z.object({
   relationId: z.string().min(1, "Relation requise"),
   scheduledDate: isoDateTime,
-  durationMinutes: z.number().min(30).max(480).default(120),
+  durationMinutes: z.number().min(30).max(480).default(DEFAULT_WORKSHOP_MINUTES),
   location: z.string().optional(),
   tasks: z.array(z.string()).default([]),
 });
@@ -450,6 +451,15 @@ export const referentInterventionSchema = z.object({
 export const referentContactSchema = z.object({
   subject: z.string().min(1, "Sujet requis").max(200),
   message: z.string().min(10, "Message trop court").max(2000),
+});
+
+/**
+ * Demande de suppression de compte : la confirmation explicite (les ateliers
+ * non utilises seront perdus) est exigee aussi cote serveur, pas seulement
+ * par la fenetre du client.
+ */
+export const accountDeletionRequestSchema = z.object({
+  confirmed: z.literal(true, { errorMap: () => ({ message: "Confirmation requise" }) }),
 });
 
 export type CreateReferentInput = z.infer<typeof createReferentSchema>;

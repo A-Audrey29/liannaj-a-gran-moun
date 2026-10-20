@@ -27,6 +27,8 @@ import type { Relation, User as UserType, Intervention, Category } from "@shared
 import MessagesTab from "@/components/messages-tab";
 import MeetingHistory from "@/components/meeting-history";
 import DisponibilitesTab from "@/components/disponibilites-tab";
+import { AccountDeletionRequest } from "@/components/account-deletion-request";
+import { homeTabsFor } from "@/lib/space-tabs";
 import { MobileTabsMenu } from "@/components/mobile-tabs-menu";
 import { useSSE } from "@/hooks/use-sse";
 import { useUnreadMessageCount } from "@/hooks/use-unread-count";
@@ -39,18 +41,6 @@ import { isUpcomingOrOngoing } from "@shared/meeting-check";
 
 type RelationWithUsers = Relation & { senior: UserType; junior: UserType; interventions?: Intervention[] };
 type MatchSuggestion = { user: UserType; commonCategories: string[]; isRecommended: boolean; isFavorite: boolean };
-
-const ALL_TABS = [
-  { id: "dashboard", label: "Tableau de bord", icon: LayoutGrid },
-  { id: "rencontres", label: "Mes rencontres", icon: Calendar },
-  { id: "disponibilites", label: "Mes disponibilités", icon: CalendarClock },
-  // Navigates to /mes-ateliers (see setActiveTab); senior only.
-  { id: "ateliers", label: "Mes achats", icon: BookOpen },
-  { id: "messages", label: "Messagerie", icon: Mail },
-  { id: "demandes", label: "Trouver un profil", icon: MessageCircle },
-  { id: "profil", label: "Mes informations", icon: User },
-  { id: "aide", label: "Aide", icon: HelpCircle },
-] as const;
 
 type InterventionWithPartner = Intervention & { partnerName: string; relationId: string };
 
@@ -94,14 +84,7 @@ export default function Home() {
   const [savedTab, setActiveTabState] = useState<string>("dashboard");
   const [openRelationId, setOpenRelationId] = useState<string | null>(null);
   const isNotAdmin = user?.role !== "ADMIN";
-  const tabs = (user?.role === "ADMIN"
-    ? ALL_TABS.filter((t) => t.id !== "profil" && t.id !== "messages" && t.id !== "aide" && t.id !== "disponibilites")
-    : user?.role === "JUNIOR"
-    ? ALL_TABS.filter((t) => t.id !== "aide").map((t) =>
-        t.id === "demandes" ? { ...t, label: "Demandes reçues" } : t
-      )
-    : ALL_TABS.filter((t) => t.id !== "aide" && t.id !== "disponibilites")
-  ).filter((t) => t.id !== "ateliers" || user?.role === "SENIOR");
+  const tabs = homeTabsFor(user?.role);
   // An unknown tab for this role (link from another space, stale state)
   // would render an empty page: fall back to the dashboard.
   const activeTab = savedTab === "aide" || tabs.some((t) => t.id === savedTab) ? savedTab : "dashboard";
@@ -190,7 +173,7 @@ export default function Home() {
           <h1 className="text-2xl md:text-3xl font-bold" data-testid="text-mon-espace">Bonjour {user?.firstName}</h1>
           {user?.role === "SENIOR" && creditData && (
             <span
-              className="px-3 py-1 rounded-full text-sm font-medium bg-[#c0354a]/10 text-[#c0354a]"
+              className="px-3 py-1 rounded-full text-sm font-medium bg-primary/10 text-primary"
               data-testid="badge-credit-balance"
             >
               {/* Same figure as the "Ateliers restants" card: booked meetings set aside. */}
@@ -202,7 +185,7 @@ export default function Home() {
           <button
             onClick={() => setActiveTab("aide")}
             className={`flex items-center gap-2 px-4 py-2.5 rounded-full text-sm font-medium transition-colors ${
-              activeTab === "aide" ? "bg-[#c0354a] text-white" : "bg-white text-muted-foreground hover:bg-muted"
+              activeTab === "aide" ? "bg-primary text-white" : "bg-white text-muted-foreground hover:bg-muted"
             }`}
             data-testid="tab-aide"
           >
@@ -217,9 +200,9 @@ export default function Home() {
       )}
       {/* Only an ACTIVE relation lets the senior propose: before the first
           meeting the team organises it (relation-detail says so). */}
-      {user?.role === "SENIOR" && !relLoading && proposableRelations.length > 0 && (
+      {user?.role === "SENIOR" && activeTab !== "profil" && !relLoading && proposableRelations.length > 0 && (
         <Button
-          className="w-full mb-6 rounded-2xl h-14 text-base font-semibold bg-[#c0354a] hover:bg-[#a82b3d] text-white shadow-sm"
+          className="w-full mb-6 rounded-2xl h-14 text-base font-semibold bg-primary hover:bg-primary/90 text-white shadow-sm"
           onClick={() => {
             if (proposableRelations.length === 1) {
               setLocation(`/relations/${proposableRelations[0].id}`);
@@ -229,12 +212,12 @@ export default function Home() {
           }}
           data-testid="button-proposer-rencontre-permanent"
         >
-          <Calendar className="w-5 h-5 mr-2" /> Proposer une rencontre
+          <Calendar className="w-5 h-5 mr-2" /> Demander un atelier
         </Button>
       )}
       {user?.role === "SENIOR" && !relLoading && counts.activeRelations.length === 0 && activeTab !== "demandes" && (
         <Button
-          className="w-full mb-6 rounded-2xl h-14 text-base font-semibold bg-[#c0354a] hover:bg-[#a82b3d] text-white shadow-sm"
+          className="w-full mb-6 rounded-2xl h-14 text-base font-semibold bg-primary hover:bg-primary/90 text-white shadow-sm"
           onClick={() => setActiveTab("demandes")}
           data-testid="button-choisir-jeune"
         >
@@ -254,14 +237,14 @@ export default function Home() {
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
               className={`flex items-center gap-2 px-4 py-2.5 rounded-full text-sm font-medium whitespace-nowrap transition-colors ${
-                isActive ? "bg-[#c0354a] text-white" : "bg-white text-muted-foreground hover:bg-muted"
+                isActive ? "bg-primary text-white" : "bg-white text-muted-foreground hover:bg-muted"
               }`}
               data-testid={`tab-${tab.id}`}
             >
               <Icon className="w-4 h-4" />
               {tab.label}
               {count > 0 && (
-                <Badge className={`ml-1 text-xs px-1.5 py-0 ${isActive ? "bg-white text-[#c0354a]" : "bg-[#c0354a] text-white"}`}>
+                <Badge className={`ml-1 text-xs px-1.5 py-0 ${isActive ? "bg-white text-primary" : "bg-primary text-white"}`}>
                   {count}
                 </Badge>
               )}
@@ -292,8 +275,8 @@ function DashboardCard({ icon: Icon, count, label, detail, onClick, highlight, t
   icon: any; count: number | string; label: string; detail?: string; onClick: () => void; highlight?: "orange" | "red" | "purple"; testId: string;
 }) {
   const bgClass = highlight === "orange" ? "bg-orange-50 border-orange-200" : highlight === "red" ? "bg-red-50 border-red-200" : highlight === "purple" ? "bg-[#f3eaff] border-[#e8d7fe]" : "bg-white border-transparent";
-  const iconColor = highlight === "orange" ? "text-orange-500" : highlight === "red" ? "text-[#c0354a]" : highlight === "purple" ? "text-[#6d28d9]" : "text-muted-foreground";
-  const countColor = highlight === "orange" ? "text-orange-700" : highlight === "red" ? "text-[#c0354a]" : highlight === "purple" ? "text-[#6d28d9]" : "text-foreground";
+  const iconColor = highlight === "orange" ? "text-orange-500" : highlight === "red" ? "text-primary" : highlight === "purple" ? "text-[#6d28d9]" : "text-muted-foreground";
+  const countColor = highlight === "orange" ? "text-orange-700" : highlight === "red" ? "text-primary" : highlight === "purple" ? "text-[#6d28d9]" : "text-foreground";
 
   return (
     <button
@@ -507,7 +490,7 @@ function RencontresTab({ relations, isLoading, user, onOpenMessage }: { relation
                   {rel.status === "ACTIVE" && (
                     <Button
                       size="sm"
-                      className="rounded-full text-xs bg-[#c0354a] hover:bg-[#a82b3d] text-white"
+                      className="rounded-full text-xs bg-primary hover:bg-primary/90 text-white"
                       onClick={() => onOpenMessage(rel.id)}
                       data-testid={`button-message-${rel.id}`}
                     >
@@ -546,7 +529,7 @@ function RencontresTab({ relations, isLoading, user, onOpenMessage }: { relation
                 <p className="text-sm text-orange-700 mb-2">Cette rencontre attend votre confirmation.</p>
                 <Button
                   size="sm"
-                  className="w-full bg-[#c0354a] hover:bg-[#a82b3d] text-white text-xs"
+                  className="w-full bg-primary hover:bg-primary/90 text-white text-xs"
                   onClick={() => confirmMutation.mutate(entry.id)}
                   disabled={confirmMutation.isPending}
                   data-testid={`button-confirm-intervention-${entry.id}`}
@@ -585,9 +568,7 @@ function DemandesTab({ relations, isLoading, user }: { relations?: RelationWithU
   const { toast } = useToast();
   const isSenior = user?.role === "SENIOR";
   const [sugFilter, setSugFilter] = useState<"all" | "favorites" | "recommended">("all");
-  const [viewMode, setViewMode] = useState<"list" | "carousel">(() =>
-    typeof window !== "undefined" && window.matchMedia("(min-width: 768px)").matches ? "carousel" : "list",
-  );
+  const [viewMode, setViewMode] = useState<"list" | "carousel">("carousel");
   const [carouselIndex, setCarouselIndex] = useState(0);
 
   const { data: suggestions, isLoading: sugLoading } = useQuery<MatchSuggestion[]>({
@@ -680,7 +661,7 @@ function DemandesTab({ relations, isLoading, user }: { relations?: RelationWithU
                   onClick={() => setSugFilter(f.id)}
                   className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
                     sugFilter === f.id
-                      ? "bg-[#c0354a] text-white"
+                      ? "bg-primary text-white"
                       : "bg-white text-muted-foreground hover:bg-muted border"
                   }`}
                   data-testid={`filter-suggestions-${f.id}`}
@@ -693,7 +674,7 @@ function DemandesTab({ relations, isLoading, user }: { relations?: RelationWithU
             <div className="flex gap-1 border rounded-lg p-0.5" data-testid="view-mode-toggle">
               <button
                 onClick={() => setViewMode("list")}
-                className={`p-3 rounded-md transition-colors ${viewMode === "list" ? "bg-[#c0354a] text-white" : "text-muted-foreground hover:bg-muted"}`}
+                className={`p-3 rounded-md transition-colors ${viewMode === "list" ? "bg-primary text-white" : "text-muted-foreground hover:bg-muted"}`}
                 aria-label="Vue liste"
                 aria-pressed={viewMode === "list"}
                 data-testid="view-mode-list"
@@ -702,7 +683,7 @@ function DemandesTab({ relations, isLoading, user }: { relations?: RelationWithU
               </button>
               <button
                 onClick={() => setViewMode("carousel")}
-                className={`p-3 rounded-md transition-colors ${viewMode === "carousel" ? "bg-[#c0354a] text-white" : "text-muted-foreground hover:bg-muted"}`}
+                className={`p-3 rounded-md transition-colors ${viewMode === "carousel" ? "bg-primary text-white" : "text-muted-foreground hover:bg-muted"}`}
                 aria-label="Vue carrousel"
                 aria-pressed={viewMode === "carousel"}
                 data-testid="view-mode-carousel"
@@ -749,12 +730,12 @@ function DemandesTab({ relations, isLoading, user }: { relations?: RelationWithU
                             data-testid={`button-favorite-${s.user.id}`}
                             aria-label={s.isFavorite ? "Retirer des favoris" : "Ajouter aux favoris"}
                           >
-                            <Heart className={`w-5 h-5 transition-colors ${s.isFavorite ? "fill-[#c0354a] text-[#c0354a]" : "text-muted-foreground"}`} />
+                            <Heart className={`w-5 h-5 transition-colors ${s.isFavorite ? "fill-primary text-primary" : "text-muted-foreground"}`} />
                           </button>
                           <Button
                             size="sm"
                             variant="ghost"
-                            className="rounded-full text-sm px-3 py-1.5 h-auto text-[#c0354a] hover:text-[#a82b3d] hover:bg-red-50"
+                            className="rounded-full text-sm px-3 py-1.5 h-auto text-primary hover:text-primary hover:bg-red-50"
                             onClick={() => setJuniorToRequest({ id: s.user.id, firstName: s.user.firstName })}
                             disabled={createRelationMutation.isPending}
                             data-testid={`button-propose-${s.user.id}`}
@@ -809,7 +790,7 @@ function DemandesTab({ relations, isLoading, user }: { relations?: RelationWithU
                             data-testid={`button-favorite-${s.user.id}`}
                             aria-label={s.isFavorite ? "Retirer des favoris" : "Ajouter aux favoris"}
                           >
-                            <Heart className={`w-4 h-4 transition-colors ${s.isFavorite ? "fill-[#c0354a] text-[#c0354a]" : "text-muted-foreground"}`} />
+                            <Heart className={`w-4 h-4 transition-colors ${s.isFavorite ? "fill-primary text-primary" : "text-muted-foreground"}`} />
                           </button>
                           {s.isRecommended && (
                             <Badge className="no-default-hover-elevate absolute top-2 left-2 bg-[#e8d7fe] text-[#6d28d9] text-xs px-1.5 shadow-sm">Recommandé</Badge>
@@ -835,7 +816,7 @@ function DemandesTab({ relations, isLoading, user }: { relations?: RelationWithU
                           <Button
                             size="sm"
                             variant="ghost"
-                            className="rounded-full text-sm px-3 py-2 h-auto text-[#c0354a] hover:text-[#a82b3d] hover:bg-red-50 w-full mt-1"
+                            className="rounded-full text-sm px-3 py-2 h-auto text-primary hover:text-primary hover:bg-red-50 w-full mt-1"
                             onClick={() => setJuniorToRequest({ id: s.user.id, firstName: s.user.firstName })}
                             disabled={createRelationMutation.isPending}
                             data-testid={`button-propose-${s.user.id}`}
@@ -879,7 +860,7 @@ function DemandesTab({ relations, isLoading, user }: { relations?: RelationWithU
                       aria-current={idx === safeCarouselIndex ? "true" : undefined}
                       data-testid={`carousel-dot-${idx}`}
                     >
-                      <span className={`h-2 w-2 rounded-full transition-colors ${idx === safeCarouselIndex ? "bg-[#c0354a]" : "bg-muted-foreground/40"}`} />
+                      <span className={`h-2 w-2 rounded-full transition-colors ${idx === safeCarouselIndex ? "bg-primary" : "bg-muted-foreground/40"}`} />
                     </button>
                   ))}
                 </div>
@@ -1072,7 +1053,7 @@ function PhotoUpload({ user }: { user: AuthUser }) {
           </button>
           <button
             onClick={() => deleteMutation.mutate()}
-            className="absolute -top-2 -right-2 w-8 h-8 rounded-full bg-[#c0354a] text-white shadow flex items-center justify-center"
+            className="absolute -top-2 -right-2 w-8 h-8 rounded-full bg-primary text-white shadow flex items-center justify-center"
             disabled={deleteMutation.isPending}
             data-testid="button-delete-photo"
             aria-label="Supprimer la photo de profil"
@@ -1218,7 +1199,7 @@ function ProfilTab({ user }: { user: AuthUser | null }) {
       <Button
         onClick={() => setEditOpen(true)}
         variant="outline"
-        className="w-full rounded-full border-[#c0354a] text-[#c0354a] hover:bg-[#c0354a] hover:text-white"
+        className="w-full rounded-full border-primary text-primary hover:bg-primary hover:text-white"
         data-testid="button-edit-profile"
       >
         <Pencil className="w-4 h-4 mr-2" /> Modifier mon profil
@@ -1226,11 +1207,14 @@ function ProfilTab({ user }: { user: AuthUser | null }) {
 
       <Button
         onClick={handleLogout}
-        className="w-full rounded-full bg-[#c0354a] hover:bg-[#a82b3d] text-white"
+        variant="outline"
+        className="w-full rounded-full border-foreground/40 text-foreground"
         data-testid="button-logout-profil"
       >
         Déconnexion
       </Button>
+
+      <AccountDeletionRequest />
     </div>
   );
 }
@@ -1270,7 +1254,7 @@ function ChangePasswordSection() {
           className="flex items-center gap-2 w-full text-left"
           data-testid="button-toggle-password"
         >
-          <Lock className="w-4 h-4 text-[#c0354a]" />
+          <Lock className="w-4 h-4 text-primary" />
           <SectionTitle>Modifier mon mot de passe</SectionTitle>
           <ChevronRight className={`w-4 h-4 ml-auto transition-transform ${open ? "rotate-90" : ""}`} />
         </button>
@@ -1306,7 +1290,7 @@ function ChangePasswordSection() {
               <Button
                 type="submit"
                 disabled={mutation.isPending}
-                className="w-full rounded-full bg-[#c0354a] hover:bg-[#a82b3d] text-white"
+                className="w-full rounded-full bg-primary hover:bg-primary/90 text-white"
                 data-testid="button-submit-password"
               >
                 {mutation.isPending ? "Modification en cours..." : "Valider"}
@@ -1568,7 +1552,7 @@ function EditProfileDialog({ user, open, onOpenChange }: { user: AuthUser; open:
               <Button
                 type="submit"
                 disabled={updateMutation.isPending}
-                className="rounded-full bg-[#c0354a] hover:bg-[#a82b3d] text-white"
+                className="rounded-full bg-primary hover:bg-primary/90 text-white"
                 data-testid="button-save-profile"
               >
                 {updateMutation.isPending ? "Enregistrement..." : "Enregistrer"}
@@ -1648,14 +1632,14 @@ function AideTab({ user, relations }: { user: AuthUser | null; relations?: Relat
               onClick={() => { setReason(opt.value); setRelationId(""); }}
               className={`w-full flex items-center gap-3 px-4 py-4 rounded-xl border-2 text-left text-base transition-colors ${
                 reason === opt.value
-                  ? "border-[#c0354a] bg-red-50"
+                  ? "border-primary bg-red-50"
                   : "border-gray-200 hover:border-gray-300 bg-white"
               }`}
             >
               <span className={`w-5 h-5 rounded-full border-2 flex-shrink-0 flex items-center justify-center ${
-                reason === opt.value ? "border-[#c0354a]" : "border-gray-400"
+                reason === opt.value ? "border-primary" : "border-gray-400"
               }`}>
-                {reason === opt.value && <span className="w-2.5 h-2.5 rounded-full bg-[#c0354a]" />}
+                {reason === opt.value && <span className="w-2.5 h-2.5 rounded-full bg-primary" />}
               </span>
               {opt.label}
             </button>
@@ -1679,14 +1663,14 @@ function AideTab({ user, relations }: { user: AuthUser | null; relations?: Relat
                     onClick={() => setRelationId(r.id)}
                     className={`w-full flex items-center gap-3 px-4 py-4 rounded-xl border-2 text-left text-base transition-colors ${
                       relationId === r.id
-                        ? "border-[#c0354a] bg-red-50"
+                        ? "border-primary bg-red-50"
                         : "border-gray-200 hover:border-gray-300 bg-white"
                     }`}
                   >
                     <span className={`w-5 h-5 rounded-full border-2 flex-shrink-0 flex items-center justify-center ${
-                      relationId === r.id ? "border-[#c0354a]" : "border-gray-400"
+                      relationId === r.id ? "border-primary" : "border-gray-400"
                     }`}>
-                      {relationId === r.id && <span className="w-2.5 h-2.5 rounded-full bg-[#c0354a]" />}
+                      {relationId === r.id && <span className="w-2.5 h-2.5 rounded-full bg-primary" />}
                     </span>
                     {partner.firstName} {partner.lastName} — {partner.role === "JUNIOR" ? "Jeune" : "Senior"}
                   </button>
@@ -1715,7 +1699,7 @@ function AideTab({ user, relations }: { user: AuthUser | null; relations?: Relat
 
       <Button
         data-testid="button-submit-report"
-        className="w-full h-14 text-lg bg-[#c0354a] hover:bg-[#a82b3d]"
+        className="w-full h-14 text-lg bg-primary hover:bg-primary/90"
         onClick={() => mutation.mutate()}
         disabled={!canSubmit || mutation.isPending}
       >

@@ -57,7 +57,7 @@ export async function checkAndSendAvailabilityReminders(now: Date = new Date()) 
       await storage.recordAvailabilityReminder(user.id, {
         title: ended ? "Vos disponibilités sont terminées" : "Vos disponibilités se terminent bientôt",
         message: ended
-          ? `Vos derniers créneaux dataient du ${lastDate}. Prolongez votre planning pour que les séniors puissent vous proposer une rencontre.`
+          ? `Vos derniers créneaux dataient du ${lastDate}. Prolongez votre planning pour que les séniors puissent vous demander un atelier.`
           : `Vos créneaux s'arrêtent le ${lastDate}. Prolongez votre planning en un clic pour rester visible.`,
         link: AVAILABILITY_PATH,
       });

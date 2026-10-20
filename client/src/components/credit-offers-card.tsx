@@ -1,11 +1,11 @@
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useState } from "react";
+import { useMutation } from "@tanstack/react-query";
 import { apiRequest, apiErrorMessage } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
-import { useAuth } from "@/hooks/use-auth";
 import { Link } from "wouter";
-import { CREDIT_OFFERS } from "@shared/credit-offers";
+import { ShoppingCart } from "lucide-react";
 import { CONTACT_EMAIL } from "@shared/branding";
 
 /** Where a given role writes to the team: in-app for seniors and aidants. */
@@ -15,84 +15,54 @@ export function teamContactHref(role: string | undefined): string {
   return `mailto:${CONTACT_EMAIL}`;
 }
 
-/**
- * Online payment is open only when a provider is configured on the server.
- * Until then the offers stay visible but buying goes through the team.
- */
-export function useOnlinePayment(): boolean | undefined {
-  const { data } = useQuery<{ online: boolean }>({
-    queryKey: ["/api/credits/payment-status"],
-    staleTime: 5 * 60 * 1000,
-  });
-  return data?.online;
-}
-
-export function OffersGrid() {
+/** Starts a checkout for one offer and sends the buyer to the payment page. */
+export function useCheckout() {
   const { toast } = useToast();
-  const { user } = useAuth();
-  const online = useOnlinePayment();
+  // Stays true once the payment page is on its way: the mutation itself goes
+  // back to "idle" right away, and a second click would open a second checkout.
+  const [redirecting, setRedirecting] = useState(false);
   const mutation = useMutation({
     mutationFn: async (offerId: string) => {
       const res = await apiRequest("POST", "/api/credits/checkout", { offerId });
       return res.json() as Promise<{ url: string }>;
     },
     onSuccess: (data) => {
+      setRedirecting(true);
       window.location.href = data.url;
     },
     onError: (err) => {
       toast({
         variant: "destructive",
         title: "Erreur",
-        // e.g. 503 "paiement en ligne indisponible": show why, not "réessayez".
+        // e.g. 503 "Le paiement en ligne n'est pas disponible actuellement.": show why, not "réessayez".
         description: apiErrorMessage(err, "Impossible de lancer le paiement. Réessayez."),
       });
     },
   });
-
-  return (
-    <div className="space-y-3">
-      {CREDIT_OFFERS.map((offer) => (
-        <div key={offer.id} className="flex items-center justify-between gap-3">
-          <div>
-            <p className="text-sm font-semibold" data-testid={`text-offer-name-${offer.id}`}>{offer.name}</p>
-            <p className="text-sm">{offer.label}</p>
-            <p className="text-xs text-muted-foreground">{offer.priceEuros} €</p>
-          </div>
-          {online && (
-            <Button
-              size="sm"
-              disabled={mutation.isPending}
-              onClick={() => mutation.mutate(offer.id)}
-              data-testid={`button-buy-${offer.id}`}
-            >
-              Acheter
-            </Button>
-          )}
-        </div>
-      ))}
-      {online === false && (
-        <p className="text-sm rounded-lg bg-[#f3eaff] px-3 py-2" data-testid="text-buy-via-team">
-          Pour acheter des ateliers,{" "}
-          <a href={teamContactHref(user?.role)} className="font-semibold text-[#c0354a] underline">
-            écrivez à l'équipe
-          </a>
-          . Elle vous indique comment régler et ajoute vos ateliers à votre compte.
-        </p>
-      )}
-    </div>
-  );
+  return { mutate: mutation.mutate, variables: mutation.variables, isPending: mutation.isPending || redirecting };
 }
 
+/** Dashboard entry point: one clear button to the page that explains how buying works. */
 export function CreditOffersCard() {
   return (
     <Card data-testid="card-credit-offers">
       <CardContent className="pt-6 space-y-3">
         <p className="font-semibold">Acheter des ateliers</p>
-        <OffersGrid />
-        <Link href="/forfaits" className="inline-block text-sm underline text-[#c0354a]" data-testid="link-forfaits">
-          Comment fonctionnent les forfaits ?
-        </Link>
+        <p className="text-sm text-muted-foreground">1 crédit = 1 atelier. Choisissez un forfait, on vous explique chaque étape.</p>
+        <BuyAteliersButton className="w-full sm:w-auto" />
       </CardContent>
     </Card>
+  );
+}
+
+export const BUY_ATELIERS_PATH = "/forfaits";
+
+export function BuyAteliersButton({ className }: { className?: string }) {
+  return (
+    <Link href={BUY_ATELIERS_PATH}>
+      <Button className={`rounded-full ${className ?? ""}`} data-testid="button-buy-ateliers">
+        <ShoppingCart className="w-4 h-4 mr-2" aria-hidden="true" /> Acheter des ateliers
+      </Button>
+    </Link>
   );
 }

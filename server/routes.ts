@@ -20,12 +20,13 @@ import {
   getInterventionConfirmedEmailHtml,
   getFeedbackReminderEmailHtml,
   getNewReportEmailHtml,
+  getNewAdminNotificationEmailHtml,
   getCreditPurchaseConfirmedEmailHtml,
   getNegativeCreditBalanceEmailHtml,
   getPasswordResetEmailHtml,
   escapeHtml,
 } from "./lib/email-templates";
-import { insertUserSchema, createRelationSchema, insertInterventionSchema, feedbackSchema, createPaymentSchema, checkoutSchema, changePasswordSchema, forgotPasswordSchema, resetPasswordSchema, createAdminSchema, insertReportSchema, createAvailabilitySchema, createRecurringAvailabilitiesSchema, extendAvailabilitiesSchema, createDateExceptionSchema, updateUserCategoriesSchema, meetingHistoryQuerySchema, npsSchema, npsQuerySchema, creditsQuerySchema, checkoutStatusQuerySchema, validateRegistrationSchema, COMPLETED_STATUSES } from "../shared/schema";
+import { accountDeletionRequestSchema, insertUserSchema, createRelationSchema, insertInterventionSchema, feedbackSchema, createPaymentSchema, checkoutSchema, changePasswordSchema, forgotPasswordSchema, resetPasswordSchema, createAdminSchema, insertReportSchema, createAvailabilitySchema, createRecurringAvailabilitiesSchema, extendAvailabilitiesSchema, createDateExceptionSchema, updateUserCategoriesSchema, meetingHistoryQuerySchema, npsSchema, npsQuerySchema, creditsQuerySchema, checkoutStatusQuerySchema, validateRegistrationSchema, COMPLETED_STATUSES } from "../shared/schema";
 import { creditOwnerId } from "../shared/credits";
 import type { CreditBalanceResponse, CreditHistoryEntry, CheckoutStatusResponse } from "../shared/credits";
 import type { MeetingHistoryEntry, MeetingHistoryResponse, MeetingHistorySummary, Role } from "../shared/schema";
@@ -244,6 +245,9 @@ function buildMeetingSummary(entries: MeetingHistoryEntry[]): MeetingHistorySumm
 
 const isDev = process.env.NODE_ENV !== "production";
 
+/** `Report.reason` of an account-deletion request (shown in the admin "Signalements" tab). */
+const ACCOUNT_DELETION_REASON = "ACCOUNT_DELETION";
+
 // Durée de validité du lien de validation d'inscription (7 jours).
 const VALIDATION_TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -366,7 +370,7 @@ async function validateSlot(
 
 const SLOT_CONFLICT_MESSAGE = "Une autre rencontre est déjà prévue sur ce créneau.";
 const LOCK_CONTENTION_MESSAGE = "Une autre action est en cours sur ce créneau, veuillez réessayer dans un instant.";
-const NO_CREDITS_MESSAGE = "Tous les ateliers achetés sont déjà réservés pour des rencontres prévues. Achetez un pack pour en proposer une nouvelle.";
+const NO_CREDITS_MESSAGE = "Tous les ateliers achetés sont déjà réservés pour des rencontres prévues. Achetez un pack pour demander un nouvel atelier.";
 /**
  * Crée la rencontre via createInterventionSafe (verrou + re-check du conflit
  * dans la transaction), pour fermer la fenêtre de course entre validateSlot()
@@ -1248,7 +1252,7 @@ export async function registerRoutes(
         }
       } else if (relation.status === "ACTIVE") {
         if (relation.seniorId !== user.id && user.role !== "ADMIN") {
-          return res.status(403).json({ message: "Seul le Senior peut proposer une rencontre" });
+          return res.status(403).json({ message: "Seul le Senior peut demander un atelier" });
         }
       } else {
         return res.status(400).json({ message: "La relation n'est pas dans un état permettant de créer une rencontre" });
@@ -1296,8 +1300,8 @@ export async function registerRoutes(
       await storage.createNotification({
         user: { connect: { id: relation.juniorId } },
         type: "INTERVENTION_PROPOSED",
-        title: "Nouvelle rencontre proposée",
-        message: `Une rencontre a été proposée pour le ${fmtDayNumeric(new Date(parsed.data.scheduledDate))} à ${fmtTime(new Date(parsed.data.scheduledDate))}.`,
+        title: "Atelier demandé",
+        message: `Un atelier vous est demandé pour le ${fmtDayNumeric(new Date(parsed.data.scheduledDate))} à ${fmtTime(new Date(parsed.data.scheduledDate))}.`,
         link: `/relations/${relation.id}`,
       });
 
@@ -1308,7 +1312,7 @@ export async function registerRoutes(
         const locationStr = parsed.data.location || "Non précisé";
         sendEmail({
           to: junior.email,
-          subject: `${PLATFORM_NAME} - Nouvelle rencontre proposée pour le ${dateStr}`,
+          subject: `${PLATFORM_NAME} - Atelier demandé pour le ${dateStr}`,
           htmlContent: getInterventionProposedEmailHtml(juniorName, dateStr, locationStr, `${getBaseUrl(req)}/relations/${relation.id}`),
         }).catch(console.error);
       }
@@ -2475,7 +2479,8 @@ export async function registerRoutes(
   app.get("/api/admin/reports", requireAdmin, async (_req, res) => {
     try {
       const reports = await storage.getReports();
-      res.json(reports);
+      // The users come straight from the database: never send their password hash.
+      res.json(reports.map((r) => ({ ...r, reporter: sanitizeUser(r.reporter), target: r.target ? sanitizeUser(r.target) : null })));
     } catch (err) {
       console.error("[ADMIN_REPORTS] Error:", err);
       res.status(500).json({ message: "Erreur" });
@@ -2885,8 +2890,8 @@ export async function registerRoutes(
       await storage.createNotification({
         user: { connect: { id: relation.juniorId } },
         type: "INTERVENTION_PROPOSED",
-        title: "Nouvelle rencontre proposée",
-        message: `${senderName} propose une rencontre le ${fmtDayNumeric(new Date(parsed.data.scheduledDate))} à ${fmtTime(new Date(parsed.data.scheduledDate))}.`,
+        title: "Atelier demandé",
+        message: `${senderName} demande un atelier le ${fmtDayNumeric(new Date(parsed.data.scheduledDate))} à ${fmtTime(new Date(parsed.data.scheduledDate))}.`,
         link: null,
       });
       sendSSEEvent(relation.juniorId, "invalidate", { queryKey: ["/api/relations"] });
@@ -3107,6 +3112,66 @@ export async function registerRoutes(
     } catch (err) {
       console.error("[PAYMENT_WEBHOOK] Erreur passagère, Stripe va réessayer:", err);
       res.status(500).send();
+    }
+  });
+
+  // Has this user already sent a deletion request that nobody handled yet?
+  app.get("/api/account/deletion-request", requireAuth, async (req, res) => {
+    try {
+      const open = await storage.findOpenReportByReason(req.user!.id, ACCOUNT_DELETION_REASON);
+      res.json({ pending: !!open });
+    } catch (err) {
+      console.error("[ACCOUNT_DELETION] Error:", err);
+      res.status(500).json({ message: "Erreur" });
+    }
+  });
+
+  // A user asks the team to delete their account. Nothing is deleted here: the
+  // request lands in the admin's "Signalements" tab (and by e-mail) so a person
+  // can check it and act. Unused credits are lost, hence the explicit confirmation.
+  app.post("/api/account/deletion-request", requireAuth, async (req, res) => {
+    try {
+      const parsed = accountDeletionRequestSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: "Confirmation requise", errors: parsed.error.flatten().fieldErrors });
+      }
+      const user = req.user as any;
+      if (user.role === "ADMIN") {
+        return res.status(403).json({ message: "Un compte administrateur ne se supprime pas par cette demande." });
+      }
+
+      // Credits belong to the senior (an aidant's request does not touch them).
+      const credits = user.role === "SENIOR" ? await storage.getCreditBalance(user.id) : null;
+      const creditsLine = credits !== null ? `Ateliers non utilisés : ${Math.max(credits, 0)}.` : "";
+      const userName = `${user.firstName} ${user.lastName}`;
+      // A second click (or a second tab) must not pile up requests.
+      const { created } = await storage.createReportOnce({
+        reporterId: user.id,
+        reason: ACCOUNT_DELETION_REASON,
+        message: `[Demande de suppression de compte] ${userName} (${user.email}, ${user.role}). ${creditsLine}`.trim(),
+      });
+      if (!created) {
+        return res.json({ alreadyRequested: true, message: "Votre demande a déjà été envoyée à l'équipe." });
+      }
+
+      const adminUrl = `${getPublicBaseUrl()}/admin`;
+      for (const admin of await storage.getAdmins()) {
+        sendEmail({
+          to: admin.email,
+          subject: `Demande de suppression de compte — ${PLATFORM_NAME}`,
+          htmlContent: getNewAdminNotificationEmailHtml(
+            admin.firstName,
+            userName,
+            `demande la suppression de son compte (${user.email}, ${user.role}). ${creditsLine}`.trim(),
+            adminUrl,
+          ),
+        }).catch((err) => console.error("[ACCOUNT_DELETION] Error sending to admin:", err));
+      }
+
+      res.status(201).json({ message: `Votre demande a été envoyée à l'équipe ${PLATFORM_NAME}.` });
+    } catch (err) {
+      console.error("[ACCOUNT_DELETION] Error:", err);
+      res.status(500).json({ message: "Erreur lors de l'envoi de la demande" });
     }
   });
 
