@@ -123,6 +123,11 @@ export interface IStorage {
   activatePendingUser(userId: string, token: string): Promise<boolean>;
   createUser(data: Prisma.UserCreateInput): Promise<User>;
   updateUser(id: string, data: Prisma.UserUpdateInput): Promise<User>;
+  /** Successful login: stamps lastLoginAt and cancels any inactivity warning. */
+  recordLogin(userId: string): Promise<void>;
+  /** ACTIVE non-admin accounts whose last activity is on or before `cutoff`. */
+  getInactiveUsers(cutoff: Date): Promise<User[]>;
+  markInactivityWarned(userId: string, at: Date): Promise<void>;
 
   getCategories(): Promise<Category[]>;
   createCategory(data: Prisma.CategoryCreateInput): Promise<Category>;
@@ -326,6 +331,30 @@ class DatabaseStorage implements IStorage {
 
   async getUserByEmail(email: string): Promise<User | null> {
     return prisma.user.findUnique({ where: { email } });
+  }
+
+  async recordLogin(userId: string): Promise<void> {
+    await prisma.user.update({
+      where: { id: userId },
+      data: { lastLoginAt: new Date(), inactivityWarnedAt: null },
+    });
+  }
+
+  // Reference date = COALESCE(lastLoginAt, createdAt). Admins are never
+  // concerned, nor accounts that are not ACTIVE (pending, suspended, banned).
+  async getInactiveUsers(cutoff: Date): Promise<User[]> {
+    return prisma.user.findMany({
+      where: {
+        status: "ACTIVE",
+        role: { not: "ADMIN" },
+        OR: [{ lastLoginAt: { lte: cutoff } }, { lastLoginAt: null, createdAt: { lte: cutoff } }],
+      },
+      orderBy: { createdAt: "asc" },
+    });
+  }
+
+  async markInactivityWarned(userId: string, at: Date): Promise<void> {
+    await prisma.user.update({ where: { id: userId }, data: { inactivityWarnedAt: at } });
   }
 
   async getReferentsBySeniorId(seniorId: string): Promise<User[]> {

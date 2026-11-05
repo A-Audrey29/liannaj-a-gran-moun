@@ -3,6 +3,40 @@
 Journal des choix d'architecture et de leurs raisons. Une entrée par décision,
 la plus récente en haut.
 
+## 2026-11-05 — Comptes inactifs : avertissement automatique, suppression humaine (RGPD)
+
+**Besoin.** Conservation des données limitée : un compte sans connexion depuis
+2 ans doit être repéré, son titulaire prévenu, et l'admin informé.
+
+**Décision.**
+- `User.lastLoginAt` et `User.inactivityWarnedAt` (migration
+  `20261105120000_add_user_inactivity_tracking`, additive, `down.sql` fourni,
+  pas de backfill). Inactivité = `COALESCE(lastLoginAt, createdAt)`. Posé à la
+  connexion réussie (`LocalStrategy`), qui efface aussi l'avertissement.
+- Seuils dans un seul fichier : `shared/inactivity.ts` (2 ans, 30 jours de
+  délai de grâce).
+- Job `server/lib/inactivity.ts` : e-mail d'avertissement unique (idempotent via
+  `inactivityWarnedAt`), verrou consultatif Postgres, un échec d'e-mail n'arrête
+  pas la passe et ne marque pas le compte (retenté le lendemain). Exclut les
+  ADMIN et tout compte non `ACTIVE` (en attente, suspendu, banni).
+- **La suppression n'est jamais automatique** (règle projet). Après avertissement
+  + 30 jours le compte apparaît « Délai dépassé — à supprimer » dans l'onglet
+  admin Inactivité ; un humain supprime via l'onglet Utilisateurs.
+- Lien de l'e-mail : `getBaseUrl()` de `server/env.ts` (BASE_URL), jamais
+  `X-Forwarded-Host` (pas de requête dans un job, et cet en-tête est falsifiable).
+
+**Ordonnancement : `setInterval` dans le processus** (1re passe 1 min après le
+démarrage, puis toutes les 24 h, `unref`), comme les autres relances. Alternative
+écartée : cron Render / dépendance de planification, plus fiable mais un service
+de plus à configurer pour un job quotidien et idempotent. Limite : si l'instance
+dort (offre gratuite Render), la passe est retardée jusqu'au réveil, sans perte.
+Désactivable avec `INACTIVITY_JOB_ENABLED=false` ; jamais lancé en test.
+
+**Limites.** Un utilisateur qui reste connecté par cookie (7 jours max) sans se
+reconnecter est comparé à sa dernière connexion, pas à son dernier usage : sans
+conséquence à l'échelle de 2 ans. Les comptes jamais validés
+(`PENDING_VALIDATION`) ne sont pas couverts par ce mécanisme.
+
 ## 2026-10-20 — Un atelier dure 60 minutes par défaut, « Demander un atelier »
 
 **Décision.** Sans durée choisie, un atelier dure **60 minutes** (avant : 120) :

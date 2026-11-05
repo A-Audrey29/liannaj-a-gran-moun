@@ -10,6 +10,7 @@ import rateLimit from "express-rate-limit";
 import { fileTypeFromBuffer } from "file-type";
 import sharp from "sharp";
 import { requireAuth, requireAdmin } from "./auth";
+import { checkInactiveAccounts, listInactiveAccounts } from "./lib/inactivity";
 import { pool } from "./db";
 import { storage } from "./storage";
 import { sendEmail } from "./lib/email";
@@ -1956,6 +1957,27 @@ export async function registerRoutes(
       res.json(users.map(sanitizeUser));
     } catch (err) {
       console.error("[ADMIN_USERS] Error:", err);
+      res.status(500).json({ message: "Erreur" });
+    }
+  });
+
+  // Comptes sans connexion depuis 2 ans (RGPD). Lecture seule : la suppression
+  // reste un geste humain (DELETE /api/admin/users/:id), jamais automatique.
+  app.get("/api/admin/inactive-accounts", requireAdmin, async (_req, res) => {
+    try {
+      res.json(await listInactiveAccounts());
+    } catch (err) {
+      console.error("[INACTIVITY] Error:", err);
+      res.status(500).json({ message: "Erreur" });
+    }
+  });
+
+  // Lance la passe d'avertissement maintenant (le job tourne aussi seul, 1x/jour).
+  app.post("/api/admin/inactive-accounts/run", requireAdmin, async (_req, res) => {
+    try {
+      res.json(await checkInactiveAccounts());
+    } catch (err) {
+      console.error("[INACTIVITY] Error:", err);
       res.status(500).json({ message: "Erreur" });
     }
   });

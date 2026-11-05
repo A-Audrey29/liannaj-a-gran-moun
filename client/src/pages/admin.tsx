@@ -80,6 +80,8 @@ import { creditOwnerId, type CreditBalanceResponse } from "@shared/credits";
 import { CREDIT_OFFERS } from "@shared/credit-offers";
 import MessagerieAdminTab from "@/components/admin-messages-tab";
 import SatisfactionTab from "@/components/admin-satisfaction-tab";
+import InactivityTab, { INACTIVE_ACCOUNTS_KEY } from "@/components/admin-inactivity-tab";
+import type { InactiveAccount } from "@shared/inactivity";
 import { fmtTime, fmtDayLongMonthYear, gpParts } from "@/lib/availability-format";
 
 type SafeUser = Omit<User, "password" | "validationToken" | "validationExpiry">;
@@ -97,6 +99,7 @@ const ADMIN_TABS = [
   { id: "paiements", label: "Paiements", icon: CreditCard },
   { id: "signalements", label: "Signalements", icon: Flag },
   { id: "satisfaction", label: "Satisfaction", icon: ThumbsUp },
+  { id: "inactivite", label: "Inactivité", icon: Clock },
   { id: "notifications", label: "Notifications", icon: Bell },
   { id: "mon-compte", label: "Mon compte", icon: UserCog },
 ] as const;
@@ -2136,6 +2139,8 @@ export default function Admin() {
     refetchOnMount: "always",
     refetchOnWindowFocus: true,
   });
+  const { data: inactiveAccounts = [] } = useQuery<InactiveAccount[]>({ queryKey: [INACTIVE_ACCOUNTS_KEY] });
+  const toDeleteCount = inactiveAccounts.filter((a) => a.status === "TO_DELETE").length;
   const pendingUsers = users.filter((u) => u.status === "PENDING_VALIDATION").length;
   const pendingRelations = allRelations.filter((r) => r.status === "PENDING").length;
 
@@ -2144,6 +2149,7 @@ export default function Admin() {
     if (tabId === "utilisateurs") return pendingUsers;
     if (tabId === "signalements") return reportCount?.count ?? 0;
     if (tabId === "relations") return pendingRelations;
+    if (tabId === "inactivite") return toDeleteCount;
     return 0;
   }
 
@@ -2187,6 +2193,7 @@ export default function Admin() {
       {activeTab === "paiements" && <PaiementsTab />}
       {activeTab === "signalements" && <SignalementsTab />}
       {activeTab === "satisfaction" && <SatisfactionTab />}
+      {activeTab === "inactivite" && <InactivityTab roleLabel={roleLabel} />}
       {activeTab === "notifications" && <NotificationsAdminTab />}
       {activeTab === "mon-compte" && <MonCompteTab />}
     </div>
