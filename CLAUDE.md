@@ -137,7 +137,8 @@ npm run db:push    # prisma db push — NE PAS utiliser sur la base Neon avec do
   automatique (`server/lib/inactivity.ts`), puis 30 jours plus tard le compte
   est « à supprimer » dans l'onglet admin Inactivité. **Jamais de suppression
   automatique.** Seuils uniquement dans `shared/inactivity.ts` ; inactivité =
-  `COALESCE(lastLoginAt, createdAt)` ; admins exclus. Détail dans
+  `COALESCE(lastLoginAt, createdAt)`, prise sur tout le **foyer** (sénior +
+  ses aidants : la connexion de l'un garde les autres) ; admins exclus. Détail dans
   `docs/decisions.md`.
 
 ## Skills — maintenir CLAUDE.md et la mémoire projet à jour

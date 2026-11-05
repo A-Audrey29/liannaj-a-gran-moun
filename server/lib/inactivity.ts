@@ -10,7 +10,6 @@ import {
   graceEndsAt,
   inactivityCutoff,
   inactivityStatus,
-  lastActivityDate,
   type InactiveAccount,
   type InactivityStatus,
 } from "../../shared/inactivity";
@@ -76,7 +75,8 @@ export async function checkInactiveAccounts(now: Date = new Date()): Promise<Ina
             user.firstName || user.email,
             loginUrl,
             INACTIVITY_THRESHOLD_YEARS,
-            INACTIVITY_GRACE_DAYS
+            INACTIVITY_GRACE_DAYS,
+            user.household.map((m) => `${m.firstName} ${m.lastName}`.trim())
           ),
         });
         // sendEmail returns null when no e-mail provider is configured: nothing
@@ -119,7 +119,8 @@ export async function listInactiveAccounts(now: Date = new Date()): Promise<Inac
       lastName: u.lastName,
       role: u.role,
       profilePhoto: u.profilePhoto,
-      lastActivityAt: lastActivityDate(u).toISOString(),
+      lastActivityAt: u.lastActivityAt.toISOString(),
+      activityVia: u.activityVia,
       warnedAt: u.inactivityWarnedAt?.toISOString() ?? null,
       graceEndsAt: graceEndsAt(u.inactivityWarnedAt)?.toISOString() ?? null,
       status: inactivityStatus(u.inactivityWarnedAt, now),

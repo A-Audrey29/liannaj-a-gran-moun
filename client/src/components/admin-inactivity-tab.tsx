@@ -74,7 +74,8 @@ export default function InactivityTab({ roleLabel }: { roleLabel: (role: string)
       </div>
 
       <p className="text-sm text-muted-foreground">
-        Comptes sans connexion depuis plus de {INACTIVITY_THRESHOLD_YEARS} ans (administrateurs exclus). Un e-mail
+        Comptes sans connexion depuis plus de {INACTIVITY_THRESHOLD_YEARS} ans (administrateurs exclus). Un sénior
+        et ses aidants comptent ensemble : la connexion de l'un garde tous les comptes actifs. Un e-mail
         d'avertissement part automatiquement une fois ; sans connexion dans les {INACTIVITY_GRACE_DAYS} jours, le compte
         passe en « à supprimer ». Rien n'est supprimé automatiquement : la suppression se fait dans l'onglet
         Utilisateurs.
@@ -97,6 +98,9 @@ export default function InactivityTab({ roleLabel }: { roleLabel: (role: string)
                   <p className="text-sm text-muted-foreground">{roleLabel(a.role)}</p>
                   <p className="text-sm text-muted-foreground">
                     Dernière activité : {fmtDate(a.lastActivityAt)}
+                    {a.activityVia && (
+                      <> (via {roleLabel(a.activityVia.role).toLowerCase()} {a.activityVia.firstName} {a.activityVia.lastName})</>
+                    )}
                     {a.warnedAt && <> · Averti le {fmtDate(a.warnedAt)}</>}
                     {a.graceEndsAt && a.status === "WARNED" && <> · Délai jusqu'au {fmtDate(a.graceEndsAt)}</>}
                   </p>

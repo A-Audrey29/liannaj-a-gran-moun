@@ -22,6 +22,20 @@ la plus récente en haut.
 - **La suppression n'est jamais automatique** (règle projet). Après avertissement
   + 30 jours le compte apparaît « Délai dépassé — à supprimer » dans l'onglet
   admin Inactivité ; un humain supprime via l'onglet Utilisateurs.
+- **Foyer sénior + aidants.** L'aidant (`REFERENT_SENIOR`, lié par
+  `linkedSeniorId`, plusieurs possibles) utilise souvent la plateforme à la
+  place du sénior. Date d'activité retenue = la plus récente du foyer
+  (`householdActivity`, `shared/inactivity.ts`) : une connexion de l'un garde
+  tous les comptes actifs. Chaque compte inactif reçoit son propre e-mail, qui
+  nomme les autres membres (« il suffit que l'un de vous se connecte »).
+  L'onglet admin affiche « (via aidant X) » quand la date vient d'un autre
+  membre. Une connexion efface l'avertissement de **tout** le foyer, sinon un
+  sénior averti garderait un `inactivityWarnedAt` périmé et passerait direct
+  « à supprimer » au cycle suivant. Écarté : recopier `lastLoginAt` de l'aidant
+  sur le sénior (plus court, mais fausse la donnée : on ne saurait plus qui
+  s'est connecté).
+- Hébergement prévu : Render **payant** (pas de mise en veille), donc la passe
+  quotidienne in-process est fiable.
 - Lien de l'e-mail : `getBaseUrl()` de `server/env.ts` (BASE_URL), jamais
   `X-Forwarded-Host` (pas de requête dans un job, et cet en-tête est falsifiable).
 

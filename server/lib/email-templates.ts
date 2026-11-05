@@ -481,8 +481,17 @@ export function getInactivityWarningEmailHtml(
   userName: string,
   loginUrl: string,
   years: number,
-  graceDays: number
+  graceDays: number,
+  /** Other members of the household (senior / aidants): one login keeps all. */
+  householdNames: string[] = []
 ): string {
+  const household = householdNames.length
+    ? `
+    <p style="margin:0 0 18px;color:#1f1f1f;font-size:16px;line-height:1.6;">
+      Votre compte est li&eacute; &agrave; celui de ${householdNames.map((n) => `<strong>${escapeHtml(n)}</strong>`).join(", ")} :
+      il suffit que l&rsquo;un de vous se connecte pour garder les comptes.
+    </p>`
+    : "";
   const body = `
     <p style="margin:0 0 18px;color:#1f1f1f;font-size:16px;line-height:1.6;">Bonjour ${escapeHtml(userName)},</p>
     <p style="margin:0 0 18px;color:#1f1f1f;font-size:16px;line-height:1.6;">
@@ -491,7 +500,7 @@ export function getInactivityWarningEmailHtml(
     <p style="margin:0 0 18px;color:#1f1f1f;font-size:16px;line-height:1.6;">
       Si vous souhaitez le garder, il vous suffit de vous <strong>connecter dans les ${escapeHtml(graceDays)} jours</strong>.
       Sinon, l&rsquo;&eacute;quipe pourra supprimer votre compte et vos donn&eacute;es personnelles.
-    </p>
+    </p>${household}
     <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 auto 28px;">
       <tr>
         <td align="center" style="border-radius:6px;background:linear-gradient(135deg,#e91e8c,#7c3aed);">

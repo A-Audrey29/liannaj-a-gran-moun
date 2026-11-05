@@ -25,6 +25,12 @@ export interface InactiveAccount {
   role: string;
   profilePhoto: string | null;
   lastActivityAt: string;
+  /**
+   * Set when the most recent activity of the household is another member's
+   * login (the senior's aidant, or the senior of an aidant account), so the
+   * admin sees where the date comes from.
+   */
+  activityVia: HouseholdMember | null;
   warnedAt: string | null;
   graceEndsAt: string | null;
   status: InactivityStatus;
@@ -33,6 +39,34 @@ export interface InactiveAccount {
 /** Date de référence de l'activité : dernière connexion, sinon création du compte. */
 export function lastActivityDate(user: { lastLoginAt: Date | null; createdAt: Date }): Date {
   return user.lastLoginAt ?? user.createdAt;
+}
+
+export interface HouseholdMember {
+  firstName: string;
+  lastName: string;
+  role: string;
+}
+
+/**
+ * Un sénior et ses aidants forment un « foyer » : il suffit que l'un d'eux se
+ * connecte pour que tous les comptes du foyer restent actifs (l'aidant utilise
+ * souvent la plateforme à la place du sénior). Renvoie la date la plus récente
+ * du foyer et, si elle vient d'un autre membre, ce membre.
+ */
+export function householdActivity<M extends HouseholdMember & { lastLoginAt: Date | null; createdAt: Date }>(
+  self: { lastLoginAt: Date | null; createdAt: Date },
+  others: M[]
+): { at: Date; via: HouseholdMember | null } {
+  let at = lastActivityDate(self);
+  let via: HouseholdMember | null = null;
+  for (const m of others) {
+    const d = lastActivityDate(m);
+    if (d.getTime() > at.getTime()) {
+      at = d;
+      via = { firstName: m.firstName, lastName: m.lastName, role: m.role };
+    }
+  }
+  return { at, via };
 }
 
 /** Date limite : toute activité antérieure à celle-ci est de l'inactivité. */

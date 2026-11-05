@@ -115,6 +115,82 @@ describe("job d'avertissement", () => {
   });
 });
 
+describe("foyer sénior + aidant", () => {
+  it("la connexion récente de l'aidant protège le sénior (et inversement)", async () => {
+    const senior = await createUser("SENIOR", { createdAt: TROIS_ANS() });
+    await createUser("REFERENT_SENIOR", { createdAt: TROIS_ANS(), lastLoginAt: ilYaJours(10), linkedSeniorId: senior.id });
+    const senior2 = await createUser("SENIOR", { createdAt: TROIS_ANS(), lastLoginAt: ilYaJours(10) });
+    await createUser("REFERENT_SENIOR", { createdAt: TROIS_ANS(), linkedSeniorId: senior2.id });
+
+    const result = await checkInactiveAccounts();
+
+    expect(result.warned).toBe(0);
+    expect(sendEmail).not.toHaveBeenCalled();
+    expect(await listInactiveAccounts()).toEqual([]);
+  });
+
+  it("un deuxième aidant actif protège aussi l'autre aidant", async () => {
+    const senior = await createUser("SENIOR", { createdAt: TROIS_ANS() });
+    await createUser("REFERENT_SENIOR", { createdAt: TROIS_ANS(), linkedSeniorId: senior.id });
+    await createUser("REFERENT_SENIOR", { createdAt: TROIS_ANS(), lastLoginAt: ilYaJours(10), linkedSeniorId: senior.id });
+
+    expect(await listInactiveAccounts()).toEqual([]);
+  });
+
+  it("foyer entièrement inactif : chaque compte est averti, l'e-mail nomme l'autre membre", async () => {
+    const senior = await createUser("SENIOR", { createdAt: TROIS_ANS(), firstName: "René", lastName: "Moreau" });
+    const aidant = await createUser("REFERENT_SENIOR", {
+      createdAt: TROIS_ANS(),
+      lastLoginAt: ilYaJours(2 * 365 + 30),
+      firstName: "André",
+      lastName: "Moreau",
+      linkedSeniorId: senior.id,
+    });
+
+    const result = await checkInactiveAccounts();
+
+    expect(result.warned).toBe(2);
+    const mails = vi.mocked(sendEmail).mock.calls.map((c) => c[0]);
+    expect(mails.find((m) => m.to === senior.email)?.htmlContent).toContain("André Moreau");
+    expect(mails.find((m) => m.to === aidant.email)?.htmlContent).toContain("René Moreau");
+
+    // L'admin voit d'où vient la date du sénior.
+    const liste = await listInactiveAccounts();
+    const ligneSenior = liste.find((a) => a.id === senior.id)!;
+    expect(ligneSenior.activityVia).toEqual({ firstName: "André", lastName: "Moreau", role: "REFERENT_SENIOR" });
+    expect(liste.find((a) => a.id === aidant.id)!.activityVia).toBeNull();
+  });
+
+  it("un sénior sans aidant : e-mail sans mention de foyer", async () => {
+    const seul = await createUser("SENIOR", { createdAt: TROIS_ANS() });
+    await checkInactiveAccounts();
+    const html = vi.mocked(sendEmail).mock.calls[0][0].htmlContent;
+    expect(vi.mocked(sendEmail).mock.calls[0][0].to).toBe(seul.email);
+    expect(html).not.toContain("il suffit que l&rsquo;un de vous");
+  });
+
+  it("la connexion de l'aidant efface l'avertissement de tout le foyer", async () => {
+    const senior = await createUser("SENIOR", { createdAt: TROIS_ANS(), inactivityWarnedAt: ilYaJours(40) });
+    const aidant = await createUser("REFERENT_SENIOR", {
+      createdAt: TROIS_ANS(),
+      inactivityWarnedAt: ilYaJours(40),
+      linkedSeniorId: senior.id,
+    });
+    const autre = await createUser("SENIOR", { createdAt: TROIS_ANS(), inactivityWarnedAt: ilYaJours(40) });
+
+    await loginAs(aidant);
+
+    const [s, a, o] = await Promise.all(
+      [senior, aidant, autre].map((u) => prisma.user.findUnique({ where: { id: u.id } }))
+    );
+    expect(s?.inactivityWarnedAt).toBeNull();
+    expect(a?.inactivityWarnedAt).toBeNull();
+    expect(a?.lastLoginAt).not.toBeNull();
+    expect(s?.lastLoginAt).toBeNull(); // la date du sénior n'est pas falsifiée
+    expect(o?.inactivityWarnedAt).not.toBeNull(); // un autre foyer n'est pas touché
+  });
+});
+
 describe("statut", () => {
   it("TO_WARN / WARNED / TO_DELETE selon la date d'avertissement", () => {
     const now = new Date("2026-11-05T12:00:00Z");
