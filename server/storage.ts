@@ -5,7 +5,7 @@ import { Prisma } from "../generated/prisma/client.ts";
 import { COMPLETED_STATUSES } from "../shared/schema";
 import { FREE_FIRST_MEETING_MAX_MINUTES } from "../shared/credits";
 import { NPS_COOLDOWN_DAYS, NPS_SEGMENTS, type NpsSegment } from "../shared/nps";
-import { householdActivity, type HouseholdMember } from "../shared/inactivity";
+import { effectiveWarnedAt, householdActivity, type HouseholdMember } from "../shared/inactivity";
 
 /** An inactive account with its household activity already resolved. */
 export type InactiveUser = User & {
@@ -370,7 +370,10 @@ class DatabaseStorage implements IStorage {
   // recent one of the household. Admins are never concerned, nor accounts
   // that are not ACTIVE (pending, suspended, banned).
   async getInactiveUsers(cutoff: Date): Promise<InactiveUser[]> {
-    const member = { id: true, firstName: true, lastName: true, role: true, lastLoginAt: true, createdAt: true } as const;
+    const member = { id: true, firstName: true, lastName: true, role: true, status: true, lastLoginAt: true, createdAt: true } as const;
+    // Only ACTIVE members count (and are named in the e-mail): a suspended or
+    // never-validated aidant must not keep the senior's account alive.
+    const activeMembers = { where: { status: "ACTIVE" }, select: member } as const;
     // The account's own date being old is necessary (the household date is
     // never older), so this query is a superset filtered below.
     const candidates = await prisma.user.findMany({
@@ -380,8 +383,8 @@ class DatabaseStorage implements IStorage {
         OR: [{ lastLoginAt: { lte: cutoff } }, { lastLoginAt: null, createdAt: { lte: cutoff } }],
       },
       include: {
-        referentAccounts: { select: member },
-        linkedSenior: { select: { ...member, referentAccounts: { select: member } } },
+        referentAccounts: activeMembers,
+        linkedSenior: { select: { ...member, referentAccounts: activeMembers } },
       },
       orderBy: { createdAt: "asc" },
     });
@@ -389,11 +392,22 @@ class DatabaseStorage implements IStorage {
     const result: InactiveUser[] = [];
     for (const { referentAccounts, linkedSenior, ...user } of candidates) {
       const others = linkedSenior
-        ? [linkedSenior, ...linkedSenior.referentAccounts.filter((a) => a.id !== user.id)]
+        ? [
+            ...(linkedSenior.status === "ACTIVE" ? [linkedSenior] : []),
+            ...linkedSenior.referentAccounts.filter((a) => a.id !== user.id),
+          ]
         : referentAccounts;
       const { at, via } = householdActivity(user, others);
       if (at.getTime() > cutoff.getTime()) continue;
-      result.push({ ...user, lastActivityAt: at, activityVia: via, household: others.map(({ firstName, lastName, role }) => ({ firstName, lastName, role })) });
+      result.push({
+        ...user,
+        // A stale warning (activity after it was sent) is ignored here, so the
+        // job sends a fresh one and the status never jumps to "à supprimer".
+        inactivityWarnedAt: effectiveWarnedAt(user.inactivityWarnedAt, at),
+        lastActivityAt: at,
+        activityVia: via,
+        household: others.map(({ firstName, lastName, role }) => ({ firstName, lastName, role })),
+      });
     }
     return result;
   }

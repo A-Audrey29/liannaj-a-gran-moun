@@ -286,6 +286,15 @@ const resetPasswordLimiter = rateLimit({
   legacyHeaders: false,
 });
 
+// Chaque passe peut envoyer jusqu'à 100 e-mails : quelques clics suffisent.
+const inactivityRunLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: isDev ? 1000 : 5,
+  message: { message: "Vérification déjà lancée plusieurs fois. Réessayez dans 15 minutes." },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
 const checkoutLimiter = rateLimit({
   windowMs: 10 * 60 * 1000,
   limit: isDev ? 1000 : 10,
@@ -1973,7 +1982,7 @@ export async function registerRoutes(
   });
 
   // Lance la passe d'avertissement maintenant (le job tourne aussi seul, 1x/jour).
-  app.post("/api/admin/inactive-accounts/run", requireAdmin, async (_req, res) => {
+  app.post("/api/admin/inactive-accounts/run", requireAdmin, inactivityRunLimiter, async (_req, res) => {
     try {
       res.json(await checkInactiveAccounts());
     } catch (err) {

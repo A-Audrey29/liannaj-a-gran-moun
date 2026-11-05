@@ -34,6 +34,13 @@ la plus récente en haut.
   « à supprimer » au cycle suivant. Écarté : recopier `lastLoginAt` de l'aidant
   sur le sénior (plus court, mais fausse la donnée : on ne saurait plus qui
   s'est connecté).
+- **Avertissement périmé** (revue du 2026-11-05) : un avertissement ne compte
+  que s'il a été envoyé alors que le foyer était inactif depuis 2 ans
+  (`effectiveWarnedAt`). Sinon (connexion pendant l'envoi, aidant créé après,
+  échec d'enregistrement de connexion), il est ignoré : nouvel e-mail, jamais
+  de passage direct « à supprimer ». Seuls les membres `ACTIVE` du foyer comptent.
+- Quota e-mail : 100 envois max par passe, passe interrompue sur 401/403/429
+  du prestataire ; bouton admin limité à 5 lancements / 15 min.
 - Hébergement prévu : Render **payant** (pas de mise en veille), donc la passe
   quotidienne in-process est fiable.
 - Lien de l'e-mail : `getBaseUrl()` de `server/env.ts` (BASE_URL), jamais

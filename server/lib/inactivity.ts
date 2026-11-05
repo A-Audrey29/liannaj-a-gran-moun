@@ -21,6 +21,14 @@ import {
 const INACTIVITY_LOCK_ID = 4_812_360;
 
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
+/**
+ * Plafond d'e-mails par passe : le quota du prestataire (ex. 300/jour en
+ * gratuit chez Brevo) sert aussi aux mots de passe oubliés et aux relances.
+ * Le reste part les jours suivants (le job est idempotent).
+ */
+const MAX_EMAILS_PER_RUN = 100;
+/** Quota atteint ou clé refusée : inutile d'insister pour les comptes suivants. */
+const PROVIDER_BLOCKED = /\((401|403|429)\)/;
 /** Laisse le serveur finir de démarrer avant la première passe. */
 const FIRST_RUN_DELAY_MS = 60 * 1000;
 
@@ -61,9 +69,9 @@ export async function checkInactiveAccounts(now: Date = new Date()): Promise<Ina
       return result;
     }
 
-    const candidates = (await storage.getInactiveUsers(inactivityCutoff(now))).filter(
-      (u) => !u.inactivityWarnedAt
-    );
+    const candidates = (await storage.getInactiveUsers(inactivityCutoff(now)))
+      .filter((u) => !u.inactivityWarnedAt)
+      .slice(0, MAX_EMAILS_PER_RUN);
     const loginUrl = `${getBaseUrl()}/login`;
 
     for (const user of candidates) {
@@ -90,6 +98,10 @@ export async function checkInactiveAccounts(now: Date = new Date()): Promise<Ina
       } catch (err) {
         result.failed++;
         console.error(`[INACTIVITY] Échec de l'avertissement pour l'utilisateur ${user.id} (retenté à la prochaine passe):`, err);
+        if (err instanceof Error && PROVIDER_BLOCKED.test(err.message)) {
+          console.error("[INACTIVITY] Prestataire d'e-mail bloqué (quota ou clé) : passe interrompue, reprise à la prochaine.");
+          break;
+        }
       }
     }
 

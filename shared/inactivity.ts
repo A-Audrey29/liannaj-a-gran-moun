@@ -76,6 +76,19 @@ export function inactivityCutoff(now: Date = new Date()): Date {
   return d;
 }
 
+/**
+ * Un avertissement ne compte que s'il a été envoyé alors que le foyer était
+ * déjà inactif depuis 2 ans. Toute activité plus récente (connexion pendant
+ * l'envoi, aidant créé ou reconnecté, échec d'enregistrement de connexion
+ * suivi d'une autre connexion) le rend caduc : sans cette règle, un vieil
+ * avertissement resté en base ferait passer le compte directement « à
+ * supprimer » au cycle suivant, sans nouvel e-mail.
+ */
+export function effectiveWarnedAt(warnedAt: Date | null, lastActivityAt: Date): Date | null {
+  if (!warnedAt) return null;
+  return lastActivityAt.getTime() <= inactivityCutoff(warnedAt).getTime() ? warnedAt : null;
+}
+
 /** Fin du délai de grâce, ou null si l'avertissement n'est pas parti. */
 export function graceEndsAt(warnedAt: Date | null): Date | null {
   return warnedAt ? new Date(warnedAt.getTime() + INACTIVITY_GRACE_DAYS * DAY_MS) : null;

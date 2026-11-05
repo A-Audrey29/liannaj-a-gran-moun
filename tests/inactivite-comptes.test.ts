@@ -191,6 +191,53 @@ describe("foyer sénior + aidant", () => {
   });
 });
 
+describe("robustesse (revue 2026-11-05)", () => {
+  it("un avertissement périmé (activité après l'envoi) est ignoré : nouvel e-mail, jamais « à supprimer » direct", async () => {
+    // Averti il y a 2 ans + 40 j, puis reconnecté 10 j plus tard (ex. connexion
+    // pendant l'envoi, ou aidant créé après) ; inactif à nouveau aujourd'hui.
+    const u = await createUser("SENIOR", {
+      createdAt: ilYaJours(5 * 365),
+      inactivityWarnedAt: ilYaJours(2 * 365 + 40),
+      lastLoginAt: ilYaJours(2 * 365 + 30),
+    });
+
+    const [ligne] = await listInactiveAccounts();
+    expect(ligne.id).toBe(u.id);
+    expect(ligne.status).toBe("TO_WARN");
+
+    const result = await checkInactiveAccounts();
+    expect(result.warned).toBe(1);
+  });
+
+  it("un aidant suspendu ne garde pas le compte du sénior et n'est pas nommé", async () => {
+    const senior = await createUser("SENIOR", { createdAt: TROIS_ANS() });
+    await createUser("REFERENT_SENIOR", {
+      createdAt: ilYaJours(20),
+      lastLoginAt: ilYaJours(10),
+      status: "SUSPENDED",
+      firstName: "Suspendu",
+      linkedSeniorId: senior.id,
+    });
+
+    const result = await checkInactiveAccounts();
+
+    expect(result.warned).toBe(1);
+    const mail = vi.mocked(sendEmail).mock.calls[0][0];
+    expect(mail.to).toBe(senior.email);
+    expect(mail.htmlContent).not.toContain("Suspendu");
+  });
+
+  it("quota du prestataire atteint (429) : la passe s'arrête au lieu d'insister", async () => {
+    for (let i = 0; i < 3; i++) await createUser("SENIOR", { createdAt: TROIS_ANS() });
+    vi.mocked(sendEmail).mockRejectedValue(new Error("Brevo error (429): Too many requests"));
+
+    const result = await checkInactiveAccounts();
+
+    expect(sendEmail).toHaveBeenCalledTimes(1);
+    expect(result).toEqual({ warned: 0, failed: 1, skipped: false });
+  });
+});
+
 describe("statut", () => {
   it("TO_WARN / WARNED / TO_DELETE selon la date d'avertissement", () => {
     const now = new Date("2026-11-05T12:00:00Z");
