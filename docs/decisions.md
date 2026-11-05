@@ -39,6 +39,10 @@ la plus récente en haut.
   (`effectiveWarnedAt`). Sinon (connexion pendant l'envoi, aidant créé après,
   échec d'enregistrement de connexion), il est ignoré : nouvel e-mail, jamais
   de passage direct « à supprimer ». Seuls les membres `ACTIVE` du foyer comptent.
+- Suppression depuis l'onglet Inactivité : `DELETE /api/admin/inactive-accounts/:id`
+  recalcule le statut au moment du clic et répond 409 si le compte n'est plus
+  « à supprimer » (onglet resté ouvert, reconnexion du compte ou de son aidant).
+  La suppression générale (onglet Utilisateurs) reste inchangée.
 - Quota e-mail : 100 envois max par passe, passe interrompue sur 401/403/429
   du prestataire ; bouton admin limité à 5 lancements / 15 min.
 - Hébergement prévu : Render **payant** (pas de mise en veille), donc la passe
@@ -52,6 +56,19 @@ démarrage, puis toutes les 24 h, `unref`), comme les autres relances. Alternati
 de plus à configurer pour un job quotidien et idempotent. Limite : si l'instance
 dort (offre gratuite Render), la passe est retardée jusqu'au réveil, sans perte.
 Désactivable avec `INACTIVITY_JOB_ENABLED=false` ; jamais lancé en test.
+
+**À faire au branchement (pas encore fait au 2026-11-05).**
+- **Render** (service pas encore créé) : mettre dans `DATABASE_URL` l'URL
+  **directe** de Neon, pas celle en `-pooler`. Les verrous consultatifs de
+  session (`pg_try_advisory_lock`, utilisés par ce job et les 3 relances) ne
+  sont pas fiables derrière un pooler en mode transaction : passes sautées ou
+  doublons possibles. Le `.env` local pointe aujourd'hui sur l'URL `-pooler`.
+- **Prestataire e-mail** (Brevo ou autre, pas encore choisi) : un envoi accepté
+  n'est pas un e-mail reçu. Une adresse morte déclenche quand même les 30 jours.
+  Une fois le prestataire choisi, voir avec FEVES s'il faut tenir compte des
+  rebonds (webhook « hard bounce ») avant de marquer un compte averti.
+- Comptes existants : uniquement des comptes de test à ce jour, donc pas de
+  vague d'avertissements au lancement.
 
 **Limites.** Un utilisateur qui reste connecté par cookie (7 jours max) sans se
 reconnecter est comparé à sa dernière connexion, pas à son dernier usage : sans

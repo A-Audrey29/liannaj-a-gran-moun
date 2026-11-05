@@ -303,4 +303,35 @@ describe("routes admin", () => {
     expect(res.body[0].warnedAt).toBeTruthy();
     expect(res.body[0]).not.toHaveProperty("email");
   });
+
+  it("suppression depuis l'onglet : refusée (409) si le compte n'est plus « à supprimer »", async () => {
+    const admin = await createUser("ADMIN");
+    const agent = await loginAs(admin);
+    // Averti il y a 10 j : délai pas écoulé.
+    const averti = await createUser("SENIOR", { createdAt: TROIS_ANS(), inactivityWarnedAt: ilYaJours(10) });
+    // Délai écoulé, mais son aidant s'est reconnecté depuis (onglet resté ouvert).
+    const sauve = await createUser("SENIOR", { createdAt: TROIS_ANS(), inactivityWarnedAt: ilYaJours(40) });
+    await createUser("REFERENT_SENIOR", { createdAt: TROIS_ANS(), lastLoginAt: ilYaJours(1), linkedSeniorId: sauve.id });
+    // Compte actif, jamais concerné.
+    const actif = await createUser("JUNIOR");
+
+    for (const u of [averti, sauve, actif, admin]) {
+      expect((await agent.delete(`/api/admin/inactive-accounts/${u.id}`)).status).toBe(409);
+      expect(await prisma.user.findUnique({ where: { id: u.id } })).not.toBeNull();
+    }
+  });
+
+  it("suppression depuis l'onglet : supprime un compte « à supprimer », refusée aux non-admins", async () => {
+    const admin = await createUser("ADMIN");
+    const cible = await createUser("SENIOR", { createdAt: TROIS_ANS(), inactivityWarnedAt: ilYaJours(40) });
+
+    const senior = await createUser("SENIOR");
+    const intrus = await loginAs(senior);
+    expect((await intrus.delete(`/api/admin/inactive-accounts/${cible.id}`)).status).toBe(403);
+    expect(await prisma.user.findUnique({ where: { id: cible.id } })).not.toBeNull();
+
+    const agent = await loginAs(admin);
+    expect((await agent.delete(`/api/admin/inactive-accounts/${cible.id}`)).status).toBe(200);
+    expect(await prisma.user.findUnique({ where: { id: cible.id } })).toBeNull();
+  });
 });

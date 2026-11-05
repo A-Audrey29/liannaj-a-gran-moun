@@ -1,11 +1,22 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Loader2, PlayCircle } from "lucide-react";
+import { Loader2, PlayCircle, Trash2 } from "lucide-react";
 import { queryClient, apiRequest, apiErrorMessage } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { UserAvatar } from "@/components/user-avatar";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import {
   INACTIVITY_GRACE_DAYS,
   INACTIVITY_THRESHOLD_YEARS,
@@ -53,6 +64,20 @@ export default function InactivityTab({ roleLabel }: { roleLabel: (role: string)
     onError: (err) => toast({ title: "Vérification impossible", description: apiErrorMessage(err, "Une erreur est survenue"), variant: "destructive" }),
   });
 
+  const deleteMut = useMutation({
+    mutationFn: (id: string) => apiRequest("DELETE", `${INACTIVE_ACCOUNTS_KEY}/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [INACTIVE_ACCOUNTS_KEY] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
+      toast({ title: "Compte supprimé" });
+    },
+    onError: (err) => {
+      // 409: the account logged in since the list was loaded — refresh it.
+      queryClient.invalidateQueries({ queryKey: [INACTIVE_ACCOUNTS_KEY] });
+      toast({ title: "Suppression refusée", description: apiErrorMessage(err, "Une erreur est survenue"), variant: "destructive" });
+    },
+  });
+
   if (isLoading) {
     return <div className="flex justify-center py-12"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>;
   }
@@ -77,8 +102,8 @@ export default function InactivityTab({ roleLabel }: { roleLabel: (role: string)
         Comptes sans connexion depuis plus de {INACTIVITY_THRESHOLD_YEARS} ans (administrateurs exclus). Un sénior
         et ses aidants comptent ensemble : la connexion de l'un garde tous les comptes actifs. Un e-mail
         d'avertissement part automatiquement une fois ; sans connexion dans les {INACTIVITY_GRACE_DAYS} jours, le compte
-        passe en « à supprimer ». Rien n'est supprimé automatiquement : la suppression se fait dans l'onglet
-        Utilisateurs.
+        passe en « à supprimer ». Rien n'est supprimé automatiquement : un admin supprime avec le bouton « Supprimer », qui revérifie
+        l'inactivité au moment du clic.
       </p>
 
       {isError && <p className="text-sm text-primary">Impossible de charger la liste.</p>}
@@ -108,6 +133,40 @@ export default function InactivityTab({ roleLabel }: { roleLabel: (role: string)
                 <Badge className={`${STATUS_COLORS[a.status]} text-xs px-2 py-1`} data-testid={`status-inactive-${a.id}`}>
                   {STATUS_LABELS[a.status]}
                 </Badge>
+                {a.status === "TO_DELETE" && (
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button
+                        variant="outline"
+                        className="min-h-[44px] text-red-700 border-red-300 hover:bg-red-50"
+                        disabled={deleteMut.isPending}
+                        data-testid={`button-delete-inactive-${a.id}`}
+                      >
+                        <Trash2 className="w-4 h-4 mr-2" aria-hidden="true" />
+                        Supprimer
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>Supprimer {a.firstName} {a.lastName} ?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          Cette action est irréversible. Toutes les données du compte seront supprimées. Si la
+                          personne s'est reconnectée entre-temps, la suppression sera refusée.
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>Annuler</AlertDialogCancel>
+                        <AlertDialogAction
+                          onClick={() => deleteMut.mutate(a.id)}
+                          className="bg-red-600 hover:bg-red-700"
+                          data-testid={`button-confirm-delete-inactive-${a.id}`}
+                        >
+                          Supprimer
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
+                )}
               </CardContent>
             </Card>
           ))}

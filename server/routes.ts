@@ -405,6 +405,18 @@ async function createInterventionOrConflict(
   );
 }
 
+/** Suppression définitive d'un compte (geste humain d'un admin, jamais automatique). */
+async function deleteUserAccount(user: { id: string; profilePhoto: string | null }): Promise<void> {
+  // La photo en base part avec l'utilisateur (ProfilePhoto est en cascade).
+  // Ce nettoyage ne concerne que les photos d'avant la bascule, encore
+  // présentes sur le disque.
+  if (user.profilePhoto) {
+    const photoPath = path.join(process.cwd(), user.profilePhoto.replace(/^\//, ""));
+    if (fs.existsSync(photoPath)) fs.unlinkSync(photoPath);
+  }
+  await storage.deleteUser(user.id);
+}
+
 export async function registerRoutes(
   httpServer: Server,
   app: Express
@@ -1991,6 +2003,28 @@ export async function registerRoutes(
     }
   });
 
+  // Suppression depuis l'onglet Inactivité : le statut est recalculé à
+  // l'instant de la suppression, car l'onglet a pu rester ouvert longtemps.
+  // Si le compte (ou son foyer) s'est reconnecté entre-temps, on refuse.
+  app.delete("/api/admin/inactive-accounts/:id", requireAdmin, async (req, res) => {
+    try {
+      const id = getParam(req, "id");
+      const current = (await listInactiveAccounts()).find((a) => a.id === id);
+      if (!current || current.status !== "TO_DELETE") {
+        return res.status(409).json({
+          message: "Ce compte n'est plus à supprimer : il (ou son aidant) s'est reconnecté, ou le délai n'est pas écoulé.",
+        });
+      }
+      const user = await storage.getUser(id);
+      if (!user) return res.status(404).json({ message: "Utilisateur non trouvé" });
+      await deleteUserAccount(user);
+      res.json({ message: "Utilisateur supprimé" });
+    } catch (err) {
+      console.error("[INACTIVITY_DELETE] Error:", err);
+      res.status(500).json({ message: "Erreur" });
+    }
+  });
+
   app.patch("/api/admin/users/:id/validate", requireAdmin, async (req, res) => {
     try {
       const user = await storage.getUser(getParam(req, "id"));
@@ -2025,14 +2059,7 @@ export async function registerRoutes(
       const user = await storage.getUser(getParam(req, "id"));
       if (!user) return res.status(404).json({ message: "Utilisateur non trouvé" });
       if (user.role === "ADMIN") return res.status(403).json({ message: "Impossible de supprimer un administrateur" });
-      // La photo en base part avec l'utilisateur (ProfilePhoto est en cascade).
-      // Ce nettoyage ne concerne que les photos d'avant la bascule, encore
-      // présentes sur le disque.
-      if (user.profilePhoto) {
-        const photoPath = path.join(process.cwd(), user.profilePhoto.replace(/^\//, ""));
-        if (fs.existsSync(photoPath)) fs.unlinkSync(photoPath);
-      }
-      await storage.deleteUser(user.id);
+      await deleteUserAccount(user);
       res.json({ message: "Utilisateur supprimé" });
     } catch (err) {
       console.error("[ADMIN_DELETE_USER] Error:", err);
