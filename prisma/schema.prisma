@@ -104,6 +104,12 @@ model User {
   availabilityTemplate       Json?
   availabilityReminderSentAt DateTime?
 
+  // Conservation des donnees (RGPD) : derniere connexion reussie, et date de
+  // l'e-mail « votre compte est inactif ». Inactivite = COALESCE(lastLoginAt,
+  // createdAt). Voir shared/inactivity.ts. Jamais de suppression automatique.
+  lastLoginAt        DateTime?
+  inactivityWarnedAt DateTime?
+
   categories          UserCategory[]
 
   sentMessages        Message[] @relation("SentMessages")

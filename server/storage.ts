@@ -10,6 +10,15 @@ import { Prisma } from "../generated/prisma/client.ts";
 import { COMPLETED_STATUSES } from "../shared/schema";
 import { FREE_FIRST_MEETING_MAX_MINUTES } from "../shared/credits";
 import { NPS_COOLDOWN_DAYS, NPS_SEGMENTS, type NpsSegment } from "../shared/nps";
+import { effectiveWarnedAt, householdActivity, type HouseholdMember } from "../shared/inactivity";
+
+/** An inactive account with its household activity already resolved. */
+export type InactiveUser = User & {
+  lastActivityAt: Date;
+  activityVia: HouseholdMember | null;
+  /** The other members of the household (senior / aidants), for the e-mail. */
+  household: HouseholdMember[];
+};
 
 /**
  * Périmètre d'un historique de rencontres. Construit serveur à partir du rôle
@@ -147,6 +156,17 @@ export interface IStorage {
   refusePendingUser(userId: string, token: string): Promise<boolean>;
   createUser(data: Prisma.UserCreateInput): Promise<User>;
   updateUser(id: string, data: Prisma.UserUpdateInput): Promise<User>;
+  /**
+   * Successful login: stamps lastLoginAt and cancels the inactivity warning of
+   * the whole household (senior + aidants), since one login keeps them all.
+   */
+  recordLogin(userId: string): Promise<void>;
+  /**
+   * ACTIVE non-admin accounts whose household (the account, plus its senior
+   * or its aidants) has no activity after `cutoff`.
+   */
+  getInactiveUsers(cutoff: Date): Promise<InactiveUser[]>;
+  markInactivityWarned(userId: string, at: Date): Promise<void>;
 
   getCategories(): Promise<Category[]>;
   createCategory(data: Prisma.CategoryCreateInput): Promise<Category>;
@@ -365,6 +385,74 @@ class DatabaseStorage implements IStorage {
 
   async getUserByEmail(email: string): Promise<User | null> {
     return prisma.user.findUnique({ where: { email } });
+  }
+
+  async recordLogin(userId: string): Promise<void> {
+    await prisma.$transaction(async (tx) => {
+      const user = await tx.user.update({
+        where: { id: userId },
+        data: { lastLoginAt: new Date(), inactivityWarnedAt: null },
+        select: { linkedSeniorId: true },
+      });
+      // Household root = the senior (an aidant points to it; a senior is its
+      // own root). Clearing the whole household avoids a stale warning that
+      // would make the senior jump straight to "à supprimer" two years later.
+      const rootId = user.linkedSeniorId ?? userId;
+      await tx.user.updateMany({
+        where: { OR: [{ id: rootId }, { linkedSeniorId: rootId }], inactivityWarnedAt: { not: null } },
+        data: { inactivityWarnedAt: null },
+      });
+    });
+  }
+
+  // Reference date = COALESCE(lastLoginAt, createdAt), taken as the most
+  // recent one of the household. Admins are never concerned, nor accounts
+  // that are not ACTIVE (pending, suspended, banned).
+  async getInactiveUsers(cutoff: Date): Promise<InactiveUser[]> {
+    const member = { id: true, firstName: true, lastName: true, role: true, status: true, lastLoginAt: true, createdAt: true } as const;
+    // Only ACTIVE members count (and are named in the e-mail): a suspended or
+    // never-validated aidant must not keep the senior's account alive.
+    const activeMembers = { where: { status: "ACTIVE" }, select: member } as const;
+    // The account's own date being old is necessary (the household date is
+    // never older), so this query is a superset filtered below.
+    const candidates = await prisma.user.findMany({
+      where: {
+        status: "ACTIVE",
+        role: { not: "ADMIN" },
+        OR: [{ lastLoginAt: { lte: cutoff } }, { lastLoginAt: null, createdAt: { lte: cutoff } }],
+      },
+      include: {
+        referentAccounts: activeMembers,
+        linkedSenior: { select: { ...member, referentAccounts: activeMembers } },
+      },
+      orderBy: { createdAt: "asc" },
+    });
+
+    const result: InactiveUser[] = [];
+    for (const { referentAccounts, linkedSenior, ...user } of candidates) {
+      const others = linkedSenior
+        ? [
+            ...(linkedSenior.status === "ACTIVE" ? [linkedSenior] : []),
+            ...linkedSenior.referentAccounts.filter((a) => a.id !== user.id),
+          ]
+        : referentAccounts;
+      const { at, via } = householdActivity(user, others);
+      if (at.getTime() > cutoff.getTime()) continue;
+      result.push({
+        ...user,
+        // A stale warning (activity after it was sent) is ignored here, so the
+        // job sends a fresh one and the status never jumps to "à supprimer".
+        inactivityWarnedAt: effectiveWarnedAt(user.inactivityWarnedAt, at),
+        lastActivityAt: at,
+        activityVia: via,
+        household: others.map(({ firstName, lastName, role }) => ({ firstName, lastName, role })),
+      });
+    }
+    return result;
+  }
+
+  async markInactivityWarned(userId: string, at: Date): Promise<void> {
+    await prisma.user.update({ where: { id: userId }, data: { inactivityWarnedAt: at } });
   }
 
   async getReferentsBySeniorId(seniorId: string): Promise<User[]> {

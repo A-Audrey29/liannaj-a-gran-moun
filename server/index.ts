@@ -9,6 +9,7 @@ import { checkAndSendFeedbackReminders } from "./lib/feedback-reminder";
 import { checkAndSendMeetingCheckReminders } from "./lib/meeting-check-reminder";
 import { checkAndSendAvailabilityReminders } from "./lib/availability-reminder";
 import { checkAndAutoCompleteMeetings } from "./lib/meeting-auto-complete";
+import { startInactivityScheduler } from "./lib/inactivity";
 
 const RAPPEL_FEEDBACK_INTERVALLE_MS = 6 * 60 * 60 * 1000;
 const RAPPEL_MEETING_CHECK_INTERVALLE_MS = 6 * 60 * 60 * 1000;
@@ -45,6 +46,7 @@ const CLOTURE_AUTO_INTERVALLE_MS = 60 * 60 * 1000;
       checkAndSendAvailabilityReminders();
       setInterval(() => checkAndAutoCompleteMeetings(), CLOTURE_AUTO_INTERVALLE_MS);
       checkAndAutoCompleteMeetings();
+      startInactivityScheduler();
     },
   );
 })();
