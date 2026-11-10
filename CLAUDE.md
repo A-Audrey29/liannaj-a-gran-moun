@@ -133,6 +133,13 @@ npm run db:push    # prisma db push — NE PAS utiliser sur la base Neon avec do
   référent, rencontre tenue, 90 jours). Note 0 valide : ne jamais tester
   `score === 0` / `!score`. L'export CSV pour le financeur ne contient aucun
   nom ni e-mail. Détail dans `docs/decisions.md`.
+- **Comptes inactifs (RGPD)** : 2 ans sans connexion → e-mail d'avertissement
+  automatique (`server/lib/inactivity.ts`), puis 30 jours plus tard le compte
+  est « à supprimer » dans l'onglet admin Inactivité. **Jamais de suppression
+  automatique.** Seuils uniquement dans `shared/inactivity.ts` ; inactivité =
+  `COALESCE(lastLoginAt, createdAt)`, prise sur tout le **foyer** (sénior +
+  ses aidants : la connexion de l'un garde les autres) ; admins exclus. Détail dans
+  `docs/decisions.md`.
 
 ## Skills — maintenir CLAUDE.md et la mémoire projet à jour
 

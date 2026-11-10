@@ -115,6 +115,12 @@ export function setupAuth(app: Express) {
             });
           }
 
+          // Inactivity tracking (RGPD): a failure here must never lock the
+          // user out, so it is logged and the login goes on.
+          await storage.recordLogin(user.id).catch((err) =>
+            console.error("[AUTH] Échec d'enregistrement de la connexion:", err)
+          );
+
           return done(null, mapUserToSession(user));
         } catch (err) {
           return done(err);

@@ -10,6 +10,7 @@ import rateLimit from "express-rate-limit";
 import { fileTypeFromBuffer } from "file-type";
 import sharp from "sharp";
 import { requireAuth, requireAdmin } from "./auth";
+import { checkInactiveAccounts, listInactiveAccounts } from "./lib/inactivity";
 import { pool } from "./db";
 import { storage } from "./storage";
 import { sendEmail } from "./lib/email";
@@ -285,6 +286,15 @@ const resetPasswordLimiter = rateLimit({
   legacyHeaders: false,
 });
 
+// Chaque passe peut envoyer jusqu'à 100 e-mails : quelques clics suffisent.
+const inactivityRunLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: isDev ? 1000 : 5,
+  message: { message: "Vérification déjà lancée plusieurs fois. Réessayez dans 15 minutes." },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
 const checkoutLimiter = rateLimit({
   windowMs: 10 * 60 * 1000,
   limit: isDev ? 1000 : 10,
@@ -393,6 +403,18 @@ async function createInterventionOrConflict(
     (tx) => hasInterventionConflict(juniorId, data.scheduledDate, data.durationMinutes, tx),
     seniorId
   );
+}
+
+/** Suppression définitive d'un compte (geste humain d'un admin, jamais automatique). */
+async function deleteUserAccount(user: { id: string; profilePhoto: string | null }): Promise<void> {
+  // La photo en base part avec l'utilisateur (ProfilePhoto est en cascade).
+  // Ce nettoyage ne concerne que les photos d'avant la bascule, encore
+  // présentes sur le disque.
+  if (user.profilePhoto) {
+    const photoPath = path.join(process.cwd(), user.profilePhoto.replace(/^\//, ""));
+    if (fs.existsSync(photoPath)) fs.unlinkSync(photoPath);
+  }
+  await storage.deleteUser(user.id);
 }
 
 export async function registerRoutes(
@@ -1960,6 +1982,49 @@ export async function registerRoutes(
     }
   });
 
+  // Comptes sans connexion depuis 2 ans (RGPD). Lecture seule : la suppression
+  // reste un geste humain (DELETE /api/admin/users/:id), jamais automatique.
+  app.get("/api/admin/inactive-accounts", requireAdmin, async (_req, res) => {
+    try {
+      res.json(await listInactiveAccounts());
+    } catch (err) {
+      console.error("[INACTIVITY] Error:", err);
+      res.status(500).json({ message: "Erreur" });
+    }
+  });
+
+  // Lance la passe d'avertissement maintenant (le job tourne aussi seul, 1x/jour).
+  app.post("/api/admin/inactive-accounts/run", requireAdmin, inactivityRunLimiter, async (_req, res) => {
+    try {
+      res.json(await checkInactiveAccounts());
+    } catch (err) {
+      console.error("[INACTIVITY] Error:", err);
+      res.status(500).json({ message: "Erreur" });
+    }
+  });
+
+  // Suppression depuis l'onglet Inactivité : le statut est recalculé à
+  // l'instant de la suppression, car l'onglet a pu rester ouvert longtemps.
+  // Si le compte (ou son foyer) s'est reconnecté entre-temps, on refuse.
+  app.delete("/api/admin/inactive-accounts/:id", requireAdmin, async (req, res) => {
+    try {
+      const id = getParam(req, "id");
+      const current = (await listInactiveAccounts()).find((a) => a.id === id);
+      if (!current || current.status !== "TO_DELETE") {
+        return res.status(409).json({
+          message: "Ce compte n'est plus à supprimer : il (ou son aidant) s'est reconnecté, ou le délai n'est pas écoulé.",
+        });
+      }
+      const user = await storage.getUser(id);
+      if (!user) return res.status(404).json({ message: "Utilisateur non trouvé" });
+      await deleteUserAccount(user);
+      res.json({ message: "Utilisateur supprimé" });
+    } catch (err) {
+      console.error("[INACTIVITY_DELETE] Error:", err);
+      res.status(500).json({ message: "Erreur" });
+    }
+  });
+
   app.patch("/api/admin/users/:id/validate", requireAdmin, async (req, res) => {
     try {
       const user = await storage.getUser(getParam(req, "id"));
@@ -1994,14 +2059,7 @@ export async function registerRoutes(
       const user = await storage.getUser(getParam(req, "id"));
       if (!user) return res.status(404).json({ message: "Utilisateur non trouvé" });
       if (user.role === "ADMIN") return res.status(403).json({ message: "Impossible de supprimer un administrateur" });
-      // La photo en base part avec l'utilisateur (ProfilePhoto est en cascade).
-      // Ce nettoyage ne concerne que les photos d'avant la bascule, encore
-      // présentes sur le disque.
-      if (user.profilePhoto) {
-        const photoPath = path.join(process.cwd(), user.profilePhoto.replace(/^\//, ""));
-        if (fs.existsSync(photoPath)) fs.unlinkSync(photoPath);
-      }
-      await storage.deleteUser(user.id);
+      await deleteUserAccount(user);
       res.json({ message: "Utilisateur supprimé" });
     } catch (err) {
       console.error("[ADMIN_DELETE_USER] Error:", err);
