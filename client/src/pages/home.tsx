@@ -26,6 +26,7 @@ import { updateProfileSchema, type UpdateProfileInput, changePasswordSchema, typ
 import type { Relation, User as UserType, Intervention, Category } from "@shared/schema";
 import MessagesTab from "@/components/messages-tab";
 import MeetingHistory from "@/components/meeting-history";
+import { MeetingDoneButton } from "@/components/meeting-done-button";
 import DisponibilitesTab from "@/components/disponibilites-tab";
 import { AccountDeletionRequest } from "@/components/account-deletion-request";
 import { homeTabsFor } from "@/lib/space-tabs";
@@ -541,6 +542,8 @@ function RencontresTab({ relations, isLoading, user, onOpenMessage }: { relation
                   Vous ne pouvez pas venir ? Prévenez l'équipe avec le bouton Aide en haut de la page.
                 </p>
               </div>
+            ) : user?.role === "SENIOR" ? (
+              <MeetingDoneButton meeting={entry} />
             ) : null
           }
         />

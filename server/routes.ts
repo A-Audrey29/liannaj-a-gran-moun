@@ -15,18 +15,17 @@ import { storage } from "./storage";
 import { sendEmail } from "./lib/email";
 import {
   getValidationEmailHtml,
+  getRegistrationRefusedEmailHtml,
   getRelationAcceptedEmailHtml,
   getInterventionProposedEmailHtml,
   getInterventionConfirmedEmailHtml,
-  getFeedbackReminderEmailHtml,
   getNewReportEmailHtml,
   getNewAdminNotificationEmailHtml,
   getCreditPurchaseConfirmedEmailHtml,
-  getNegativeCreditBalanceEmailHtml,
   getPasswordResetEmailHtml,
   escapeHtml,
 } from "./lib/email-templates";
-import { accountDeletionRequestSchema, insertUserSchema, createRelationSchema, insertInterventionSchema, feedbackSchema, createPaymentSchema, checkoutSchema, changePasswordSchema, forgotPasswordSchema, resetPasswordSchema, createAdminSchema, insertReportSchema, createAvailabilitySchema, createRecurringAvailabilitiesSchema, extendAvailabilitiesSchema, createDateExceptionSchema, updateUserCategoriesSchema, meetingHistoryQuerySchema, npsSchema, npsQuerySchema, creditsQuerySchema, checkoutStatusQuerySchema, validateRegistrationSchema, COMPLETED_STATUSES } from "../shared/schema";
+import { accountDeletionRequestSchema, insertUserSchema, createRelationSchema, insertInterventionSchema, feedbackSchema, createPaymentSchema, checkoutSchema, changePasswordSchema, forgotPasswordSchema, resetPasswordSchema, createAdminSchema, insertReportSchema, createAvailabilitySchema, createRecurringAvailabilitiesSchema, extendAvailabilitiesSchema, createDateExceptionSchema, updateUserCategoriesSchema, meetingHistoryQuerySchema, npsSchema, npsQuerySchema, creditsQuerySchema, checkoutStatusQuerySchema, validateRegistrationSchema, refuseRegistrationSchema, COMPLETED_STATUSES } from "../shared/schema";
 import { creditOwnerId } from "../shared/credits";
 import type { CreditBalanceResponse, CreditHistoryEntry, CheckoutStatusResponse } from "../shared/credits";
 import type { MeetingHistoryEntry, MeetingHistoryResponse, MeetingHistorySummary, Role } from "../shared/schema";
@@ -36,12 +35,14 @@ import type { MeetingHistoryScope, NpsIneligibleReason } from "./storage";
 import { createRecurringAvailabilities, extendRecurringAvailabilities, parseAvailabilityTemplate, lastAvailableEnd, createDateException, deleteAvailability, isWithinAvailability, hasInterventionConflict } from "./lib/availability";
 import { addSSEClient, sendSSEEvent, isUserConnected } from "./lib/sse";
 import { fmtDayNumeric, fmtTime, gpDateTimeToUtc, addDaysISO } from "../shared/dates";
-import { PLATFORM_NAME } from "../shared/branding";
+import { PLATFORM_NAME, CONTACT_EMAIL } from "../shared/branding";
 import { sendPushNotification, getVapidPublicKey } from "./lib/push";
 import { paymentProvider } from "./lib/payment-provider";
 import { findCreditOffer } from "../shared/credit-offers";
 import { env, getBaseUrl as getPublicBaseUrl } from "./env";
 import { createPasswordResetToken, resetPasswordWithToken } from "./lib/password-reset";
+import { closeMeeting } from "./lib/meeting-completion";
+import { isMeetingEnded } from "../shared/meeting-check";
 
 const TAILLE_MAX_PHOTO = 5 * 1024 * 1024;
 
@@ -167,7 +168,20 @@ function toMeetingHistoryEntry(i: any): MeetingHistoryEntry {
     seniorComment: i.seniorComment,
     juniorRating: i.juniorRating,
     juniorComment: i.juniorComment,
+    closure: meetingClosure(i),
   };
+}
+
+/** Who closed the meeting, for the admin's after-the-fact control. */
+function meetingClosure(i: any): MeetingHistoryEntry["closure"] {
+  if (!i.completedAt) return null;
+  const at = i.completedAt.toISOString();
+  if (i.completedAutomatically) return { at, by: "AUTO", name: null };
+  const closer = i.completedBy;
+  if (!closer) return { at, by: "UNKNOWN", name: null }; // closer account deleted since
+  const name = `${closer.firstName} ${closer.lastName}`;
+  const by = closer.role === "SENIOR" ? "SENIOR" : closer.role === "REFERENT_SENIOR" ? "AIDANT" : "ADMIN";
+  return { at, by, name };
 }
 
 /**
@@ -497,7 +511,7 @@ export async function registerRoutes(
 
       return res.status(201).json({
         message: emailSent
-          ? "Inscription réussie ! Un email a été envoyé à votre référent pour valider votre compte."
+          ? `Inscription réussie ! Un e-mail a été envoyé à ${user.role === "SENIOR" ? "votre personne de confiance" : "votre professeur"} pour valider votre compte.`
           : "Inscription enregistrée, mais l'e-mail de validation n'a pas pu être envoyé.",
         emailSent,
       });
@@ -864,19 +878,74 @@ export async function registerRoutes(
     return res.redirect(`/validate?token=${encodeURIComponent(token)}`);
   });
 
-  // Read-only: lets /validate show whose registration is being validated and,
-  // for a senior, offer the trusted person to open their aidant space. Holding
-  // the (unguessable) token is the proof of being the addressee of the e-mail.
+  /** Pending, unexpired account behind a validation token — or the error to send. */
+  async function pendingUserForToken(token: string) {
+    const user = token ? await storage.getUserByValidationToken(token) : null;
+    if (!user || user.status !== "PENDING_VALIDATION") {
+      return { user: null, error: { status: 404, body: { message: "Lien invalide ou déjà utilisé", reason: "invalid" } } };
+    }
+    if (user.validationExpiry && user.validationExpiry.getTime() < Date.now()) {
+      return { user: null, error: { status: 410, body: { message: "Lien expiré", reason: "expired" } } };
+    }
+    return { user, error: null };
+  }
+
+  /**
+   * Teacher side of a junior's validation link: does the address that
+   * received it already have a TEACHER account (the junior is linked to it),
+   * no account (the teacher can create one here), or another kind of account
+   * (validation only, FEVES links by hand)?
+   */
+  async function teacherForValidator(validatorEmail: string | null) {
+    const email = validatorEmail ? validatorEmail.toLowerCase().trim() : null;
+    if (!email) return { email: null, account: "other" as const, teacher: null };
+    const existing = await storage.getUserByEmail(email);
+    if (!existing) return { email, account: "none" as const, teacher: null };
+    if (existing.role === "TEACHER" && existing.status === "ACTIVE") {
+      return { email, account: "teacher" as const, teacher: existing };
+    }
+    return { email, account: "other" as const, teacher: null };
+  }
+
+  async function notifyAdmins(title: string, message: string, link: string) {
+    for (const admin of await storage.getAdmins()) {
+      await storage.createNotification({ user: { connect: { id: admin.id } }, type: "SYSTEM", title, message, link });
+    }
+  }
+
+  // Read-only: lets /validate show whose registration is being validated.
+  // Senior: the trusted person may open their aidant space. Junior: the
+  // teacher sees the whole profile (bio, ateliers, photo) before deciding.
+  // Holding the (unguessable) token is the proof of being the addressee.
   app.get("/api/validate/info", async (req, res) => {
     try {
       const token = typeof req.query.token === "string" ? req.query.token : "";
-      const user = token ? await storage.getUserByValidationToken(token) : null;
-      if (!user || user.status !== "PENDING_VALIDATION") {
-        return res.status(404).json({ message: "Lien invalide ou déjà utilisé", reason: "invalid" });
+      const found = await pendingUserForToken(token);
+      if (!found.user) return res.status(found.error.status).json(found.error.body);
+      const user = found.user;
+
+      if (user.role === "JUNIOR") {
+        const categories = await storage.getUserCategories(user.id);
+        const teacher = await teacherForValidator(user.validatorEmail);
+        return res.json({
+          firstName: user.firstName,
+          role: user.role,
+          aidantEmail: null,
+          canCreateAidant: false,
+          student: {
+            firstName: user.firstName,
+            lastName: user.lastName,
+            birthDate: user.birthDate ? user.birthDate.toISOString() : null,
+            city: user.city,
+            schoolName: user.schoolName,
+            bio: user.bio,
+            ateliers: categories.map((c) => c.category.name),
+            hasPhoto: !!user.profilePhoto,
+          },
+          teacher: { email: teacher.email, account: teacher.account },
+        });
       }
-      if (user.validationExpiry && user.validationExpiry.getTime() < Date.now()) {
-        return res.status(410).json({ message: "Lien expiré", reason: "expired" });
-      }
+
       const aidantEmail = user.role === "SENIOR" && user.validatorEmail ? user.validatorEmail.toLowerCase().trim() : null;
       const aidantAlreadyExists = aidantEmail ? !!(await storage.getUserByEmail(aidantEmail)) : false;
       return res.json({
@@ -891,6 +960,26 @@ export async function registerRoutes(
     }
   });
 
+  // Photo of the junior being validated: /api/photos needs a session, the
+  // teacher has none yet. Same proof as /info: the pending token.
+  app.get("/api/validate/photo", async (req, res) => {
+    try {
+      const token = typeof req.query.token === "string" ? req.query.token : "";
+      const found = await pendingUserForToken(token);
+      if (!found.user) return res.status(found.error.status).json(found.error.body);
+      const key = found.user.profilePhoto;
+      const photo = key ? await storage.getProfilePhotoByFilename(path.basename(key)) : null;
+      if (!photo) return res.status(404).json({ message: "Photo non trouvée" });
+      res.setHeader("Content-Type", photo.mimeType);
+      res.setHeader("X-Content-Type-Options", "nosniff");
+      res.setHeader("Cache-Control", "private, no-store");
+      return res.send(photo.data);
+    } catch (err) {
+      console.error("[VALIDATE PHOTO] Error:", err);
+      return res.status(500).json({ message: "Erreur" });
+    }
+  });
+
   app.post("/api/validate", async (req, res) => {
     try {
       const parsed = validateRegistrationSchema.safeParse(req.body);
@@ -901,7 +990,7 @@ export async function registerRoutes(
         }
         return res.status(400).json({ message: "Données invalides", reason: "aidant_invalid", errors: fieldErrors });
       }
-      const { token, aidant } = parsed.data;
+      const { token, aidant, teacher } = parsed.data;
 
       const user = await storage.getUserByValidationToken(token);
       if (!user) {
@@ -939,6 +1028,54 @@ export async function registerRoutes(
         return res.json({ message: "Compte validé, espace aidant créé", aidantCreated: true });
       }
 
+      if (teacher && user.role !== "JUNIOR") {
+        return res.status(400).json({ message: "Création d'un espace professeur impossible pour ce compte", reason: "teacher_not_allowed" });
+      }
+
+      if (user.role === "JUNIOR") {
+        // The validator is the junior's teacher: validating links the junior
+        // to their space (existing account, or created here with the address
+        // the link was sent to — never one from the request).
+        const found = await teacherForValidator(user.validatorEmail);
+        if (teacher && found.account !== "none") {
+          return res.status(409).json({ message: "Un compte existe déjà avec cette adresse e-mail", reason: "teacher_exists" });
+        }
+        const link = teacher
+          ? {
+              newTeacher: {
+                email: found.email!,
+                password: await bcrypt.hash(teacher.password, 10),
+                firstName: teacher.firstName,
+                lastName: teacher.lastName,
+              },
+            }
+          : found.teacher
+            ? { teacherId: found.teacher.id }
+            : null;
+        const result = await storage.activateJuniorWithTeacher(user.id, token, link);
+        if (!result) {
+          return res.status(404).json({ message: "Lien invalide ou déjà utilisé", reason: "invalid" });
+        }
+
+        // FEVES' background control: told about every new teacher account,
+        // and about a junior left without a teacher (to link by hand).
+        const studentName = `${user.firstName} ${user.lastName}`;
+        if (teacher && result.teacher) {
+          await notifyAdmins(
+            "Nouveau professeur inscrit",
+            `${result.teacher.firstName} ${result.teacher.lastName} (${result.teacher.email}) a créé son espace professeur en validant ${studentName}, qui lui est rattaché(e).`,
+            "/admin?tab=utilisateurs"
+          );
+        } else if (!result.teacher) {
+          await notifyAdmins(
+            "Élève validé sans professeur rattaché",
+            `L'inscription de ${studentName} a été validée par ${user.validatorEmail ?? "une adresse inconnue"}, qui n'a pas d'espace professeur. Rattachez l'élève à son professeur si besoin.`,
+            "/admin?tab=utilisateurs"
+          );
+        }
+        return res.json({ message: "Compte validé", aidantCreated: false, teacherCreated: !!teacher, linked: !!result.teacher });
+      }
+
       // Only a pending account: a suspended or banned one must not be
       // re-activated by an old link (atomic, like activateSeniorWithAidant).
       if (!(await storage.activatePendingUser(user.id, token))) {
@@ -953,6 +1090,40 @@ export async function registerRoutes(
       }
       console.error("[VALIDATE] Error:", err);
       return res.status(500).json({ message: "Erreur lors de la validation", reason: "invalid" });
+    }
+  });
+
+  // « Ce n'est pas mon élève » : the addressee of the link refuses. The
+  // account is suspended (never deleted automatically), the junior is told,
+  // and FEVES can reactivate it from the admin if it was a mistake.
+  app.post("/api/validate/refuse", async (req, res) => {
+    try {
+      const parsed = refuseRegistrationSchema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ message: "Token manquant", reason: "invalid" });
+      const found = await pendingUserForToken(parsed.data.token);
+      if (!found.user) return res.status(found.error.status).json(found.error.body);
+      const user = found.user;
+
+      if (!(await storage.refusePendingUser(user.id, parsed.data.token))) {
+        return res.status(404).json({ message: "Lien invalide ou déjà utilisé", reason: "invalid" });
+      }
+
+      const userName = `${user.firstName} ${user.lastName}`;
+      await notifyAdmins(
+        "Inscription refusée",
+        `${user.validatorEmail ?? "Le valideur"} a refusé l'inscription de ${userName}. Le compte est suspendu : réactivez-le si c'est une erreur.`,
+        "/admin?tab=utilisateurs"
+      );
+      sendEmail({
+        to: user.email,
+        subject: `${PLATFORM_NAME} - Inscription non validée`,
+        htmlContent: getRegistrationRefusedEmailHtml(userName, CONTACT_EMAIL),
+      }).catch(console.error);
+
+      return res.json({ message: "Inscription refusée" });
+    } catch (err) {
+      console.error("[VALIDATE REFUSE] Error:", err);
+      return res.status(500).json({ message: "Erreur", reason: "invalid" });
     }
   });
 
@@ -1368,107 +1539,75 @@ export async function registerRoutes(
     }
   });
 
-  app.patch("/api/interventions/:id/done", requireAdmin, async (req, res) => {
+  // Clôture : le senior ou son aidant déclare la rencontre réalisée une fois
+  // terminée ; l'admin peut tout clôturer (même jamais confirmée par le
+  // jeune). Sans déclaration, le job meeting-auto-complete s'en charge 48h
+  // après la fin. Décision du 2026-11-10.
+  app.patch("/api/interventions/:id/done", requireAuth, async (req, res) => {
     try {
       const intervention = await storage.getInterventionWithRelation(getParam(req, "id"));
       if (!intervention) {
         return res.status(404).json({ message: "Rencontre non trouvée" });
       }
-      if (intervention.status !== "CONFIRMED") {
-        return res.status(400).json({ message: "La rencontre doit être confirmée avant d'être marquée comme réalisée" });
+      const user = req.user!;
+      const isAdmin = user.role === "ADMIN";
+      const isSenior = intervention.relation.seniorId === user.id;
+      const isAidant = user.role === "REFERENT_SENIOR" && user.linkedSeniorId === intervention.relation.seniorId;
+      if (!isAdmin && !isSenior && !isAidant) {
+        return res.status(403).json({ message: "Seul le senior, son aidant ou l'équipe peut déclarer la rencontre réalisée" });
       }
 
-      const completion = await storage.completeIntervention(
-        intervention.id,
-        intervention.relation.seniorId,
-        req.user!.id
-      );
-      if (!completion) {
-        return res.status(409).json({ message: "Cette rencontre a déjà été traitée" });
-      }
-      const updated = completion.intervention;
-
-      if (intervention.relation.status === "PENDING_FIRST_MEETING") {
-        await storage.updateRelationStatus(intervention.relationId, "ACTIVE");
-        await storage.getOrCreateConversation(intervention.relationId);
-      }
-
-      const seniorId = intervention.relation.seniorId;
-      const juniorId = intervention.relation.juniorId;
-
-      // Cas rare : plusieurs interventions CONFIRMED simultanées sur un solde
-      // insuffisant peuvent faire passer le solde en négatif à la validation.
-      // On ne bloque jamais la complétion elle-même (l'intervention n'a plus
-      // de porte de sortie une fois COMPLETED_PENDING_FEEDBACK, CANCELLED
-      // n'étant plus possible) — on se contente d'avertir le sénior et son
-      // référent, le blocage réel se fait déjà à la création de toute
-      // nouvelle intervention (solde <= 0 → 402).
-      const balanceAfter = await storage.getCreditBalance(seniorId);
-      if (balanceAfter < 0) {
-        const seniorForAlert = await storage.getUser(seniorId);
-        const referents = await storage.getReferentsBySeniorId(seniorId);
-        const alertRecipients = [seniorForAlert, ...referents].filter(
-          (u): u is NonNullable<typeof u> => !!u
-        );
-        for (const recipient of alertRecipients) {
-          await storage.createNotification({
-            user: { connect: { id: recipient.id } },
-            type: "SYSTEM",
-            title: "Solde de crédits négatif",
-            message: `Le solde de crédits est de ${balanceAfter}. Un rattrapage est nécessaire pour organiser de nouvelles rencontres.`,
-            link: `/relations/${intervention.relationId}`,
-          });
-          if (recipient.email && seniorForAlert) {
-            sendEmail({
-              to: recipient.email,
-              subject: `Solde de crédits négatif — ${PLATFORM_NAME}`,
-              htmlContent: getNegativeCreditBalanceEmailHtml(
-                `${recipient.firstName} ${recipient.lastName}`,
-                `${seniorForAlert.firstName} ${seniorForAlert.lastName}`,
-                balanceAfter
-              ),
-            }).catch(console.error);
-          }
+      if (isAdmin) {
+        if (intervention.status !== "CONFIRMED" && intervention.status !== "PROPOSED") {
+          return res.status(400).json({ message: "Cette rencontre est déjà clôturée ou annulée" });
+        }
+      } else {
+        if (intervention.status !== "CONFIRMED") {
+          return res.status(400).json({ message: "La rencontre doit être confirmée par le jeune avant d'être déclarée réalisée" });
+        }
+        if (!isMeetingEnded(intervention, new Date())) {
+          return res.status(400).json({ message: "La rencontre n'est pas encore terminée" });
         }
       }
 
-      await storage.createNotification({
-        user: { connect: { id: seniorId } },
-        type: "FEEDBACK_REMINDER",
-        title: "Feedback requis",
-        message: "La rencontre a été validée. Merci de laisser votre feedback.",
-        link: `/relations/${intervention.relationId}`,
-      });
-
-      await storage.createNotification({
-        user: { connect: { id: juniorId } },
-        type: "FEEDBACK_REMINDER",
-        title: "Feedback requis",
-        message: "La rencontre a été validée. Merci de laisser votre feedback.",
-        link: `/relations/${intervention.relationId}`,
-      });
-
-      const dateStr = fmtDayNumeric(intervention.scheduledDate);
-      const seniorUser = await storage.getUser(seniorId);
-      if (seniorUser?.email) {
-        sendEmail({
-          to: seniorUser.email,
-          subject: `${PLATFORM_NAME} - Donnez votre avis sur la rencontre du ${dateStr}`,
-          htmlContent: getFeedbackReminderEmailHtml(`${seniorUser.firstName} ${seniorUser.lastName}`, dateStr, `${getBaseUrl(req)}/relations/${intervention.relationId}`),
-        }).catch(console.error);
+      const updated = await closeMeeting(intervention, { userId: user.id, isAdmin });
+      if (!updated) {
+        return res.status(409).json({ message: "Cette rencontre a déjà été traitée" });
       }
-      const juniorUser = await storage.getUser(juniorId);
-      if (juniorUser?.email) {
-        sendEmail({
-          to: juniorUser.email,
-          subject: `${PLATFORM_NAME} - Donnez votre avis sur la rencontre du ${dateStr}`,
-          htmlContent: getFeedbackReminderEmailHtml(`${juniorUser.firstName} ${juniorUser.lastName}`, dateStr, `${getBaseUrl(req)}/relations/${intervention.relationId}`),
-        }).catch(console.error);
-      }
-
       res.json(updated);
     } catch (err) {
       console.error("[DONE_INTERVENTION] Error:", err);
+      res.status(500).json({ message: "Erreur" });
+    }
+  });
+
+  // Correction admin : une rencontre clôturée (par le senior, l'aidant ou
+  // automatiquement) n'a pas eu lieu. Elle passe annulée et le crédit est rendu.
+  app.patch("/api/interventions/:id/not-held", requireAdmin, async (req, res) => {
+    try {
+      const intervention = await storage.getInterventionWithRelation(getParam(req, "id"));
+      if (!intervention) {
+        return res.status(404).json({ message: "Rencontre non trouvée" });
+      }
+      const reverted = await storage.revertCompletedIntervention(intervention.id, req.user!.id);
+      if (!reverted) {
+        return res.status(400).json({ message: "Seule une rencontre clôturée peut être déclarée non tenue" });
+      }
+      const dateStr = fmtDayNumeric(intervention.scheduledDate);
+      for (const userId of [intervention.relation.seniorId, intervention.relation.juniorId]) {
+        await storage.createNotification({
+          user: { connect: { id: userId } },
+          type: "SYSTEM",
+          title: "Rencontre corrigée",
+          message: reverted.refunded
+            ? `La rencontre du ${dateStr} est enregistrée comme non tenue. Le crédit a été rendu.`
+            : `La rencontre du ${dateStr} est enregistrée comme non tenue.`,
+          link: `/relations/${intervention.relationId}`,
+        });
+      }
+      res.json({ ...reverted.intervention, refunded: reverted.refunded });
+    } catch (err) {
+      console.error("[NOT_HELD_INTERVENTION] Error:", err);
       res.status(500).json({ message: "Erreur" });
     }
   });

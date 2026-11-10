@@ -1,12 +1,15 @@
 /**
- * Seul un admin peut marquer une rencontre réalisée (c'est ce qui débite le
- * crédit). Processus complet : docs/PROCESSUS-RENCONTRES.md.
+ * Clôture des rencontres (décision du 2026-11-10, docs/decisions.md).
+ * Processus complet : docs/PROCESSUS-RENCONTRES.md.
  *
- * - Rencontre "terminée" : sa fin (début + durée) est passée. L'admin peut
- *   dès lors la marquer réalisée ou l'annuler.
- * - Rencontre "en retard" : terminée depuis plus de MEETING_CHECK_GRACE_HOURS
- *   et toujours PROPOSED/CONFIRMED. Les admins sont relancés (job
- *   meeting-check-reminder) et elle apparaît dans le filtre "À traiter".
+ * - Rencontre "terminée" : sa fin (début + durée) est passée. Le senior (ou
+ *   son aidant) peut dès lors la déclarer réalisée ; l'admin peut tout faire.
+ * - Rencontre CONFIRMED terminée depuis AUTO_COMPLETE_HOURS : clôturée
+ *   automatiquement (job meeting-auto-complete), sans action de FEVES.
+ * - Rencontre "en retard" : jamais confirmée par le jeune (PROPOSED) et
+ *   terminée depuis MEETING_CHECK_GRACE_HOURS. Elle ne peut pas se clôturer
+ *   seule : les admins sont relancés (job meeting-check-reminder) et elle
+ *   apparaît dans le filtre "À traiter".
  */
 export const MEETING_CHECK_GRACE_HOURS = 24;
 
@@ -29,9 +32,26 @@ export function isMeetingEnded(meeting: MeetingTiming, now: Date): boolean {
 
 export function isMeetingOverdue(meeting: MeetingTiming, now: Date): boolean {
   return (
-    isOpen(meeting) &&
+    meeting.status === "PROPOSED" &&
     meetingEnd(meeting.scheduledDate, meeting.durationMinutes).getTime() + GRACE_MS <= now.getTime()
   );
+}
+
+/** Délai après la fin au-delà duquel une rencontre confirmée est clôturée seule. */
+export const AUTO_COMPLETE_HOURS = 48;
+
+const AUTO_COMPLETE_MS = AUTO_COMPLETE_HOURS * 60 * 60 * 1000;
+
+export function isMeetingAutoCompletable(meeting: MeetingTiming, now: Date): boolean {
+  return (
+    meeting.status === "CONFIRMED" &&
+    meetingEnd(meeting.scheduledDate, meeting.durationMinutes).getTime() + AUTO_COMPLETE_MS <= now.getTime()
+  );
+}
+
+/** Borne SQL du job de clôture automatique (même principe que overdueStartBefore). */
+export function autoCompleteStartBefore(now: Date): Date {
+  return new Date(now.getTime() - AUTO_COMPLETE_MS);
 }
 
 /**

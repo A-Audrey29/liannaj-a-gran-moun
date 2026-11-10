@@ -73,7 +73,7 @@ import {
   ThumbsUp,
 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
-import type { User, Relation, Intervention, PaymentRecord, Notification } from "@shared/schema";
+import type { User, Relation, Intervention, PaymentRecord, Notification, MeetingHistoryEntry } from "@shared/schema";
 import { ATELIERS } from "@shared/ateliers";
 import { isMeetingEnded } from "@shared/meeting-check";
 import { creditOwnerId, type CreditBalanceResponse } from "@shared/credits";
@@ -991,6 +991,60 @@ function TeacherPanel({ teacher }: { teacher: SafeUser }) {
 
 // ==================== RENCONTRES ====================
 
+function closureLabel(closure: NonNullable<MeetingHistoryEntry["closure"]>): string {
+  // completedAt is an administrative timestamp, not a meeting time.
+  const when = new Date(closure.at).toLocaleDateString("fr-FR");
+  switch (closure.by) {
+    case "AUTO":
+      return `Clôturée automatiquement le ${when} (48 h après la fin, sans déclaration du senior)`;
+    case "SENIOR":
+      return `Déclarée réalisée par le senior (${closure.name}) le ${when}`;
+    case "AIDANT":
+      return `Déclarée réalisée par l'aidant (${closure.name}) le ${when}`;
+    case "ADMIN":
+      return `Marquée réalisée par l'équipe (${closure.name}) le ${when}`;
+    default:
+      return `Clôturée le ${when}`;
+  }
+}
+
+/** Correction: a closed meeting did not take place — cancelled, credit given back. */
+function NotHeldButton({ interventionId }: { interventionId: string }) {
+  const { toast } = useToast();
+  const mutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("PATCH", `/api/interventions/${interventionId}/not-held`);
+      return (await res.json()) as { refunded: boolean };
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/meetings/history"] });
+      toast({ title: data.refunded ? "Rencontre corrigée, crédit rendu" : "Rencontre corrigée" });
+    },
+    onError: (err) => toast({ title: "Erreur", description: apiErrorMessage(err, "Réessayez plus tard."), variant: "destructive" }),
+  });
+  return (
+    <AlertDialog>
+      <AlertDialogTrigger asChild>
+        <Button size="sm" variant="outline" disabled={mutation.isPending} data-testid={`button-admin-not-held-${interventionId}`}>
+          N'a pas eu lieu
+        </Button>
+      </AlertDialogTrigger>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Cette rencontre n'a pas eu lieu ?</AlertDialogTitle>
+          <AlertDialogDescription>
+            Elle passera « annulée » et le crédit décompté sera rendu au senior. Le senior et le jeune sont prévenus.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Retour</AlertDialogCancel>
+          <AlertDialogAction onClick={() => mutation.mutate()}>Confirmer la correction</AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+}
+
 function RencontresTab() {
   const [searchUserId, setSearchUserId] = useState<string | null>(null);
   const { toast } = useToast();
@@ -1038,17 +1092,30 @@ function RencontresTab() {
         viewerRole="ADMIN"
         emptyLabel="Aucune rencontre trouvée"
         renderActions={(entry) => {
+          // Closed meeting: who closed it (contrôle a posteriori) and the
+          // correction if it did not take place (credit given back).
+          if (entry.status === "COMPLETED_PENDING_FEEDBACK" || entry.status === "COMPLETED") {
+            return (
+              <div className="space-y-2">
+                {entry.closure && (
+                  <p className="text-xs text-muted-foreground" data-testid={`text-closure-${entry.id}`}>
+                    {closureLabel(entry.closure)}
+                  </p>
+                )}
+                <NotHeldButton interventionId={entry.id} />
+              </div>
+            );
+          }
           // Available as soon as the meeting has ended (e.g. after a phone
-          // call), not only once the 24h reminder delay has passed.
+          // call). An admin may close it even if the junior never confirmed.
           if (!isMeetingEnded(entry, new Date())) return null;
           return (
             <div className="flex gap-2">
               <Button
                 size="sm"
                 onClick={() => markDoneMutation.mutate(entry.id)}
-                disabled={markDoneMutation.isPending || entry.status !== "CONFIRMED"}
+                disabled={markDoneMutation.isPending}
                 data-testid={`button-admin-done-${entry.id}`}
-                title={entry.status !== "CONFIRMED" ? "Doit d'abord être confirmée par le jeune" : undefined}
               >
                 A-t-elle eu lieu ? Marquer réalisée
               </Button>

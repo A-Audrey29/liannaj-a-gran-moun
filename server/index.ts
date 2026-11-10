@@ -8,10 +8,13 @@ import { serveStatic } from "./static";
 import { checkAndSendFeedbackReminders } from "./lib/feedback-reminder";
 import { checkAndSendMeetingCheckReminders } from "./lib/meeting-check-reminder";
 import { checkAndSendAvailabilityReminders } from "./lib/availability-reminder";
+import { checkAndAutoCompleteMeetings } from "./lib/meeting-auto-complete";
 
 const RAPPEL_FEEDBACK_INTERVALLE_MS = 6 * 60 * 60 * 1000;
 const RAPPEL_MEETING_CHECK_INTERVALLE_MS = 6 * 60 * 60 * 1000;
 const RAPPEL_DISPONIBILITES_INTERVALLE_MS = 6 * 60 * 60 * 1000;
+// Toutes les heures : une rencontre se clôture au plus 1h après ses 48h.
+const CLOTURE_AUTO_INTERVALLE_MS = 60 * 60 * 1000;
 
 (async () => {
   // Le serveur HTTP est cree avant l'app car registerRoutes en a besoin pour
@@ -40,6 +43,8 @@ const RAPPEL_DISPONIBILITES_INTERVALLE_MS = 6 * 60 * 60 * 1000;
       checkAndSendMeetingCheckReminders();
       setInterval(() => checkAndSendAvailabilityReminders(), RAPPEL_DISPONIBILITES_INTERVALLE_MS);
       checkAndSendAvailabilityReminders();
+      setInterval(() => checkAndAutoCompleteMeetings(), CLOTURE_AUTO_INTERVALLE_MS);
+      checkAndAutoCompleteMeetings();
     },
   );
 })();

@@ -24,6 +24,7 @@ import { useState } from "react";
 import { useSSE } from "@/hooks/use-sse";
 import { MobileTabsMenu } from "@/components/mobile-tabs-menu";
 import MeetingHistory from "@/components/meeting-history";
+import { MeetingDoneButton } from "@/components/meeting-done-button";
 import { fmtTime, fmtDayLongMonthYear } from "@/lib/availability-format";
 import { CreditOffersCard } from "@/components/credit-offers-card";
 import { NpsPrompt } from "@/components/nps-prompt";
@@ -205,6 +206,7 @@ function SuiviTab({ relations }: { relations: RelationWithUsers[] }) {
         <MeetingHistory
           scope={{ kind: "me" }}
           viewerRole="REFERENT_SENIOR"
+          renderActions={(entry) => <MeetingDoneButton meeting={entry} />}
           emptyLabel="Aucune rencontre pour le moment."
         />
       </div>
@@ -271,6 +273,7 @@ function SuiviTab({ relations }: { relations: RelationWithUsers[] }) {
         <MeetingHistory
           scope={{ kind: "me" }}
           viewerRole="REFERENT_SENIOR"
+          renderActions={(entry) => <MeetingDoneButton meeting={entry} />}
           emptyLabel="Aucune rencontre pour le moment."
         />
       </div>
