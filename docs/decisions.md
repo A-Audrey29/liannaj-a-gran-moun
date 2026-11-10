@@ -3,6 +3,64 @@
 Journal des choix d'architecture et de leurs raisons. Une entrée par décision,
 la plus récente en haut.
 
+## 2026-11-10 — Clôture des rencontres par le senior et automatique ; validation des élèves par leur professeur
+
+**Contexte.** En préparant la présentation aux professeurs, deux écarts sont
+apparus entre le parcours raconté et le code. 1) Seul un admin pouvait
+marquer une rencontre réalisée (décision du 2026-10-12) : FEVES devait
+cliquer pour chaque rencontre, sinon ni débit ni demande d'avis. 2) Le
+professeur validait l'élève depuis un e-mail qui n'affichait que le prénom,
+ne pouvait pas refuser, et l'élève n'arrivait pas dans son espace : FEVES
+faisait le lien à la main. Objectif d'Audrey : FEVES a le moins possible à
+faire, avec un contrôle en arrière-plan.
+
+**Décision — le senior (ou son aidant) déclare la rencontre réalisée.**
+Revient sur le refus du 2026-10-12 : c'est lui qui paie, il déclenche donc
+lui-même le débit. Conditions côté serveur : rencontre `CONFIRMED` et
+terminée (`isMeetingEnded`). Le jeune ne peut pas. L'admin peut tout
+clôturer, y compris une rencontre jamais confirmée (`PROPOSED`).
+
+**Décision — clôture automatique 48h après la fin.** Une rencontre
+`CONFIRMED` non clôturée ni annulée 48h après sa fin est clôturée par le job
+`server/lib/meeting-auto-complete.ts` (toutes les heures, verrou advisory
+`4_812_359`). Les quatre chemins (senior, aidant, admin, auto) passent par
+`closeMeeting` (`server/lib/meeting-completion.ts`) : même débit, mêmes
+demandes d'avis. Une rencontre `PROPOSED` ne se clôture jamais seule (on ne
+sait pas si elle a eu lieu) : c'est le seul cas encore relancé aux admins
+(24h, `isMeetingOverdue` réduit à `PROPOSED`).
+
+**Décision — contrôle a posteriori plutôt qu'a priori.** Chaque clôture
+garde qui et quand (`Intervention.completedAt`, `completedById`,
+`completedAutomatically`, migration `20261110120000_intervention_completion_audit`,
+`down.sql` fourni). L'onglet Rencontres l'affiche, et le bouton
+« N'a pas eu lieu » (`PATCH /api/interventions/:id/not-held`) annule une
+rencontre clôturée et rend exactement le crédit débité (ajustement `+1`,
+calculé sur le solde net de la rencontre dans le ledger : jamais deux fois,
+rien pour une rencontre gratuite). Écarté : notifier l'admin à chaque
+déclaration du senior (trop de bruit) ; seules les clôtures automatiques
+font l'objet d'une notification récapitulative, sans e-mail.
+
+**Décision — le professeur voit tout le profil, valide ou refuse, et
+l'élève lui est attribué.** `GET /api/validate/info` renvoie pour un jeune :
+nom, âge, ville, établissement, bio, ateliers, et la photo via
+`GET /api/validate/photo?token=` (le prof n'a pas encore de session ; le
+jeton en attente est la preuve, comme pour l'aidant). Jamais l'e-mail, le
+téléphone ou l'adresse du jeune. À la validation :
+- l'adresse qui a reçu le lien a un compte `TEACHER` → l'élève y est rattaché ;
+- pas de compte → le prof peut créer son espace professeur sur la page, avec
+  cette adresse (jamais une adresse venant de la requête), même modèle que
+  l'aidant ; activation + compte + lien dans une transaction
+  (`activateJuniorWithTeacher`) ;
+- il peut aussi valider sans compte, ou l'adresse appartient à un autre rôle
+  → élève actif, admins notifiés pour faire le lien.
+`POST /api/validate/refuse` (« Ce n'est pas mon élève ») passe le compte en
+`SUSPENDED` (jamais de suppression automatique), consomme le lien, écrit au
+jeune et notifie les admins, qui peuvent réactiver depuis l'admin.
+
+**Contrôle FEVES côté professeurs.** Notification aux admins pour chaque
+espace professeur créé depuis un lien, chaque élève validé sans professeur
+rattaché, et chaque refus. Les liens prof-élève restent modifiables dans
+l'admin.
 ## 2026-11-05 — Comptes inactifs : avertissement automatique, suppression humaine (RGPD)
 
 **Besoin.** Conservation des données limitée : un compte sans connexion depuis

@@ -23,12 +23,14 @@ export function getValidationEmailHtml(
 ): string {
   const roleLabel = forAidant
     ? "personne de confiance (son aidant)"
-    : "r&eacute;f&eacute;rent(e)";
+    : "professeur(e)";
   const aidantParagraph = forAidant
     ? `<p style="margin:0 0 18px;color:#1f1f1f;font-size:15px;line-height:1.6;">
                 En validant, vous pourrez aussi cr&eacute;er votre <strong>espace aidant</strong>&nbsp;: suivre ses rencontres, demander un atelier pour lui ou elle, payer ses forfaits et &eacute;crire &agrave; l'&eacute;quipe.
               </p>`
-    : "";
+    : `<p style="margin:0 0 18px;color:#1f1f1f;font-size:15px;line-height:1.6;">
+                Vous verrez son profil complet (biographie, ateliers) avant de d&eacute;cider. En validant, l'&eacute;l&egrave;ve rejoint votre <strong>espace professeur</strong>, que vous pouvez cr&eacute;er au m&ecirc;me moment. Si ce n'est pas votre &eacute;l&egrave;ve, vous pourrez refuser.
+              </p>`;
   const greeting = validatorName
     ? `Bonjour ${escapeHtml(validatorName)},`
     : "Bonjour,";
@@ -471,6 +473,19 @@ export function getAvailabilityEndingEmailHtml(
       </tr>
     </table>`;
   return emailWrapper(`Vos disponibilités se terminent bientôt - ${PLATFORM_NAME}`, body);
+}
+
+/** To the junior: the address they gave refused to validate their registration. */
+export function getRegistrationRefusedEmailHtml(userName: string, contactEmail: string): string {
+  const body = `
+    <p style="margin:0 0 18px;color:#1f1f1f;font-size:15px;line-height:1.6;">Bonjour ${escapeHtml(userName)},</p>
+    <p style="margin:0 0 18px;color:#1f1f1f;font-size:15px;line-height:1.6;">
+      La personne dont vous avez donn&eacute; l'adresse n'a pas valid&eacute; votre inscription sur ${PLATFORM_NAME}. Votre compte n'est donc pas ouvert.
+    </p>
+    <p style="margin:0 0 18px;color:#1f1f1f;font-size:15px;line-height:1.6;">
+      S'il s'agit d'une erreur (mauvaise adresse, autre professeur), &eacute;crivez &agrave; l'&eacute;quipe&nbsp;: <a href="mailto:${escapeHtml(contactEmail)}" style="color:#7c3aed;">${escapeHtml(contactEmail)}</a>.
+    </p>`;
+  return emailWrapper(`Inscription non validée - ${PLATFORM_NAME}`, body);
 }
 
 /**

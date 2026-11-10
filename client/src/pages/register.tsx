@@ -545,7 +545,7 @@ export default function Register() {
               {role === "JUNIOR" && (
                 <div className="space-y-4">
                   <h2 className="text-base font-semibold" data-testid="text-section-junior">
-                    Référent scolaire
+                    Votre professeur
                   </h2>
                   <FormField
                     control={form.control}
@@ -565,7 +565,7 @@ export default function Register() {
                     name="referentLastName"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Nom du référent</FormLabel>
+                        <FormLabel>Nom de votre professeur</FormLabel>
                         <FormField
                           control={form.control}
                           name="referentTitle"
@@ -602,16 +602,16 @@ export default function Register() {
                     name="referentEmail"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Email du référent</FormLabel>
+                        <FormLabel>E-mail de votre professeur</FormLabel>
                         <FormControl>
-                          <Input type="email" placeholder="referent@ecole.fr" {...field} data-testid="input-referentEmail" />
+                          <Input type="email" placeholder="professeur@ecole.fr" {...field} data-testid="input-referentEmail" />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
                     )}
                   />
                   <p className="text-sm text-muted-foreground" data-testid="text-junior-validation-info">
-                    Un lien sera envoyé à votre référent scolaire pour valider votre inscription.
+                    Votre professeur recevra un lien pour valider votre inscription. Il verra votre profil (biographie, ateliers) et vous retrouvera dans son espace professeur.
                   </p>
                 </div>
               )}

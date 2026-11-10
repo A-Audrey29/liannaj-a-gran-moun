@@ -16,6 +16,7 @@ import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import StatusBadge from "@/components/status-badge";
+import { MeetingDoneButton } from "@/components/meeting-done-button";
 import StarRating from "@/components/star-rating";
 import { ArrowLeft, Calendar, Clock, MapPin, Check, X, Mail, CheckCheck } from "lucide-react";
 import { useState, useEffect } from "react";
@@ -281,6 +282,7 @@ function InterventionCard({ intervention, relation, user }: { intervention: Inte
   const { toast } = useToast();
   const isJunior = relation.juniorId === user?.id;
   const isSenior = relation.seniorId === user?.id;
+  const isReferent = user?.role === "REFERENT_SENIOR" && user?.linkedSeniorId === relation.seniorId;
 
   const confirmMutation = useMutation({
     mutationFn: async () => {
@@ -347,6 +349,12 @@ function InterventionCard({ intervention, relation, user }: { intervention: Inte
             <Button size="sm" variant="outline" className="rounded-full text-xs" onClick={() => cancelMutation.mutate()} disabled={cancelMutation.isPending}>
               <X className="w-3 h-3 mr-1" /> Refuser
             </Button>
+          </div>
+        )}
+
+        {(isSenior || isReferent) && (
+          <div className="mt-2">
+            <MeetingDoneButton meeting={intervention} />
           </div>
         )}
 

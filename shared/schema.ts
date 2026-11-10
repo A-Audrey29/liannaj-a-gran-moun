@@ -420,15 +420,24 @@ export const createAdminSchema = z.object({
  * the same step. Their e-mail is the one the validation link was sent to, so
  * it is never taken from the request.
  */
-export const validateRegistrationSchema = z.object({
+// Account opened from the validation link: the aidant of a senior, or the
+// teacher of a junior. The e-mail is never taken from here (validatorEmail).
+export const validatorAccountSchema = z.object({
+  firstName: z.string().trim().min(1, "Prénom requis").max(100),
+  lastName: z.string().trim().min(1, "Nom requis").max(100),
+  password: z.string().min(6, "Le mot de passe doit faire au moins 6 caractères"),
+});
+
+export const validateRegistrationSchema = z
+  .object({
+    token: z.string().min(1, "Token manquant"),
+    aidant: validatorAccountSchema.optional(),
+    teacher: validatorAccountSchema.optional(),
+  })
+  .refine((d) => !(d.aidant && d.teacher), { message: "Un seul compte à créer", path: ["teacher"] });
+
+export const refuseRegistrationSchema = z.object({
   token: z.string().min(1, "Token manquant"),
-  aidant: z
-    .object({
-      firstName: z.string().trim().min(1, "Prénom requis").max(100),
-      lastName: z.string().trim().min(1, "Nom requis").max(100),
-      password: z.string().min(6, "Le mot de passe doit faire au moins 6 caractères"),
-    })
-    .optional(),
 });
 
 export const createReferentSchema = z.object({
@@ -491,6 +500,15 @@ export interface MeetingHistoryEntry {
   seniorComment: string | null;
   juniorRating: number | null;
   juniorComment: string | null;
+  /**
+   * Who closed the meeting (contrôle admin) : null tant qu'elle n'est pas
+   * clôturée, ou pour une rencontre clôturée avant le 2026-11-10.
+   */
+  closure: {
+    at: string; // ISO
+    by: "AUTO" | "SENIOR" | "AIDANT" | "ADMIN" | "UNKNOWN";
+    name: string | null;
+  } | null;
 }
 
 /**

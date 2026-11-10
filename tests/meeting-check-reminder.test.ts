@@ -1,9 +1,9 @@
 /**
  * Relance "rencontres a cloturer" (server/lib/meeting-check-reminder.ts).
  *
- * Seul un admin peut marquer une rencontre realisee : ce sont donc les ADMINS
- * qui sont relances, jamais les participants (decision du 2026-10-12, voir
- * docs/PROCESSUS-RENCONTRES.md). Le job tourne toutes les 6h : chaque
+ * Seules les rencontres jamais confirmees par le jeune (PROPOSED) sont
+ * relancees aux ADMINS : une rencontre CONFIRMED se cloture seule 48h apres
+ * la fin (decision du 2026-11-10, voir docs/PROCESSUS-RENCONTRES.md). Le job tourne toutes les 6h : chaque
  * rencontre en retard n'est signalee qu'une fois, en une notification
  * recapitulative par admin ; un e-mail en echec n'est pas rejoue ; rien ne se
  * passe si une autre instance tient le verrou.
@@ -75,7 +75,7 @@ describe("destinataires : les admins, jamais les participants", () => {
     const adminB = await createUser("ADMIN");
     const r1 = await relation();
     const r2 = await relation();
-    await creerRencontre(r1.relation.id, "CONFIRMED", IL_Y_A_3_JOURS());
+    await creerRencontre(r1.relation.id, "PROPOSED", IL_Y_A_3_JOURS());
     await creerRencontre(r2.relation.id, "PROPOSED", IL_Y_A_3_JOURS());
 
     await checkAndSendMeetingCheckReminders();
@@ -96,7 +96,7 @@ describe("destinataires : les admins, jamais les participants", () => {
     await createUser("ADMIN", { status: "SUSPENDED" });
     const actif = await createUser("ADMIN");
     const r = await relation();
-    await creerRencontre(r.relation.id, "CONFIRMED", IL_Y_A_3_JOURS());
+    await creerRencontre(r.relation.id, "PROPOSED", IL_Y_A_3_JOURS());
 
     await checkAndSendMeetingCheckReminders();
 
@@ -105,7 +105,7 @@ describe("destinataires : les admins, jamais les participants", () => {
 
   it("sans admin actif, ne marque rien pour relancer a la passe suivante", async () => {
     const r = await relation();
-    const rencontre = await creerRencontre(r.relation.id, "CONFIRMED", IL_Y_A_3_JOURS());
+    const rencontre = await creerRencontre(r.relation.id, "PROPOSED", IL_Y_A_3_JOURS());
 
     await checkAndSendMeetingCheckReminders();
 
@@ -119,7 +119,7 @@ describe("selection des rencontres a signaler", () => {
     await createUser("ADMIN");
   });
 
-  it("signale les rencontres PROPOSED ou CONFIRMED en retard et les marque", async () => {
+  it("signale les rencontres PROPOSED en retard, jamais les CONFIRMED (elles se cloturent seules a 48h)", async () => {
     const r = await relation();
     const proposee = await creerRencontre(r.relation.id, "PROPOSED", IL_Y_A_3_JOURS());
     const confirmee = await creerRencontre(r.relation.id, "CONFIRMED", IL_Y_A_3_JOURS());
@@ -127,12 +127,12 @@ describe("selection des rencontres a signaler", () => {
     await checkAndSendMeetingCheckReminders();
 
     expect(await estMarquee(proposee.id)).toBe(true);
-    expect(await estMarquee(confirmee.id)).toBe(true);
+    expect(await estMarquee(confirmee.id)).toBe(false);
   });
 
   it("ignore une rencontre future", async () => {
     const r = await relation();
-    await creerRencontre(r.relation.id, "CONFIRMED", DEMAIN());
+    await creerRencontre(r.relation.id, "PROPOSED", DEMAIN());
 
     await checkAndSendMeetingCheckReminders();
 
@@ -154,12 +154,12 @@ describe("selection des rencontres a signaler", () => {
 
   it("ne change jamais le statut de la rencontre : il notifie, il ne decide pas", async () => {
     const r = await relation();
-    const rencontre = await creerRencontre(r.relation.id, "CONFIRMED", IL_Y_A_3_JOURS());
+    const rencontre = await creerRencontre(r.relation.id, "PROPOSED", IL_Y_A_3_JOURS());
 
     await checkAndSendMeetingCheckReminders();
 
     const apres = await prisma.intervention.findUniqueOrThrow({ where: { id: rencontre.id } });
-    expect(apres.status).toBe("CONFIRMED");
+    expect(apres.status).toBe("PROPOSED");
   });
 });
 
@@ -173,7 +173,7 @@ describe("delai de 24h apres la fin de la rencontre", () => {
 
   it("ignore une rencontre en cours", async () => {
     const r = await relation();
-    await creerRencontre(r.relation.id, "CONFIRMED", new Date(Date.now() - HEURE));
+    await creerRencontre(r.relation.id, "PROPOSED", new Date(Date.now() - HEURE));
 
     await checkAndSendMeetingCheckReminders();
 
@@ -182,7 +182,7 @@ describe("delai de 24h apres la fin de la rencontre", () => {
 
   it("ignore une rencontre terminee depuis moins de 24h", async () => {
     const r = await relation();
-    await creerRencontre(r.relation.id, "CONFIRMED", finIlYA(23));
+    await creerRencontre(r.relation.id, "PROPOSED", finIlYA(23));
 
     await checkAndSendMeetingCheckReminders();
 
@@ -191,7 +191,7 @@ describe("delai de 24h apres la fin de la rencontre", () => {
 
   it("signale une rencontre terminee depuis plus de 24h", async () => {
     const r = await relation();
-    await creerRencontre(r.relation.id, "CONFIRMED", finIlYA(25));
+    await creerRencontre(r.relation.id, "PROPOSED", finIlYA(25));
 
     await checkAndSendMeetingCheckReminders();
 
@@ -201,7 +201,7 @@ describe("delai de 24h apres la fin de la rencontre", () => {
   it("tient compte de la duree : une rencontre longue commencee il y a 25h n'est pas encore en retard", async () => {
     const r = await relation();
     // 8h de rencontre : fin il y a 17h seulement.
-    await creerRencontre(r.relation.id, "CONFIRMED", new Date(Date.now() - 25 * HEURE), null, 480);
+    await creerRencontre(r.relation.id, "PROPOSED", new Date(Date.now() - 25 * HEURE), null, 480);
 
     await checkAndSendMeetingCheckReminders();
 
@@ -213,7 +213,7 @@ describe("idempotence et echec e-mail", () => {
   it("une seconde passe ne signale pas de nouveau les memes rencontres", async () => {
     await createUser("ADMIN");
     const r = await relation();
-    await creerRencontre(r.relation.id, "CONFIRMED", IL_Y_A_3_JOURS());
+    await creerRencontre(r.relation.id, "PROPOSED", IL_Y_A_3_JOURS());
 
     await checkAndSendMeetingCheckReminders();
     await checkAndSendMeetingCheckReminders();
@@ -225,7 +225,7 @@ describe("idempotence et echec e-mail", () => {
   it("ignore une rencontre deja marquee relancee", async () => {
     await createUser("ADMIN");
     const r = await relation();
-    await creerRencontre(r.relation.id, "CONFIRMED", IL_Y_A_3_JOURS(), new Date());
+    await creerRencontre(r.relation.id, "PROPOSED", IL_Y_A_3_JOURS(), new Date());
 
     await checkAndSendMeetingCheckReminders();
 
@@ -236,7 +236,7 @@ describe("idempotence et echec e-mail", () => {
     const enEchec = await createUser("ADMIN");
     const ok = await createUser("ADMIN");
     const r = await relation();
-    const rencontre = await creerRencontre(r.relation.id, "CONFIRMED", IL_Y_A_3_JOURS());
+    const rencontre = await creerRencontre(r.relation.id, "PROPOSED", IL_Y_A_3_JOURS());
     vi.mocked(sendEmail).mockImplementation(async ({ to }) => {
       if (to === enEchec.email) throw new Error("Brevo error (500)");
       return null;
@@ -256,7 +256,7 @@ describe("verrou multi-instance", () => {
   it("ne fait rien si une autre instance tient deja le verrou", async () => {
     await createUser("ADMIN");
     const r = await relation();
-    const rencontre = await creerRencontre(r.relation.id, "CONFIRMED", IL_Y_A_3_JOURS());
+    const rencontre = await creerRencontre(r.relation.id, "PROPOSED", IL_Y_A_3_JOURS());
 
     const autreInstance = await pool.connect();
     try {
@@ -275,7 +275,7 @@ describe("verrou multi-instance", () => {
     await createUser("ADMIN");
     const r = await relation();
     await checkAndSendMeetingCheckReminders();
-    await creerRencontre(r.relation.id, "CONFIRMED", IL_Y_A_3_JOURS());
+    await creerRencontre(r.relation.id, "PROPOSED", IL_Y_A_3_JOURS());
 
     await checkAndSendMeetingCheckReminders();
 
@@ -289,8 +289,10 @@ describe("regles partagees avec l'interface admin", () => {
 
   it("en retard : bascule exactement 24h apres la fin", () => {
     const juste = new Date(maintenant.getTime() - 1);
-    expect(isMeetingOverdue({ status: "CONFIRMED", scheduledDate: debut, durationMinutes: 120 }, maintenant)).toBe(true);
-    expect(isMeetingOverdue({ status: "CONFIRMED", scheduledDate: debut, durationMinutes: 120 }, juste)).toBe(false);
+    expect(isMeetingOverdue({ status: "PROPOSED", scheduledDate: debut, durationMinutes: 120 }, maintenant)).toBe(true);
+    expect(isMeetingOverdue({ status: "PROPOSED", scheduledDate: debut, durationMinutes: 120 }, juste)).toBe(false);
+    // Confirmee : jamais "en retard", elle se cloture automatiquement.
+    expect(isMeetingOverdue({ status: "CONFIRMED", scheduledDate: debut, durationMinutes: 120 }, maintenant)).toBe(false);
   });
 
   it("terminee : des la fin, sans attendre 24h (boutons admin)", () => {

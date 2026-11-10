@@ -142,6 +142,7 @@ model User {
   studentComments     TeacherComment[] @relation("StudentComments")
 
   availabilities      Availability[] @relation("UserAvailabilities")
+  completedInterventions Intervention[] @relation("InterventionCompletedBy")
 
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
@@ -243,6 +244,14 @@ model Intervention {
   // une fois à la création et mémorisé, pour que la réservation et le débit
   // ne dépendent pas de l'ordre de clôture. Règle : isFreeMeeting (storage.ts).
   isFree          Boolean            @default(false)
+
+  // Clôture : qui a déclaré la rencontre réalisée, et quand. completedById
+  // null + completedAutomatically = clôture automatique 48h après la fin
+  // (job meeting-auto-complete). Sert au contrôle a posteriori par l'admin.
+  completedAt           DateTime?
+  completedById         String?
+  completedBy           User?    @relation("InterventionCompletedBy", fields: [completedById], references: [id], onDelete: SetNull)
+  completedAutomatically Boolean @default(false)
 
   createdAt       DateTime           @default(now())
 

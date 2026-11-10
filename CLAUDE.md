@@ -96,6 +96,17 @@ npm run db:push    # prisma db push — NE PAS utiliser sur la base Neon avec do
   (`CONFIRMED` → `COMPLETED_PENDING_FEEDBACK`), pas à la création. Solde
   dérivé de `CreditLedger` (historique), jamais d'un compteur brut. Détail
   complet dans `docs/decisions.md`.
+- **Clôture des rencontres** (2026-11-10) : le senior ou son aidant déclare
+  « La rencontre a eu lieu » ; sinon clôture automatique 48h après la fin
+  (`CONFIRMED` seulement). Toute clôture passe par `closeMeeting`
+  (`server/lib/meeting-completion.ts`), jamais par `completeIntervention`
+  directement. L'admin contrôle après coup (qui a clôturé, « N'a pas eu
+  lieu » rend le crédit). Process FEVES : `docs/PROCESSUS-RENCONTRES.md`.
+- **Validation d'un jeune** : par son professeur, qui voit tout le profil.
+  Valider rattache l'élève au compte `TEACHER` de l'adresse qui a reçu le
+  lien (ou le crée sur la page) ; refuser suspend le compte. Admins notifiés
+  en arrière-plan. Même principe que l'aidant : jamais d'adresse venant de la
+  requête.
 - **Photos**: stockées en base (table `ProfilePhoto`), converties en WebP
   800px, EXIF supprimé — jamais sur le filesystem (Render est éphémère).
 - **Seed** (`prisma/seed.ts`): wipe destructif de la base. Toujours confirmer

@@ -1,5 +1,10 @@
 import { prisma } from "./prisma";
-import { OVERDUE_STATUSES, isMeetingOverdue, overdueStartBefore } from "../shared/meeting-check";
+import {
+  isMeetingOverdue,
+  overdueStartBefore,
+  isMeetingAutoCompletable,
+  autoCompleteStartBefore,
+} from "../shared/meeting-check";
 import type { User, Category, UserCategory, Relation, Intervention, AdminRecommendation, Notification, PaymentRecord, Favorite, Conversation, Message, PushSubscription, Report, TeacherStudent, TeacherComment, Availability, CreditLedger, NpsResponse } from "../generated/prisma/client.ts";
 import { Prisma } from "../generated/prisma/client.ts";
 import { COMPLETED_STATUSES } from "../shared/schema";
@@ -113,6 +118,12 @@ async function computeCredits(db: CreditsDb, seniorId: string): Promise<{ balanc
   return { balance, available: balance - reserved };
 }
 
+/** A meeting with its participants and whoever closed it (admin control). */
+export type MeetingHistoryRow = Intervention & {
+  relation: Relation & { senior: User; junior: User };
+  completedBy: { firstName: string; lastName: string; role: User["role"] } | null;
+};
+
 export interface IStorage {
   getUser(id: string): Promise<User | null>;
   getUserByEmail(email: string): Promise<User | null>;
@@ -130,6 +141,19 @@ export interface IStorage {
   ): Promise<User | null>;
   /** PENDING_VALIDATION -> ACTIVE if the token still matches. False otherwise. */
   activatePendingUser(userId: string, token: string): Promise<boolean>;
+  /**
+   * Validation of a junior by their teacher, in one transaction: activates the
+   * junior and links them to the teacher — an existing TEACHER account
+   * (`teacherId`), a new one created here (`newTeacher`), or none. Returns
+   * null if the token was consumed meanwhile (nothing written).
+   */
+  activateJuniorWithTeacher(
+    juniorId: string,
+    token: string,
+    teacher: { teacherId: string } | { newTeacher: { email: string; password: string; firstName: string; lastName: string } } | null
+  ): Promise<{ teacher: User | null } | null>;
+  /** PENDING_VALIDATION -> SUSPENDED, token consumed. False if no longer pending. */
+  refusePendingUser(userId: string, token: string): Promise<boolean>;
   createUser(data: Prisma.UserCreateInput): Promise<User>;
   updateUser(id: string, data: Prisma.UserUpdateInput): Promise<User>;
   /**
@@ -180,11 +204,26 @@ export interface IStorage {
   ): Promise<{ intervention: Intervention } | { conflict: true } | { locked: true } | { noCredits: true }>;
   updateIntervention(id: string, data: Prisma.InterventionUpdateInput): Promise<Intervention>;
   /**
-   * CONFIRMED -> COMPLETED_PENDING_FEEDBACK and the credit debit, atomically.
-   * Returns null if the meeting was no longer CONFIRMED (double click, two
-   * admins): nothing is debited twice.
+   * CONFIRMED -> COMPLETED_PENDING_FEEDBACK and the credit debit, atomically,
+   * recording who closed it (`triggeredById` null = automatic closure).
+   * `fromStatuses` lets an admin close a meeting the junior never confirmed.
+   * Returns null if the meeting was no longer in those statuses (double
+   * click, senior + job at once): nothing is debited twice.
    */
-  completeIntervention(interventionId: string, seniorId: string, triggeredById: string): Promise<{ intervention: Intervention; free: boolean } | null>;
+  completeIntervention(
+    interventionId: string,
+    seniorId: string,
+    triggeredById: string | null,
+    options?: { fromStatuses?: ("PROPOSED" | "CONFIRMED")[]; automatic?: boolean }
+  ): Promise<{ intervention: Intervention; free: boolean } | null>;
+  /**
+   * Admin correction: a closed meeting did not take place. -> CANCELLED and
+   * the credit given back (ADJUSTMENT +1) if it had been debited, atomically.
+   * Null if the meeting was not closed (anymore).
+   */
+  revertCompletedIntervention(interventionId: string, adminId: string): Promise<{ intervention: Intervention; refunded: boolean } | null>;
+  /** CONFIRMED meetings ended more than AUTO_COMPLETE_HOURS ago. */
+  getAutoCompletableInterventions(now?: Date): Promise<(Intervention & { relation: Relation })[]>;
   getCredits(seniorId: string): Promise<{ balance: number; available: number }>;
   /**
    * PROPOSED/CONFIRMED -> CANCELLED, conditionally: returns null if the
@@ -215,7 +254,7 @@ export interface IStorage {
   getMeetingHistory(
     scope: MeetingHistoryScope,
     filters?: MeetingHistoryFilters
-  ): Promise<(Intervention & { relation: Relation & { senior: User; junior: User } })[]>;
+  ): Promise<MeetingHistoryRow[]>;
 
   getAvailabilitiesByUser(userId: string): Promise<Availability[]>;
   getAvailabilitiesInRange(userId: string, from: Date, to: Date): Promise<Availability[]>;
@@ -456,6 +495,41 @@ class DatabaseStorage implements IStorage {
     return activated.count > 0;
   }
 
+  async activateJuniorWithTeacher(
+    juniorId: string,
+    token: string,
+    teacher: { teacherId: string } | { newTeacher: { email: string; password: string; firstName: string; lastName: string } } | null
+  ): Promise<{ teacher: User | null } | null> {
+    return prisma.$transaction(async (tx) => {
+      // Conditional on the token, like activateSeniorWithAidant.
+      const activated = await tx.user.updateMany({
+        where: { id: juniorId, validationToken: token, status: "PENDING_VALIDATION" },
+        data: { status: "ACTIVE", validationToken: null, validationExpiry: null },
+      });
+      if (activated.count === 0) return null;
+      if (!teacher) return { teacher: null };
+
+      const teacherUser =
+        "teacherId" in teacher
+          ? await tx.user.findUniqueOrThrow({ where: { id: teacher.teacherId } })
+          : await tx.user.create({ data: { ...teacher.newTeacher, role: "TEACHER", status: "ACTIVE" } });
+      await tx.teacherStudent.upsert({
+        where: { teacherId_studentId: { teacherId: teacherUser.id, studentId: juniorId } },
+        create: { teacherId: teacherUser.id, studentId: juniorId },
+        update: {},
+      });
+      return { teacher: teacherUser };
+    });
+  }
+
+  async refusePendingUser(userId: string, token: string): Promise<boolean> {
+    const refused = await prisma.user.updateMany({
+      where: { id: userId, validationToken: token, status: "PENDING_VALIDATION" },
+      data: { status: "SUSPENDED", validationToken: null, validationExpiry: null },
+    });
+    return refused.count > 0;
+  }
+
   async createUser(data: Prisma.UserCreateInput): Promise<User> {
     return prisma.user.create({ data });
   }
@@ -659,7 +733,8 @@ class DatabaseStorage implements IStorage {
     // narrows the set, isMeetingOverdue applies the exact rule.
     const candidates = await prisma.intervention.findMany({
       where: {
-        status: { in: [...OVERDUE_STATUSES] },
+        // Only PROPOSED: a CONFIRMED meeting closes itself (auto-complete job).
+        status: "PROPOSED",
         meetingCheckReminderSentAt: null,
         scheduledDate: { lte: overdueStartBefore(now) },
       },
@@ -1000,14 +1075,21 @@ class DatabaseStorage implements IStorage {
   async completeIntervention(
     interventionId: string,
     seniorId: string,
-    triggeredById: string
+    triggeredById: string | null,
+    options: { fromStatuses?: ("PROPOSED" | "CONFIRMED")[]; automatic?: boolean } = {}
   ): Promise<{ intervention: Intervention; free: boolean } | null> {
+    const fromStatuses = options.fromStatuses ?? ["CONFIRMED"];
     return prisma.$transaction(async (tx) => {
       // Conditional update: only one of two concurrent calls moves the status,
       // the other sees count 0 and debits nothing.
       const { count } = await tx.intervention.updateMany({
-        where: { id: interventionId, status: "CONFIRMED" },
-        data: { status: "COMPLETED_PENDING_FEEDBACK" },
+        where: { id: interventionId, status: { in: fromStatuses } },
+        data: {
+          status: "COMPLETED_PENDING_FEEDBACK",
+          completedAt: new Date(),
+          completedById: triggeredById,
+          completedAutomatically: options.automatic === true,
+        },
       });
       if (count === 0) return null;
 
@@ -1027,6 +1109,51 @@ class DatabaseStorage implements IStorage {
       }
       return { intervention: updated, free };
     });
+  }
+
+  async revertCompletedIntervention(
+    interventionId: string,
+    adminId: string
+  ): Promise<{ intervention: Intervention; refunded: boolean } | null> {
+    return prisma.$transaction(async (tx) => {
+      const { count } = await tx.intervention.updateMany({
+        where: { id: interventionId, status: { in: ["COMPLETED_PENDING_FEEDBACK", "COMPLETED"] } },
+        data: { status: "CANCELLED" },
+      });
+      if (count === 0) return null;
+      const intervention = await tx.intervention.findUniqueOrThrow({
+        where: { id: interventionId },
+        include: { relation: { select: { seniorId: true } } },
+      });
+
+      // Net movement already booked for this meeting (-1 if debited, 0 if
+      // free or already refunded): give back exactly that, never more.
+      const { _sum } = await tx.creditLedger.aggregate({ where: { interventionId }, _sum: { amount: true } });
+      const net = _sum.amount ?? 0;
+      if (net < 0) {
+        await tx.creditLedger.create({
+          data: {
+            seniorId: intervention.relation.seniorId,
+            type: "ADJUSTMENT",
+            amount: -net,
+            reason: "Atelier non tenu — crédit rendu",
+            triggeredById: adminId,
+            interventionId,
+          },
+        });
+      }
+      const { relation: _relation, ...plain } = intervention;
+      return { intervention: plain, refunded: net < 0 };
+    });
+  }
+
+  async getAutoCompletableInterventions(now: Date = new Date()): Promise<(Intervention & { relation: Relation })[]> {
+    const candidates = await prisma.intervention.findMany({
+      where: { status: "CONFIRMED", scheduledDate: { lte: autoCompleteStartBefore(now) } },
+      include: { relation: true },
+      orderBy: { scheduledDate: "asc" },
+    });
+    return candidates.filter((intervention) => isMeetingAutoCompletable(intervention, now));
   }
 
   async getCredits(seniorId: string): Promise<{ balance: number; available: number }> {
@@ -1087,7 +1214,7 @@ class DatabaseStorage implements IStorage {
   async getMeetingHistory(
     scope: MeetingHistoryScope,
     filters?: MeetingHistoryFilters
-  ): Promise<(Intervention & { relation: Relation & { senior: User; junior: User } })[]> {
+  ): Promise<MeetingHistoryRow[]> {
     const relationWhere: Prisma.RelationWhereInput | undefined =
       scope.kind === "all"
         ? undefined
@@ -1109,7 +1236,10 @@ class DatabaseStorage implements IStorage {
 
     return prisma.intervention.findMany({
       where,
-      include: { relation: { include: { senior: true, junior: true } } },
+      include: {
+        relation: { include: { senior: true, junior: true } },
+        completedBy: { select: { firstName: true, lastName: true, role: true } },
+      },
       orderBy: { scheduledDate: "desc" },
     });
   }
