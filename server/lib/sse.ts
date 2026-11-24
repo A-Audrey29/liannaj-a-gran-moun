@@ -37,6 +37,24 @@ export function sendSSEEvent(userId: string, event: string, data: any) {
   return true;
 }
 
+/**
+ * Ends every open stream of a user. Used when their sessions are destroyed
+ * (suspension, deletion, password change): an open stream is never
+ * re-authenticated, so it would keep receiving events. The client reconnects
+ * after 5 s; that new request only succeeds if its session is still valid.
+ */
+export function closeSSEClients(userId: string) {
+  const userClients = clients.get(userId);
+  if (!userClients) return;
+  clients.delete(userId);
+  for (const client of userClients) {
+    try {
+      client.res.end();
+    } catch {
+    }
+  }
+}
+
 export function isUserConnected(userId: string): boolean {
   const userClients = clients.get(userId);
   return !!userClients && userClients.length > 0;

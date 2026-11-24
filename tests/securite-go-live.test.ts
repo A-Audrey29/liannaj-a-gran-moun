@@ -160,3 +160,27 @@ describe("limites de débit", () => {
     expect(res.body.messages.length).toBe(3);
   });
 });
+
+describe("flux temps réel (SSE) à la suspension", () => {
+  it("la suspension ferme le flux déjà ouvert du compte, pas celui des autres", async () => {
+    const { addSSEClient, isUserConnected } = await import("../server/lib/sse");
+    const admin = await createUser("ADMIN");
+    const junior = await createUser("JUNIOR");
+    const other = await createUser("SENIOR");
+
+    // Fake open streams: only end() and on() are used by the SSE module.
+    const fakeStream = () => ({ end: vi.fn(), on: vi.fn(), write: vi.fn() });
+    const juniorStream = fakeStream();
+    const otherStream = fakeStream();
+    addSSEClient(junior.id, juniorStream as any);
+    addSSEClient(other.id, otherStream as any);
+
+    const agentAdmin = await loginAs(admin);
+    expect((await agentAdmin.patch(`/api/admin/users/${junior.id}/suspend`).send({})).status).toBe(200);
+
+    expect(juniorStream.end).toHaveBeenCalled();
+    expect(isUserConnected(junior.id)).toBe(false);
+    expect(otherStream.end).not.toHaveBeenCalled();
+    expect(isUserConnected(other.id)).toBe(true);
+  });
+});

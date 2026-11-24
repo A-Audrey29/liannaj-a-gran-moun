@@ -146,6 +146,10 @@ chaque requête (seul `ACTIVE` passe) **et** sessions effacées à la suspension
 et à la suppression. Les deux, parce que la vérification seule couvre aussi un
 statut changé directement en base, et l'effacement évite de garder des
 sessions mortes. Helper partagé `destroyUserSessions` (`server/lib/sessions.ts`).
+Il ferme aussi les flux temps réel (SSE) ouverts du compte : un flux n'est
+jamais ré-authentifié, il aurait continué à recevoir les événements. Le
+navigateur se reconnecte seul après 5 s ; seule une session encore valide y
+parvient.
 
 **Changement de mot de passe.** Les autres appareils sont déconnectés,
 l'appareil courant reste connecté (même logique que la réinitialisation, qui
