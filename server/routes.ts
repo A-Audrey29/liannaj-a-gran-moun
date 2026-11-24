@@ -44,6 +44,7 @@ import { env, getBaseUrl as getPublicBaseUrl } from "./env";
 import { createPasswordResetToken, resetPasswordWithToken } from "./lib/password-reset";
 import { closeMeeting } from "./lib/meeting-completion";
 import { isMeetingEnded } from "../shared/meeting-check";
+import { destroyUserSessions } from "./lib/sessions";
 
 const TAILLE_MAX_PHOTO = 5 * 1024 * 1024;
 
@@ -317,6 +318,37 @@ const checkoutLimiter = rateLimit({
   legacyHeaders: false,
 });
 
+// Every call can send an e-mail to the validator: without a limit, anyone
+// knowing a pending address could flood that inbox and burn the Brevo quota.
+const resendValidationLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: isDev ? 1000 : 5,
+  message: { message: "Trop de demandes. Réessayez dans 15 minutes." },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+// Routes that e-mail every admin (reports, referent contact). Counted per
+// account, mounted after requireAuth/requireReferent so req.user is set.
+const adminEmailLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  limit: isDev ? 1000 : 10,
+  keyGenerator: (req) => req.user!.id,
+  message: { message: "Trop de messages envoyés à l'équipe. Réessayez dans une heure." },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+// Chat messages, per account: generous for a real conversation, stops a script.
+const messageLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  limit: isDev ? 1000 : 30,
+  keyGenerator: (req) => req.user!.id,
+  message: { message: "Trop de messages envoyés. Patientez une minute." },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
 /** Côté le plus long d'une photo de profil après redimensionnement. */
 const PHOTO_TAILLE_MAX_PX = 800;
 
@@ -364,11 +396,9 @@ async function validateAndProcessImage(
   };
 }
 
-function getBaseUrl(req: any): string {
-  const proto = req.headers["x-forwarded-proto"] || req.protocol || "https";
-  const host = req.headers["x-forwarded-host"] || req.headers.host || "localhost:5000";
-  return `${proto}://${host}`;
-}
+// Links in e-mails always use BASE_URL (getPublicBaseUrl), never the request's
+// Host / X-Forwarded-Host headers: the sender of a request controls those, and
+// could make the e-mail the *other* person receives point to a phishing site.
 
 /**
  * Blocage dur d'un créneau de rencontre. Retourne un message d'erreur FR, ou
@@ -429,6 +459,8 @@ async function deleteUserAccount(user: { id: string; profilePhoto: string | null
     if (fs.existsSync(photoPath)) fs.unlinkSync(photoPath);
   }
   await storage.deleteUser(user.id);
+  // Its open sessions go too (deserializeUser would refuse them anyway).
+  await destroyUserSessions(user.id);
 }
 
 export async function registerRoutes(
@@ -509,7 +541,7 @@ export async function registerRoutes(
         }
       }
 
-      const baseUrl = process.env.BASE_URL || `${req.protocol}://${req.get("host")}`;
+      const baseUrl = getPublicBaseUrl();
       const validationUrl = `${baseUrl}/api/validate?token=${validationToken}`;
       const userName = `${user.firstName} ${user.lastName}`;
 
@@ -627,6 +659,9 @@ export async function registerRoutes(
 
       const hashed = await bcrypt.hash(parsed.data.newPassword, 10);
       await storage.updateUser(user.id, { password: hashed });
+      // Other devices are logged out (a leaked password stops working there
+      // too); the current one stays connected.
+      await destroyUserSessions(user.id, req.sessionID);
       res.json({ message: "Mot de passe modifié" });
     } catch (err) {
       console.error("[CHANGE_PASSWORD] Error:", err);
@@ -1172,7 +1207,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/auth/resend-validation", async (req, res) => {
+  app.post("/api/auth/resend-validation", resendValidationLimiter, async (req, res) => {
     try {
       const { email } = req.body;
       if (!email || typeof email !== "string") {
@@ -1189,7 +1224,7 @@ export async function registerRoutes(
           validationExpiry: new Date(Date.now() + VALIDATION_TOKEN_TTL_MS),
         });
 
-        const baseUrl = process.env.BASE_URL || `${req.protocol}://${req.get("host")}`;
+        const baseUrl = getPublicBaseUrl();
         const validationUrl = `${baseUrl}/api/validate?token=${newToken}`;
 
         if (process.env.NODE_ENV !== "production") {
@@ -1356,7 +1391,7 @@ export async function registerRoutes(
         sendEmail({
           to: senior.email,
           subject: `${PLATFORM_NAME} - Votre demande de relation a été acceptée`,
-          htmlContent: getRelationAcceptedEmailHtml(seniorName, juniorName, `${getBaseUrl(req)}/relations/${relation.id}`),
+          htmlContent: getRelationAcceptedEmailHtml(seniorName, juniorName, `${getPublicBaseUrl()}/relations/${relation.id}`),
         }).catch(console.error);
       }
 
@@ -1506,7 +1541,7 @@ export async function registerRoutes(
         sendEmail({
           to: junior.email,
           subject: `${PLATFORM_NAME} - Atelier demandé pour le ${dateStr}`,
-          htmlContent: getInterventionProposedEmailHtml(juniorName, dateStr, locationStr, `${getBaseUrl(req)}/relations/${relation.id}`),
+          htmlContent: getInterventionProposedEmailHtml(juniorName, dateStr, locationStr, `${getPublicBaseUrl()}/relations/${relation.id}`),
         }).catch(console.error);
       }
 
@@ -1550,7 +1585,7 @@ export async function registerRoutes(
         sendEmail({
           to: senior.email,
           subject: `${PLATFORM_NAME} - Rencontre confirmée pour le ${dateStr}`,
-          htmlContent: getInterventionConfirmedEmailHtml(seniorName, dateStr, `${getBaseUrl(req)}/relations/${intervention.relationId}`),
+          htmlContent: getInterventionConfirmedEmailHtml(seniorName, dateStr, `${getPublicBaseUrl()}/relations/${intervention.relationId}`),
         }).catch(console.error);
       }
 
@@ -2186,6 +2221,8 @@ export async function registerRoutes(
       if (user.role === "ADMIN") return res.status(403).json({ message: "Impossible de suspendre un administrateur" });
       // Clearing the token: an old validation link must not undo the suspension.
       const updated = await storage.updateUser(user.id, { status: "SUSPENDED", validationToken: null, validationExpiry: null });
+      // Logged out everywhere now (deserializeUser also refuses a non-active account).
+      await destroyUserSessions(user.id);
       res.json(sanitizeUser(updated));
     } catch (err) {
       console.error("[ADMIN_SUSPEND] Error:", err);
@@ -2427,7 +2464,7 @@ export async function registerRoutes(
       }
 
       const conv = await storage.getOrCreateConversation(relationId);
-      const limit = parseInt(req.query.limit as string) || 50;
+      const limit = Math.min(Math.max(parseInt(req.query.limit as string) || 50, 1), 100);
       const cursor = req.query.cursor as string | undefined;
       const messages = await storage.getMessages(conv.id, limit, cursor);
       res.json({ messages, conversationId: conv.id });
@@ -2437,7 +2474,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/messages/conversations/:id", requireAuth, async (req, res) => {
+  app.post("/api/messages/conversations/:id", requireAuth, messageLimiter, async (req, res) => {
     try {
       const { content } = req.body;
       if (!content || typeof content !== "string" || content.trim().length === 0) {
@@ -2627,7 +2664,7 @@ export async function registerRoutes(
 
   // ─── Signalements ──────────────────────────────────────────────────────────
 
-  app.post("/api/reports", requireAuth, async (req, res) => {
+  app.post("/api/reports", requireAuth, adminEmailLimiter, async (req, res) => {
     const parsed = insertReportSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: "Données invalides", errors: parsed.error.flatten() });
 
@@ -2655,7 +2692,7 @@ export async function registerRoutes(
 
       const reporter = await storage.getUser(reporterId);
       const reporterName = reporter ? `${reporter.firstName} ${reporter.lastName}` : "Utilisateur inconnu";
-      const adminUrl = `${process.env.BASE_URL || ""}/admin`;
+      const adminUrl = `${getPublicBaseUrl()}/admin`;
       const admins = await storage.getAdmins();
       for (const admin of admins) {
         // sendEmail attend un objet { to, subject, htmlContent }. Auparavant
@@ -2867,7 +2904,7 @@ export async function registerRoutes(
       const admins = await storage.getAdmins();
       const teacherName = `${teacher.firstName} ${teacher.lastName}`;
       const studentName = student ? `${student.firstName} ${student.lastName}` : "un élève";
-      const baseUrl = process.env.BASE_URL || getBaseUrl(req);
+      const baseUrl = getPublicBaseUrl();
       for (const admin of admins) {
         sendEmail({
           to: admin.email,
@@ -3208,7 +3245,7 @@ export async function registerRoutes(
         return res.status(400).json({ message: "Seul un sénior ou un référent lié à un sénior peut acheter des crédits" });
       }
 
-      const baseUrl = getBaseUrl(req);
+      const baseUrl = getPublicBaseUrl();
       const { url } = await paymentProvider.createCheckoutSession({
         offerId: offer.id,
         offerLabel: offer.label,
@@ -3372,7 +3409,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/referent/contact-admin", requireReferent, async (req, res) => {
+  app.post("/api/referent/contact-admin", requireReferent, adminEmailLimiter, async (req, res) => {
     try {
       const { referentContactSchema } = await import("../shared/schema");
       const parsed = referentContactSchema.safeParse(req.body);
@@ -3391,7 +3428,7 @@ export async function registerRoutes(
 
       const admins = await storage.getAdmins();
       const senderName = `${user.firstName} ${user.lastName}`;
-      const baseUrl = process.env.BASE_URL || getBaseUrl(req);
+      const baseUrl = getPublicBaseUrl();
       for (const admin of admins) {
         sendEmail({
           to: admin.email,

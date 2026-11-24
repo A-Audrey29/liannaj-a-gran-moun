@@ -133,6 +133,50 @@ reconnecter est comparé à sa dernière connexion, pas à son dernier usage : s
 conséquence à l'échelle de 2 ans. Les comptes jamais validés
 (`PENDING_VALIDATION`) ne sont pas couverts par ce mécanisme.
 
+## 2026-11-04 — Correctifs de sécurité avant la mise en ligne
+
+Trouvés à l'audit « prêt pour la mise en ligne » (hors paiement et pages
+légales). Tests : `tests/securite-go-live.test.ts`.
+
+**Session d'un compte suspendu.** Avant, `deserializeUser` ne regardait pas le
+statut : un compte suspendu gardait l'accès jusqu'à la fin de son cookie
+(7 jours). Sur une plateforme où des adultes écrivent à des jeunes parfois
+mineurs, une suspension doit agir tout de suite. Désormais : statut vérifié à
+chaque requête (seul `ACTIVE` passe) **et** sessions effacées à la suspension
+et à la suppression. Les deux, parce que la vérification seule couvre aussi un
+statut changé directement en base, et l'effacement évite de garder des
+sessions mortes. Helper partagé `destroyUserSessions` (`server/lib/sessions.ts`).
+Il ferme aussi les flux temps réel (SSE) ouverts du compte : un flux n'est
+jamais ré-authentifié, il aurait continué à recevoir les événements. Le
+navigateur se reconnecte seul après 5 s ; seule une session encore valide y
+parvient.
+
+**Changement de mot de passe.** Les autres appareils sont déconnectés,
+l'appareil courant reste connecté (même logique que la réinitialisation, qui
+fermait déjà tout).
+
+**Liens dans les e-mails.** L'ancien `getBaseUrl(req)` lisait
+`X-Forwarded-Host` : l'auteur d'une requête (ex. un jeune qui accepte une
+relation) pouvait faire pointer le lien de l'e-mail reçu par *l'autre* personne
+vers un site de phishing. Tous les liens passent maintenant par `BASE_URL`
+(`getBaseUrl()` de `server/env.ts`, obligatoire en production). Écarté : une
+liste blanche d'hôtes, inutile tant qu'il n'y a qu'un domaine.
+
+**Limites de débit** sur les routes qui envoient un e-mail ou un message :
+renvoi du lien de validation (5 / 15 min par IP), signalements et contact
+référent (10 / h par compte), messages (30 / min par compte). Par compte et
+non par IP pour les routes connectées : plusieurs familles peuvent partager une
+IP (box, lycée).
+
+**Divers.** Page de messages plafonnée à 100 ; une erreur 500 ne renvoie plus
+son message interne au navigateur ; `multer` 2.5.0 et `body-parser` 2.4.0
+(failles « high » de `npm audit`).
+
+**Laissé de côté.** `zod` 3 (faille « high » : mémoire épuisée par une très
+grosse collection) : la correction impose zod 4, changement cassant sur tous
+les schémas. Risque faible ici, le corps JSON est limité à 100 ko par Express.
+À faire dans une branche dédiée.
+
 ## 2026-10-20 — Un atelier dure 60 minutes par défaut, « Demander un atelier »
 
 **Décision.** Sans durée choisie, un atelier dure **60 minutes** (avant : 120) :
