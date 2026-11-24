@@ -122,7 +122,9 @@ export async function createApp(httpServer: Server): Promise<Express> {
 
   app.use((err: any, _req: Request, res: Response, next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
-    const message = err.message || "Internal Server Error";
+    // A 4xx message is meant for the user (e.g. "request entity too large").
+    // A 5xx one is internal (database error, file path...) and stays in the logs.
+    const message = status < 500 && err.message ? err.message : "Erreur interne du serveur";
 
     console.error("Internal Server Error:", err);
 

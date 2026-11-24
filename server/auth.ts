@@ -136,7 +136,9 @@ export function setupAuth(app: Express) {
   passport.deserializeUser(async (id: string, done) => {
     try {
       const user = await storage.getUser(id);
-      if (!user) {
+      // Checked on every request, not only at login: a suspended or banned
+      // account must lose access at once, not when its cookie expires (7 days).
+      if (!user || user.status !== "ACTIVE") {
         return done(null, false);
       }
       done(null, mapUserToSession(user));

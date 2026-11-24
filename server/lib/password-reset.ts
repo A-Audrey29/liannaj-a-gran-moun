@@ -1,6 +1,6 @@
 import crypto from "crypto";
 import { prisma } from "../prisma";
-import { pool } from "../db";
+import { destroyUserSessions } from "./sessions";
 
 /**
  * Réinitialisation de mot de passe par lien e-mail ("mot de passe oublié").
@@ -73,9 +73,6 @@ export async function resetPasswordWithToken(
 
   if ("error" in outcome) return { ok: false, reason: outcome.error };
 
-  // Sessions stockées par connect-pg-simple : { passport: { user: "<id>" } }.
-  await pool.query(`DELETE FROM "session" WHERE sess->'passport'->>'user' = $1`, [
-    outcome.userId,
-  ]);
+  await destroyUserSessions(outcome.userId);
   return { ok: true };
 }
