@@ -22,7 +22,18 @@ toujours le paiement chez Mollie avec sa clé (statut, montant, métadonnées)
 et ne crédite que si : statut `paid`, métadonnées Lyannaj présentes, montant
 égal au prix serveur de l'offre. Réponse 200 pour un id inconnu (conseil
 Mollie : ne rien apprendre à qui teste des ids), 500 sur erreur passagère
-(Mollie réessaie 10 fois sur 26 h).
+(Mollie réessaie 10 fois sur 26 h). Limite de 120 appels / min par IP sur
+le webhook : chaque appel coûte un appel à l'API Mollie, un flot ferait
+brider notre clé.
+
+**Argent reçu mais pas crédité → signalement à l'équipe.** Montant
+inattendu (prix changé pendant le paiement), offre inconnue, compte supprimé
+entre-temps : on répond 200 (rejouer n'y changerait rien) et on crée un
+signalement `PAYMENT_NOT_CREDITED` dans l'onglet Signalements, un seul par
+paiement (le webhook et la page de retour peuvent buter plusieurs fois sur
+le même problème). Rattaché au payeur, ou à un admin si le payeur n'existe
+plus. Un simple log serait passé inaperçu. Un paiement déjà remboursé chez
+Mollie (il reste « paid ») n'est jamais crédité.
 
 **Deux chemins de crédit, une seule écriture.** Le webhook et la page de
 retour (`GET /api/credits/checkout-status`) passent tous deux par

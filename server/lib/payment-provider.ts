@@ -36,6 +36,8 @@ export interface ProviderPayment {
   externalId: string;
   status: ProviderPaymentStatus;
   amountPaidEuros: number;
+  /** Part of it was refunded or charged back: never credit it. */
+  refunded: boolean;
   /** null when the payment was not created by Lyannaj's checkout. */
   metadata: PurchaseMetadata | null;
 }

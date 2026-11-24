@@ -28,6 +28,8 @@ interface MolliePayment {
   id: string;
   status: string;
   amount: { currency: string; value: string };
+  amountRefunded?: { value: string };
+  amountChargedBack?: { value: string };
   metadata: unknown;
   _links?: { checkout?: { href: string } };
 }
@@ -122,6 +124,8 @@ export const mollieProvider: PaymentProvider = {
       externalId: payment.id,
       status: mapStatus(payment.status),
       amountPaidEuros: Number(payment.amount.value),
+      // A refunded payment keeps the "paid" status at Mollie.
+      refunded: Number(payment.amountRefunded?.value ?? 0) > 0 || Number(payment.amountChargedBack?.value ?? 0) > 0,
       // Only euro payments created by our checkout carry usable metadata.
       metadata: payment.amount.currency === "EUR" ? parseMetadata(payment.metadata) : null,
     };

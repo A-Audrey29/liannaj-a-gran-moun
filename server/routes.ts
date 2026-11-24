@@ -263,6 +263,7 @@ const isDev = process.env.NODE_ENV !== "production";
 
 /** `Report.reason` of an account-deletion request (shown in the admin "Signalements" tab). */
 const ACCOUNT_DELETION_REASON = "ACCOUNT_DELETION";
+const PAYMENT_NOT_CREDITED_REASON = "PAYMENT_NOT_CREDITED";
 
 // Durée de validité du lien de validation d'inscription (7 jours).
 const VALIDATION_TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000;
@@ -306,6 +307,16 @@ const inactivityRunLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   limit: isDev ? 1000 : 5,
   message: { message: "Vérification déjà lancée plusieurs fois. Réessayez dans 15 minutes." },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+// Public and unsigned: each call costs a Mollie API call. Wide enough for
+// Mollie's own calls (one per status change), low enough to stop a flood
+// that would get our API key throttled.
+const paymentWebhookLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  limit: isDev ? 1000 : 120,
   standardHeaders: true,
   legacyHeaders: false,
 });
@@ -486,23 +497,29 @@ async function recordPaidPurchase(
 ): Promise<"credited" | "already" | "not_paid" | "ignored"> {
   if (payment.status !== "paid") return "not_paid";
   if (!payment.metadata) {
+    // Not created by our checkout (e.g. a payment made by hand in Mollie).
     console.error(`[PAYMENT] Paiement ${payment.externalId} sans métadonnées Lyannaj : ignoré.`);
     return "ignored";
   }
   if (await storage.getPaymentByExternalId(payment.externalId)) return "already";
+  if (payment.refunded) {
+    // Refunded before we could credit it (e.g. webhook failed, then refund).
+    console.error(`[PAYMENT] Paiement ${payment.externalId} remboursé avant crédit : non crédité.`);
+    return "ignored";
+  }
 
   const { seniorId, offerId, purchasedByUserId } = payment.metadata;
   const offer = findCreditOffer(offerId);
   if (!offer) {
-    console.error(`[PAYMENT] Offre inconnue "${offerId}" sur ${payment.externalId}`);
+    await alertPaymentNotCredited(payment, `offre inconnue « ${offerId} »`);
     return "ignored";
   }
   // The amount is set by our server at checkout; a mismatch means the offer
   // price changed in between or something is wrong: a human checks.
   if (Math.abs(payment.amountPaidEuros - offer.priceEuros) > 0.001) {
-    console.error(
-      `[PAYMENT] Montant inattendu sur ${payment.externalId} : ${payment.amountPaidEuros} € payés, ` +
-        `${offer.priceEuros} € attendus (${offer.id}). Non crédité, à vérifier à la main.`
+    await alertPaymentNotCredited(
+      payment,
+      `montant inattendu : ${payment.amountPaidEuros} € payés, ${offer.priceEuros} € attendus pour « ${offer.label} »`,
     );
     return "ignored";
   }
@@ -523,10 +540,7 @@ async function recordPaidPurchase(
     // Payer or senior deleted between payment and crediting: retrying will not
     // help, an admin must refund by hand.
     if (err?.code === "P2003" || err?.code === "P2025") {
-      console.error(
-        `[PAYMENT] Paiement ${payment.externalId} non crédité : compte introuvable ` +
-          `(senior ${seniorId}, payeur ${purchasedByUserId}). Remboursement manuel nécessaire.`
-      );
+      await alertPaymentNotCredited(payment, "compte du senior ou du payeur supprimé entre-temps");
       return "ignored";
     }
     throw err;
@@ -548,6 +562,32 @@ async function recordPaidPurchase(
     console.error("[PAYMENT] Échec envoi email:", emailErr);
   }
   return "credited";
+}
+
+/**
+ * Money received but no credits given: tell the team (Signalements tab), once
+ * per payment, so someone credits or refunds by hand. A log alone would go
+ * unnoticed, and the provider will not call again (we answered 200).
+ */
+async function alertPaymentNotCredited(payment: ProviderPayment, why: string): Promise<void> {
+  const message =
+    `Paiement ${payment.externalId} encaissé (${payment.amountPaidEuros} €) mais non crédité : ${why}. ` +
+    `Remboursement manuel nécessaire (ou crédit manuel si c'est justifié). ` +
+    `Senior ${payment.metadata?.seniorId ?? "?"}, payeur ${payment.metadata?.purchasedByUserId ?? "?"}.`;
+  console.error(`[PAYMENT] ${message}`);
+  try {
+    // A report needs an existing author: the payer, or an admin if the payer is gone.
+    const payer = payment.metadata ? await storage.getUser(payment.metadata.purchasedByUserId) : undefined;
+    const reporterId = payer?.id ?? (await storage.getAdmins())[0]?.id;
+    if (!reporterId) return;
+    await storage.createReportOnceForKey(payment.externalId, {
+      reporterId,
+      reason: PAYMENT_NOT_CREDITED_REASON,
+      message,
+    });
+  } catch (err) {
+    console.error("[PAYMENT] Signalement à l'équipe impossible:", err);
+  }
 }
 
 /** False for a local address Mollie cannot call (localhost, 127.0.0.1, *.local). */
@@ -3384,7 +3424,7 @@ export async function registerRoutes(
    * retries 10 times over 26 h) — otherwise the payer is charged without
    * receiving credits. Replaying is safe: the payment id is unique in base.
    */
-  app.post("/api/webhooks/payment", async (req, res) => {
+  app.post("/api/webhooks/payment", paymentWebhookLimiter, async (req, res) => {
     if (!paymentProvider.isConfigured()) return res.status(503).send();
 
     const paymentId = paymentProvider.paymentIdFromWebhook(req.body);

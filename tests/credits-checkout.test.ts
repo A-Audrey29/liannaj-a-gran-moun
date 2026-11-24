@@ -32,6 +32,7 @@ interface FakePayment {
   id: string;
   status: string;
   amount: { currency: string; value: string };
+  amountRefunded?: { currency: string; value: string };
   metadata: unknown;
   redirectUrl?: string;
   webhookUrl?: string;
@@ -108,6 +109,7 @@ async function webhook(id: string) {
 }
 
 const achats = (seniorId: string) => prisma.creditLedger.count({ where: { seniorId, type: "PURCHASE" } });
+const alertes = () => prisma.report.findMany({ where: { reason: "PAYMENT_NOT_CREDITED" } });
 
 beforeEach(async () => {
   await resetDatabase();
@@ -276,15 +278,44 @@ describe("POST /api/webhooks/payment (Mollie, non signe)", () => {
     expect(await prisma.paymentRecord.count()).toBe(0);
   });
 
-  it("un montant different du prix de l'offre n'est pas credite", async () => {
-    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+  it("un montant different du prix de l'offre n'est pas credite et l'equipe est prevenue une seule fois", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
     const senior = await createUser("SENIOR");
+    const agent = await loginAs(senior);
     paiementMollie("tr_montant", "paid", { seniorId: senior.id, offerId: "pack-10" }, "1.00");
 
     expect((await webhook("tr_montant")).status).toBe(200);
+    // Same problem met again by a replay and by the success page.
+    await webhook("tr_montant");
+    expect((await agent.get("/api/credits/checkout-status?paymentId=tr_montant")).body).toEqual({ status: "processing" });
 
     expect(await achats(senior.id)).toBe(0);
-    expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining("Montant inattendu"));
+    const reports = await alertes();
+    expect(reports).toHaveLength(1);
+    expect(reports[0].reporterId).toBe(senior.id);
+    expect(reports[0].message).toContain("tr_montant");
+    expect(reports[0].message).toContain("montant inattendu");
+  });
+
+  it("un paiement deja rembourse n'est jamais credite (webhook rejoue apres un remboursement)", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const senior = await createUser("SENIOR");
+    paiementMollie("tr_rembourse", "paid", { seniorId: senior.id });
+    // Mollie keeps status "paid" after a refund.
+    mollie.payments.get("tr_rembourse")!.amountRefunded = { currency: "EUR", value: "18.00" };
+
+    expect((await webhook("tr_rembourse")).status).toBe(200);
+
+    expect(await achats(senior.id)).toBe(0);
+  });
+
+  it("un paiement autorise mais pas encore encaisse n'est pas credite", async () => {
+    const senior = await createUser("SENIOR");
+    paiementMollie("tr_autorise", "authorized", { seniorId: senior.id });
+
+    expect((await webhook("tr_autorise")).status).toBe(200);
+
+    expect(await achats(senior.id)).toBe(0);
   });
 
   it("un rejeu ne credite pas deux fois et ne logue aucune erreur", async () => {
@@ -337,6 +368,39 @@ describe("POST /api/webhooks/payment (Mollie, non signe)", () => {
 
     expect(await prisma.paymentRecord.count({ where: { externalPaymentId: "tr_seniorSupprime" } })).toBe(0);
     expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining("Remboursement manuel"));
+    const reports = await alertes();
+    expect(reports).toHaveLength(1);
+    expect(reports[0].reporterId).toBe(payeur.id);
+  });
+
+  it("payeur et senior supprimes : l'alerte est rattachee a un admin", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const admin = await createUser("ADMIN");
+    const senior = await createUser("SENIOR");
+    paiementMollie("tr_toutSupprime", "paid", { seniorId: senior.id });
+    await prisma.user.delete({ where: { id: senior.id } });
+
+    expect((await webhook("tr_toutSupprime")).status).toBe(200);
+
+    const reports = await alertes();
+    expect(reports).toHaveLength(1);
+    expect(reports[0].reporterId).toBe(admin.id);
+  });
+
+  it("si la verification prealable rate un credit deja fait, la contrainte unique empeche le double credit", async () => {
+    // Forces the path where both callers passed the "already recorded?" check
+    // (the real race): the second insert hits the unique payment id.
+    const senior = await createUser("SENIOR");
+    paiementMollie("tr_unique", "paid", { seniorId: senior.id });
+    vi.spyOn(storage, "getPaymentByExternalId").mockResolvedValue(null);
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    expect((await webhook("tr_unique")).status).toBe(200);
+    expect((await webhook("tr_unique")).status).toBe(200);
+
+    expect(await achats(senior.id)).toBe(1);
+    expect(sendEmail).toHaveBeenCalledTimes(1);
+    expect(errorSpy).not.toHaveBeenCalled();
   });
 });
 

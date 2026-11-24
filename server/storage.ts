@@ -347,6 +347,11 @@ export interface IStorage {
    * two concurrent requests cannot both create one.
    */
   createReportOnce(data: { reporterId: string; reason: string; message: string }): Promise<{ report: Report; created: boolean }>;
+  /**
+   * One report per key (e.g. a payment id), whoever files it: the webhook and
+   * the success page may both hit the same problem, several times.
+   */
+  createReportOnceForKey(key: string, data: { reporterId: string; reason: string; message: string }): Promise<boolean>;
 
   getNpsIneligibility(user: NpsRespondent): Promise<NpsIneligibleReason | null>;
   /**
@@ -1522,6 +1527,16 @@ class DatabaseStorage implements IStorage {
       const existing = await tx.report.findFirst({ where: { reporterId: data.reporterId, reason: data.reason, status: "OPEN" } });
       if (existing) return { report: existing, created: false };
       return { report: await tx.report.create({ data }), created: true };
+    });
+  }
+
+  async createReportOnceForKey(key: string, data: { reporterId: string; reason: string; message: string }): Promise<boolean> {
+    return prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`report-key:${key}`}))`;
+      const existing = await tx.report.findFirst({ where: { reason: data.reason, message: { contains: key } } });
+      if (existing) return false;
+      await tx.report.create({ data });
+      return true;
     });
   }
 
