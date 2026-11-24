@@ -296,9 +296,9 @@ export interface IStorage {
   getAllRelations(): Promise<(Relation & { senior: User; junior: User })[]>;
   getAllRelationsByStatus(status: string): Promise<(Relation & { senior: User; junior: User })[]>;
   getRelationsAwaitingFirstMeeting(): Promise<(Relation & { senior: User; junior: User })[]>;
-  createPayment(data: { userId: string; amount: number; label: string; date?: Date; credits?: number; creditSeniorId?: string | null; triggeredById: string; stripeSessionId?: string | null }): Promise<PaymentRecord>;
+  createPayment(data: { userId: string; amount: number; label: string; date?: Date; credits?: number; creditSeniorId?: string | null; triggeredById: string; externalPaymentId?: string | null }): Promise<PaymentRecord>;
   getPayments(): Promise<(PaymentRecord & { user: User })[]>;
-  getPaymentByStripeSessionId(stripeSessionId: string): Promise<PaymentRecord | null>;
+  getPaymentByExternalId(externalPaymentId: string): Promise<PaymentRecord | null>;
   getCreditBalance(seniorId: string): Promise<number>;
   getCreditLedger(seniorId: string): Promise<CreditLedger[]>;
   getAllInterventions(): Promise<(Intervention & { relation: Relation & { senior: User; junior: User } })[]>;
@@ -1027,7 +1027,7 @@ class DatabaseStorage implements IStorage {
     });
   }
 
-  async createPayment(data: { userId: string; amount: number; label: string; date?: Date; credits?: number; creditSeniorId?: string | null; triggeredById: string; stripeSessionId?: string | null }): Promise<PaymentRecord> {
+  async createPayment(data: { userId: string; amount: number; label: string; date?: Date; credits?: number; creditSeniorId?: string | null; triggeredById: string; externalPaymentId?: string | null }): Promise<PaymentRecord> {
     return prisma.$transaction(async (tx) => {
       const payment = await tx.paymentRecord.create({
         data: {
@@ -1035,7 +1035,7 @@ class DatabaseStorage implements IStorage {
           amount: data.amount,
           label: data.label,
           date: data.date || new Date(),
-          stripeSessionId: data.stripeSessionId ?? null,
+          externalPaymentId: data.externalPaymentId ?? null,
         },
       });
       // No subscription in Lyannaj (credits only): User.subscriptionActive is
@@ -1057,8 +1057,8 @@ class DatabaseStorage implements IStorage {
     });
   }
 
-  async getPaymentByStripeSessionId(stripeSessionId: string): Promise<PaymentRecord | null> {
-    return prisma.paymentRecord.findUnique({ where: { stripeSessionId } });
+  async getPaymentByExternalId(externalPaymentId: string): Promise<PaymentRecord | null> {
+    return prisma.paymentRecord.findUnique({ where: { externalPaymentId } });
   }
 
   async getCreditBalance(seniorId: string): Promise<number> {

@@ -55,8 +55,14 @@ export interface CreditHistoryEntry {
   createdAt: string;
 }
 
+/**
+ * - credited: paid and credits added.
+ * - processing: being confirmed (or unknown to this user): wait.
+ * - unpaid: the payer left the payment page without paying. Not charged.
+ * - failed: cancelled, expired or refused. Not charged.
+ */
 export interface CheckoutStatusResponse {
-  credited: boolean;
+  status: "credited" | "processing" | "unpaid" | "failed";
 }
 
 /**

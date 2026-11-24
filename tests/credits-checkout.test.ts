@@ -1,22 +1,126 @@
 /**
- * Achat de credits en ligne (Stripe Checkout) : creation de session et
- * traitement du webhook de confirmation.
+ * Achat de credits en ligne (Mollie) : creation du paiement, webhook, et page
+ * de retour (checkout-status).
  *
- * Le prix envoye a Stripe et credite au webhook vient toujours de la
- * constante serveur shared/credit-offers.ts, jamais d'une valeur fournie
- * par le client — ces tests verifient que la validation d'offre a lieu
- * avant tout appel au prestataire de paiement.
+ * fetch est remplace par un faux Mollie en memoire : toute la chaine est
+ * testee (route -> mollie-provider -> appels HTTP), sans reseau.
+ *
+ * Points de securite verifies :
+ * - le prix envoye a Mollie vient du serveur, jamais du client ;
+ * - le webhook Mollie n'est pas signe : son contenu n'est jamais cru, le
+ *   paiement est relu chez Mollie (statut, montant, metadonnees) ;
+ * - un paiement n'est credite qu'une fois, meme si le webhook et la page de
+ *   retour arrivent ensemble ;
+ * - seul l'acheteur voit l'etat de son paiement.
  */
-import { describe, it, expect, beforeEach, afterAll, vi } from "vitest";
-import Stripe from "stripe";
+import { describe, it, expect, beforeEach, afterEach, afterAll, vi } from "vitest";
+
+vi.mock("../server/lib/email", () => ({
+  sendEmail: vi.fn().mockResolvedValue(null),
+}));
+
+import request from "supertest";
 import { resetDatabase, createUser, loginAs, getApp } from "./helpers";
 import { prisma } from "../server/prisma";
 import { storage } from "../server/storage";
-import { paymentProvider } from "../server/lib/payment-provider";
-import request from "supertest";
+import { env } from "../server/env";
+import { sendEmail } from "../server/lib/email";
+
+const MOLLIE = "https://api.mollie.com/v2";
+
+interface FakePayment {
+  id: string;
+  status: string;
+  amount: { currency: string; value: string };
+  metadata: unknown;
+  redirectUrl?: string;
+  webhookUrl?: string;
+  _links: { checkout: { href: string } };
+}
+
+const mollie = {
+  payments: new Map<string, FakePayment>(),
+  calls: [] as { method: string; path: string; body: any; auth: string | undefined }[],
+  down: false,
+  counter: 0,
+};
+
+function json(data: unknown, status = 200) {
+  return new Response(JSON.stringify(data), { status, headers: { "Content-Type": "application/json" } });
+}
+
+const fakeFetch = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+  const url = String(input);
+  if (!url.startsWith(MOLLIE)) throw new Error(`fetch inattendu dans les tests : ${url}`);
+  const method = init?.method ?? "GET";
+  const path = url.slice(MOLLIE.length);
+  const body = init?.body ? JSON.parse(String(init.body)) : undefined;
+  const auth = (init?.headers as Record<string, string> | undefined)?.Authorization;
+  mollie.calls.push({ method, path, body, auth });
+
+  if (mollie.down) return json({ status: 503, title: "Service Unavailable" }, 503);
+
+  if (method === "POST" && path === "/payments") {
+    const id = `tr_fake${++mollie.counter}`;
+    const payment: FakePayment = {
+      id,
+      status: "open",
+      amount: body.amount,
+      metadata: body.metadata,
+      redirectUrl: body.redirectUrl,
+      webhookUrl: body.webhookUrl,
+      _links: { checkout: { href: `https://www.mollie.com/checkout/${id}` } },
+    };
+    mollie.payments.set(id, payment);
+    return json(payment, 201);
+  }
+
+  const match = path.match(/^\/payments\/([^/]+)$/);
+  const payment = match ? mollie.payments.get(match[1]) : undefined;
+  if (!payment) return json({ status: 404, title: "Not Found" }, 404);
+  if (method === "PATCH") Object.assign(payment, body);
+  return json(payment);
+});
+
+/** A payment as Mollie would hold it after our checkout created it. */
+function paiementMollie(
+  id: string,
+  status: string,
+  meta: { seniorId: string; purchasedByUserId?: string; offerId?: string } | null,
+  value = "18.00",
+) {
+  mollie.payments.set(id, {
+    id,
+    status,
+    amount: { currency: "EUR", value },
+    metadata: meta && {
+      seniorId: meta.seniorId,
+      offerId: meta.offerId ?? "pack-1",
+      purchasedByUserId: meta.purchasedByUserId ?? meta.seniorId,
+    },
+    _links: { checkout: { href: `https://www.mollie.com/checkout/${id}` } },
+  });
+}
+
+async function webhook(id: string) {
+  // Mollie posts a form, not JSON.
+  return request(await getApp()).post("/api/webhooks/payment").type("form").send(`id=${id}`);
+}
+
+const achats = (seniorId: string) => prisma.creditLedger.count({ where: { seniorId, type: "PURCHASE" } });
 
 beforeEach(async () => {
   await resetDatabase();
+  mollie.payments.clear();
+  mollie.calls = [];
+  mollie.down = false;
+  vi.stubGlobal("fetch", fakeFetch);
+  vi.mocked(sendEmail).mockClear();
+});
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.restoreAllMocks();
 });
 
 afterAll(async () => {
@@ -25,240 +129,286 @@ afterAll(async () => {
 
 describe("POST /api/credits/checkout", () => {
   it("refuse une requete non authentifiee", async () => {
-    const app = await getApp();
-    const res = await request(app).post("/api/credits/checkout").send({ offerId: "pack-5" });
+    const res = await request(await getApp()).post("/api/credits/checkout").send({ offerId: "pack-5" });
     expect(res.status).toBe(401);
+    expect(mollie.calls).toHaveLength(0);
   });
 
-  it("refuse une offre inconnue", async () => {
-    const senior = await createUser("SENIOR");
-    const agent = await loginAs(senior);
+  it("refuse une offre inconnue sans appeler Mollie", async () => {
+    const agent = await loginAs(await createUser("SENIOR"));
     const res = await agent.post("/api/credits/checkout").send({ offerId: "offre-inexistante" });
     expect(res.status).toBe(400);
+    expect(mollie.calls).toHaveLength(0);
   });
 
   it("refuse un referent sans senior lie", async () => {
-    const referent = await createUser("REFERENT_SENIOR");
-    const agent = await loginAs(referent);
+    const agent = await loginAs(await createUser("REFERENT_SENIOR"));
     const res = await agent.post("/api/credits/checkout").send({ offerId: "pack-5" });
     expect(res.status).toBe(400);
+    expect(mollie.calls).toHaveLength(0);
   });
 
-  it("cree une session pour un senior directement (mock reseau Stripe absent : verifie juste la validation en amont)", async () => {
-    // Sans reseau reel vers Stripe, on ne peut pas verifier la creation
-    // effective de la session ici (stripe.checkout.sessions.create ferait
-    // un appel HTTP reel). Ce test verifie que la resolution du senior et
-    // la validation d'offre laissent bien passer la requete jusqu'a l'appel
-    // au prestataire, sans erreur de validation prealable.
+  it("cree le paiement Mollie au prix serveur et renvoie la page de paiement", async () => {
     const senior = await createUser("SENIOR");
     const agent = await loginAs(senior);
-    const res = await agent.post("/api/credits/checkout").send({ offerId: "pack-5" });
-    // Avec une cle Stripe factice, l'appel reseau echoue (401 cote Stripe) :
-    // on verifie que l'echec vient bien de l'appel au prestataire (500)
-    // et non d'un rejet de validation (400/401/403).
-    expect(res.status).toBe(500);
+
+    // A client-supplied price must be ignored: only offerId is read.
+    const res = await agent.post("/api/credits/checkout").send({ offerId: "pack-10", priceEuros: 1 });
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ url: "https://www.mollie.com/checkout/tr_fake1" });
+
+    const creation = mollie.calls[0];
+    expect(creation.method).toBe("POST");
+    expect(creation.auth).toBe(`Bearer ${process.env.MOLLIE_API_KEY}`);
+    expect(creation.body.amount).toEqual({ currency: "EUR", value: "160.00" });
+    expect(creation.body.metadata).toEqual({ seniorId: senior.id, offerId: "pack-10", purchasedByUserId: senior.id });
+    expect(creation.body.cancelUrl).toBe("http://localhost:5000/credits/cancel");
+    // BASE_URL is localhost in tests: Mollie could not reach a webhook.
+    expect(creation.body).not.toHaveProperty("webhookUrl");
+
+    // The id is added to the return URL once known, for the success page.
+    expect(mollie.payments.get("tr_fake1")?.redirectUrl).toBe(
+      "http://localhost:5000/credits/success?payment_id=tr_fake1",
+    );
   });
 
-  it("accepte le forfait pack-10 (Serenite) et transmet le prix serveur au prestataire", async () => {
-    const spy = vi
-      .spyOn(paymentProvider, "createCheckoutSession")
-      .mockResolvedValue({ url: "https://checkout.test/session" });
+  it("le referent achete pour son senior : credits au senior, paiement au referent", async () => {
+    const senior = await createUser("SENIOR");
+    const referent = await createUser("REFERENT_SENIOR", { linkedSeniorId: senior.id });
+
+    const res = await (await loginAs(referent)).post("/api/credits/checkout").send({ offerId: "pack-1" });
+
+    expect(res.status).toBe(200);
+    expect(mollie.calls[0].body.metadata).toEqual({ seniorId: senior.id, offerId: "pack-1", purchasedByUserId: referent.id });
+  });
+
+  it("donne le webhook a Mollie quand le site est public", async () => {
+    const before = env.BASE_URL;
+    env.BASE_URL = "https://lyannaj.example";
     try {
-      const senior = await createUser("SENIOR");
-      const agent = await loginAs(senior);
-      // A client-supplied price must be ignored: only offerId is read.
-      const res = await agent.post("/api/credits/checkout").send({ offerId: "pack-10", priceEuros: 1 });
-      expect(res.status).toBe(200);
-      expect(res.body.url).toBe("https://checkout.test/session");
-      expect(spy).toHaveBeenCalledTimes(1);
-      expect(spy.mock.calls[0][0]).toMatchObject({ offerId: "pack-10", priceEuros: 160, seniorId: senior.id });
+      const agent = await loginAs(await createUser("SENIOR"));
+      await agent.post("/api/credits/checkout").send({ offerId: "pack-1" });
+      expect(mollie.calls[0].body.webhookUrl).toBe("https://lyannaj.example/api/webhooks/payment");
     } finally {
-      spy.mockRestore();
+      env.BASE_URL = before;
     }
+  });
+
+  it("repond 500 si Mollie est indisponible", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    mollie.down = true;
+    const agent = await loginAs(await createUser("SENIOR"));
+    const res = await agent.post("/api/credits/checkout").send({ offerId: "pack-1" });
+    expect(res.status).toBe(500);
   });
 });
 
-describe("POST /api/webhooks/payment", () => {
-  const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET!;
-
-  function buildSignedRequest(payload: object) {
-    const payloadString = JSON.stringify(payload);
-    const header = Stripe.webhooks.generateTestHeaderString({
-      payload: payloadString,
-      secret: webhookSecret,
-    });
-    return { payloadString, header };
-  }
-
-  it("rejette une signature invalide", async () => {
-    const senior = await createUser("SENIOR");
+describe("POST /api/webhooks/payment (Mollie, non signe)", () => {
+  it("rejette un appel sans identifiant de paiement valide", async () => {
     const app = await getApp();
-    // Metadata completes et valides : si ce test passe malgre une signature
-    // fausse, c'est bien la verification de signature qui a echoue a
-    // bloquer, pas une validation de contenu en aval.
-    const payloadString = JSON.stringify({
-      type: "checkout.session.completed",
-      data: {
-        object: {
-          id: "cs_test_signature_invalide",
-          amount_total: 1500,
-          metadata: { seniorId: senior.id, offerId: "pack-1", purchasedByUserId: senior.id },
-        },
-      },
-    });
-    const res = await request(app)
-      .post("/api/webhooks/payment")
-      .set("stripe-signature", "signature-invalide")
-      .set("Content-Type", "application/json")
-      .send(payloadString);
-    expect(res.status).toBe(400);
-
-    const payment = await prisma.paymentRecord.findUnique({ where: { stripeSessionId: "cs_test_signature_invalide" } });
-    expect(payment).toBeNull();
+    expect((await request(app).post("/api/webhooks/payment").type("form").send("foo=bar")).status).toBe(400);
+    expect((await webhook("../../v2/methods")).status).toBe(400);
+    expect(mollie.calls).toHaveLength(0);
   });
 
-  it("traite un evenement checkout.session.completed valide et cree les credits", async () => {
+  it("credite un paiement paye en relisant Mollie, et previent le senior", async () => {
     const senior = await createUser("SENIOR");
-    const app = await getApp();
+    paiementMollie("tr_paye", "paid", { seniorId: senior.id, offerId: "pack-5" }, "85.00");
 
-    const sessionPayload = {
-      id: "evt_test_1",
-      type: "checkout.session.completed",
-      data: {
-        object: {
-          id: "cs_test_session_1",
-          amount_total: 8500,
-          metadata: {
-            seniorId: senior.id,
-            offerId: "pack-5",
-            purchasedByUserId: senior.id,
-          },
-        },
-      },
-    };
-    const { payloadString, header } = buildSignedRequest(sessionPayload);
-
-    const res = await request(app)
-      .post("/api/webhooks/payment")
-      .set("stripe-signature", header)
-      .set("Content-Type", "application/json")
-      .send(payloadString);
+    const res = await webhook("tr_paye");
 
     expect(res.status).toBe(200);
-
-    const payment = await prisma.paymentRecord.findUnique({ where: { stripeSessionId: "cs_test_session_1" } });
-    expect(payment).not.toBeNull();
+    expect(mollie.calls.map((c) => `${c.method} ${c.path}`)).toEqual(["GET /payments/tr_paye"]);
+    const payment = await prisma.paymentRecord.findUnique({ where: { externalPaymentId: "tr_paye" } });
     expect(payment?.amount).toBe(85);
-
+    expect(payment?.userId).toBe(senior.id);
     const ledger = await prisma.creditLedger.findFirst({ where: { seniorId: senior.id, type: "PURCHASE" } });
     expect(ledger?.amount).toBe(5);
+    expect(sendEmail).toHaveBeenCalledTimes(1);
   });
 
-  it("ignore un rejeu du meme evenement sans creer de doublon ni tenter de reecrire en base", async () => {
+  it("un achat du referent previent le senior et le referent", async () => {
     const senior = await createUser("SENIOR");
-    const app = await getApp();
+    const referent = await createUser("REFERENT_SENIOR", { linkedSeniorId: senior.id });
+    paiementMollie("tr_referent", "paid", { seniorId: senior.id, purchasedByUserId: referent.id });
 
-    const sessionPayload = {
-      id: "evt_test_2",
-      type: "checkout.session.completed",
-      data: {
-        object: {
-          id: "cs_test_session_2",
-          amount_total: 1500,
-          metadata: {
-            seniorId: senior.id,
-            offerId: "pack-1",
-            purchasedByUserId: senior.id,
-          },
-        },
-      },
-    };
-    const { payloadString, header } = buildSignedRequest(sessionPayload);
+    await webhook("tr_referent");
 
-    const premier = await request(app)
-      .post("/api/webhooks/payment")
-      .set("stripe-signature", header)
-      .set("Content-Type", "application/json")
-      .send(payloadString);
-    expect(premier.status).toBe(200);
+    expect(await achats(senior.id)).toBe(1);
+    const destinataires = vi.mocked(sendEmail).mock.calls.map((c) => c[0].to).sort();
+    expect(destinataires).toEqual([senior.email, referent.email].sort());
+  });
 
-    // Sans le check d'idempotence applicatif, ce second appel tenterait de
-    // recreer un PaymentRecord avec le meme stripeSessionId : la contrainte
-    // unique le bloquerait en base, mais l'exception Prisma remonterait et
-    // serait logguee comme une erreur de traitement — signal que le check
-    // en amont n'a pas fonctionne, meme si le resultat visible (200, pas de
-    // doublon) est identique de l'exterieur.
+  it("un identifiant inconnu de Mollie : 200, rien n'est credite", async () => {
+    const res = await webhook("tr_inconnu");
+    expect(res.status).toBe(200);
+    expect(await prisma.paymentRecord.count()).toBe(0);
+  });
+
+  it("un paiement pas encore paye n'est pas credite, il l'est quand Mollie rappelle une fois paye", async () => {
+    const senior = await createUser("SENIOR");
+    paiementMollie("tr_enCours", "open", { seniorId: senior.id });
+
+    expect((await webhook("tr_enCours")).status).toBe(200);
+    expect(await achats(senior.id)).toBe(0);
+
+    mollie.payments.get("tr_enCours")!.status = "paid";
+    expect((await webhook("tr_enCours")).status).toBe(200);
+    expect(await achats(senior.id)).toBe(1);
+  });
+
+  it("un paiement annule ou expire n'est jamais credite", async () => {
+    const senior = await createUser("SENIOR");
+    paiementMollie("tr_annule", "canceled", { seniorId: senior.id });
+    paiementMollie("tr_expire", "expired", { seniorId: senior.id });
+
+    await webhook("tr_annule");
+    await webhook("tr_expire");
+
+    expect(await prisma.paymentRecord.count()).toBe(0);
+  });
+
+  it("un paiement sans nos metadonnees (pas cree par Lyannaj) est ignore", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    paiementMollie("tr_etranger", "paid", null);
+    expect((await webhook("tr_etranger")).status).toBe(200);
+    expect(await prisma.paymentRecord.count()).toBe(0);
+  });
+
+  it("un montant different du prix de l'offre n'est pas credite", async () => {
     const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
-    const second = await request(app)
-      .post("/api/webhooks/payment")
-      .set("stripe-signature", header)
-      .set("Content-Type", "application/json")
-      .send(payloadString);
-    expect(second.status).toBe(200);
+    const senior = await createUser("SENIOR");
+    paiementMollie("tr_montant", "paid", { seniorId: senior.id, offerId: "pack-10" }, "1.00");
+
+    expect((await webhook("tr_montant")).status).toBe(200);
+
+    expect(await achats(senior.id)).toBe(0);
+    expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining("Montant inattendu"));
+  });
+
+  it("un rejeu ne credite pas deux fois et ne logue aucune erreur", async () => {
+    const senior = await createUser("SENIOR");
+    paiementMollie("tr_rejeu", "paid", { seniorId: senior.id });
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    expect((await webhook("tr_rejeu")).status).toBe(200);
+    expect((await webhook("tr_rejeu")).status).toBe(200);
+
     expect(errorSpy).not.toHaveBeenCalled();
-    errorSpy.mockRestore();
-
-    const paiements = await prisma.paymentRecord.count({ where: { stripeSessionId: "cs_test_session_2" } });
-    expect(paiements).toBe(1);
-
-    const mouvements = await prisma.creditLedger.count({ where: { seniorId: senior.id, type: "PURCHASE" } });
-    expect(mouvements).toBe(1);
+    expect(await prisma.paymentRecord.count({ where: { externalPaymentId: "tr_rejeu" } })).toBe(1);
+    expect(await achats(senior.id)).toBe(1);
+    expect(sendEmail).toHaveBeenCalledTimes(1);
   });
-  function sessionPayloadPour(sessionId: string, seniorId: string, payeurId = seniorId) {
-    return {
-      type: "checkout.session.completed",
-      data: {
-        object: {
-          id: sessionId,
-          amount_total: 1500,
-          metadata: { seniorId, offerId: "pack-1", purchasedByUserId: payeurId },
-        },
-      },
-    };
-  }
 
-  async function envoyer(payload: object) {
-    const { payloadString, header } = buildSignedRequest(payload);
-    return request(await getApp())
-      .post("/api/webhooks/payment")
-      .set("stripe-signature", header)
-      .set("Content-Type", "application/json")
-      .send(payloadString);
-  }
-
-  it("repond 500 sur une erreur passagere pour que Stripe reessaie, puis credite une seule fois au rejeu", async () => {
+  it("repond 500 si Mollie est injoignable (Mollie reessaiera), puis credite une seule fois", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
     const senior = await createUser("SENIOR");
-    const payload = sessionPayloadPour("cs_test_panne", senior.id);
-    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
-    const panne = vi
-      .spyOn(storage, "createPayment")
-      .mockRejectedValueOnce(new Error("Connection terminated unexpectedly"));
+    paiementMollie("tr_panneMollie", "paid", { seniorId: senior.id });
 
-    const premier = await envoyer(payload);
-    expect(premier.status).toBe(500);
-    expect(await prisma.creditLedger.count({ where: { seniorId: senior.id } })).toBe(0);
+    mollie.down = true;
+    expect((await webhook("tr_panneMollie")).status).toBe(500);
+    mollie.down = false;
+    expect((await webhook("tr_panneMollie")).status).toBe(200);
 
-    // Rejeu par Stripe : la base repond de nouveau.
-    const rejeu = await envoyer(payload);
-    expect(rejeu.status).toBe(200);
-    expect(await prisma.creditLedger.count({ where: { seniorId: senior.id, type: "PURCHASE" } })).toBe(1);
+    expect(await achats(senior.id)).toBe(1);
+  });
 
-    panne.mockRestore();
-    errorSpy.mockRestore();
+  it("repond 500 sur une panne de base pour que Mollie reessaie, puis credite une seule fois", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const senior = await createUser("SENIOR");
+    paiementMollie("tr_panneBase", "paid", { seniorId: senior.id });
+    vi.spyOn(storage, "createPayment").mockRejectedValueOnce(new Error("Connection terminated unexpectedly"));
+
+    expect((await webhook("tr_panneBase")).status).toBe(500);
+    expect(await achats(senior.id)).toBe(0);
+    expect((await webhook("tr_panneBase")).status).toBe(200);
+    expect(await achats(senior.id)).toBe(1);
   });
 
   it("repond 200 sans crediter si le senior a ete supprime (rejouer n'y changerait rien)", async () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
     const senior = await createUser("SENIOR");
     const payeur = await createUser("REFERENT_SENIOR");
-    const payload = sessionPayloadPour("cs_test_senior_supprime", senior.id, payeur.id);
+    paiementMollie("tr_seniorSupprime", "paid", { seniorId: senior.id, purchasedByUserId: payeur.id });
     await prisma.user.delete({ where: { id: senior.id } });
-    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 
-    const res = await envoyer(payload);
+    expect((await webhook("tr_seniorSupprime")).status).toBe(200);
 
-    expect(res.status).toBe(200);
-    expect(await prisma.paymentRecord.count({ where: { stripeSessionId: "cs_test_senior_supprime" } })).toBe(0);
+    expect(await prisma.paymentRecord.count({ where: { externalPaymentId: "tr_seniorSupprime" } })).toBe(0);
     expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining("Remboursement manuel"));
-    errorSpy.mockRestore();
+  });
+});
+
+describe("GET /api/credits/checkout-status (page de retour)", () => {
+  const statut = (agent: Awaited<ReturnType<typeof loginAs>>, id: string) =>
+    agent.get(`/api/credits/checkout-status?paymentId=${encodeURIComponent(id)}`);
+
+  it("refuse un identifiant mal forme", async () => {
+    const agent = await loginAs(await createUser("SENIOR"));
+    expect((await statut(agent, "../../etc")).status).toBe(400);
+    expect((await statut(agent, "cs_test_abc")).status).toBe(400);
+    expect(mollie.calls).toHaveLength(0);
+  });
+
+  it("paye chez Mollie sans webhook recu (dev local) : credite au retour, une seule fois", async () => {
+    const senior = await createUser("SENIOR");
+    const agent = await loginAs(senior);
+    paiementMollie("tr_retour", "paid", { seniorId: senior.id });
+
+    expect((await statut(agent, "tr_retour")).body).toEqual({ status: "credited" });
+    expect((await statut(agent, "tr_retour")).body).toEqual({ status: "credited" });
+
+    expect(await achats(senior.id)).toBe(1);
+    // Second poll answered from the base, without calling Mollie again.
+    expect(mollie.calls).toHaveLength(1);
+  });
+
+  it("parti de Mollie sans payer : unpaid ; en confirmation : processing ; refuse : failed", async () => {
+    const senior = await createUser("SENIOR");
+    const agent = await loginAs(senior);
+    // "Page precedente" on Mollie sends the payer back here, payment still open.
+    paiementMollie("tr_ouvert", "open", { seniorId: senior.id });
+    paiementMollie("tr_enConfirmation", "pending", { seniorId: senior.id });
+    paiementMollie("tr_refuse", "failed", { seniorId: senior.id });
+
+    expect((await statut(agent, "tr_ouvert")).body).toEqual({ status: "unpaid" });
+    expect((await statut(agent, "tr_enConfirmation")).body).toEqual({ status: "processing" });
+    expect((await statut(agent, "tr_refuse")).body).toEqual({ status: "failed" });
+    expect(await prisma.paymentRecord.count()).toBe(0);
+  });
+
+  it("un autre utilisateur n'apprend rien du paiement et ne le credite pas", async () => {
+    const acheteur = await createUser("SENIOR");
+    const autre = await loginAs(await createUser("SENIOR"));
+    paiementMollie("tr_aAutrui", "paid", { seniorId: acheteur.id });
+    paiementMollie("tr_refuseAutrui", "canceled", { seniorId: acheteur.id });
+
+    expect((await statut(autre, "tr_aAutrui")).body).toEqual({ status: "processing" });
+    expect((await statut(autre, "tr_refuseAutrui")).body).toEqual({ status: "processing" });
+    expect(await prisma.paymentRecord.count()).toBe(0);
+  });
+
+  it("deja credite par le webhook : l'autre utilisateur ne le voit pas, l'acheteur oui", async () => {
+    const acheteur = await createUser("SENIOR");
+    paiementMollie("tr_deja", "paid", { seniorId: acheteur.id });
+    await webhook("tr_deja");
+
+    const autre = await loginAs(await createUser("SENIOR"));
+    expect((await statut(autre, "tr_deja")).body).toEqual({ status: "processing" });
+    expect((await statut(await loginAs(acheteur), "tr_deja")).body).toEqual({ status: "credited" });
+  });
+
+  it("webhook et page de retour en meme temps : un seul credit, un seul e-mail", async () => {
+    const senior = await createUser("SENIOR");
+    const agent = await loginAs(senior);
+    paiementMollie("tr_course", "paid", { seniorId: senior.id });
+
+    const [hook, page] = await Promise.all([webhook("tr_course"), statut(agent, "tr_course")]);
+
+    expect(hook.status).toBe(200);
+    expect(page.body).toEqual({ status: "credited" });
+    expect(await achats(senior.id)).toBe(1);
+    expect(sendEmail).toHaveBeenCalledTimes(1);
   });
 });

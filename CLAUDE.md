@@ -16,7 +16,8 @@ non-négociables, garde-fous). Ce fichier ne répète que ce qui est spécifique
 - **ORM**: Prisma 7 (`@prisma/adapter-pg`) — pas Drizzle sur ce projet
 - **Auth**: Passport.js (LocalStrategy) + bcryptjs + express-session
   (`connect-pg-simple`, sessions en base)
-- **Paiement**: Stripe (Checkout) — crédits prépayés pour les ateliers
+- **Paiement**: Mollie (API Payments en `fetch` direct, pas de SDK ; compte
+  relié à Qonto) — crédits prépayés pour les ateliers
 - **Email**: Brevo (API HTTP directe, pas de SDK)
 - **Notifications**: web-push (VAPID) + SSE (`server/lib/sse.ts`) pour la
   messagerie temps réel
@@ -33,7 +34,7 @@ non-négociables, garde-fous). Ce fichier ne répète que ce qui est spécifique
 ```
 client/src/        # SPA React (pages, components, hooks, lib)
 server/            # Express: routes.ts (API), auth.ts, storage.ts (accès DB),
-                    # lib/ (email, push, sse, stripe-provider, availability)
+                    # lib/ (email, push, sse, mollie-provider, availability)
 shared/            # Code partagé client/serveur: schema.ts (Zod), ateliers.ts,
                     # branding.ts, dates.ts, credit-offers.ts, availability.ts
 prisma/            # schema.prisma + migrations/ (versionnées, pas de db push)
@@ -116,11 +117,15 @@ npm run db:push    # prisma db push — NE PAS utiliser sur la base Neon avec do
   plateforme ; e-mails signés Lyannaj, FEVES créditée en pied de page.
 - **Ateliers**: catégories d'intérêt = "ateliers", source unique
   `shared/ateliers.ts`.
-- **Paiement**: jamais d'import direct du SDK Stripe dans routes/webhook —
+- **Paiement**: jamais d'appel direct à l'API Mollie dans routes/webhook —
   passer par le contrat `server/lib/payment-provider.ts`
-  (impl : `stripe-provider.ts`). Webhook (`/api/webhooks/payment`) vérifie la
-  signature sur `req.rawBody` (capturé dans `server/app.ts`), jamais le body
-  JSON déjà parsé. L'interface d'achat (`/forfaits`) est écrite
+  (impl : `mollie-provider.ts`). Le webhook Mollie (`/api/webhooks/payment`)
+  n'est **pas signé** (juste `id=tr_...`) : ne jamais croire son contenu,
+  toujours relire le paiement chez Mollie (`getPayment`) avant de créditer.
+  Crédit fait une seule fois par `recordPaidPurchase` (routes.ts), appelé par
+  le webhook ET par la page de retour (`checkout-status`) ; l'unicité de
+  `PaymentRecord.externalPaymentId` (colonne `stripeSessionId`, nom gardé
+  pour éviter une migration) empêche le double crédit. L'interface d'achat (`/forfaits`) est écrite
   comme si le prestataire était branché (décision du 2026-10-20) : toujours
   un bouton « Acheter », jamais de « paiement pas encore ouvert » ni de
   « demander à l'équipe » pour acheter (seulement un bouton « Besoin d'aide ? »).

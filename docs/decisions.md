@@ -3,6 +3,59 @@
 Journal des choix d'architecture et de leurs raisons. Une entrée par décision,
 la plus récente en haut.
 
+## 2026-11-24 — Paiement en ligne par Mollie (remplace Stripe)
+
+**Décision.** L'association encaisse via Qonto, relié à Mollie (choix de
+FEVES, après Stripe puis HelloAsso). Stripe est retiré du code. Mollie est
+branché derrière le même contrat `server/lib/payment-provider.ts`
+(impl. `mollie-provider.ts`) ; la page `/forfaits` n'a pas changé.
+
+**API Payments en direct, pas les « liens de paiement » Qonto.** Les liens
+Qonto ne portent ni lien de retour ni métadonnées : impossible de savoir qui
+a payé quelle offre, donc pas de crédit automatique. **Clé API standard**
+(un seul profil) plutôt qu'un jeton d'accès avancé : Lyannaj ne fait que
+créer et lire des paiements. Appels en `fetch` (3 appels), sans SDK, comme
+Brevo.
+
+**Webhook non signé.** Mollie n'envoie que `id=tr_...`. Le serveur relit
+toujours le paiement chez Mollie avec sa clé (statut, montant, métadonnées)
+et ne crédite que si : statut `paid`, métadonnées Lyannaj présentes, montant
+égal au prix serveur de l'offre. Réponse 200 pour un id inconnu (conseil
+Mollie : ne rien apprendre à qui teste des ids), 500 sur erreur passagère
+(Mollie réessaie 10 fois sur 26 h).
+
+**Deux chemins de crédit, une seule écriture.** Le webhook et la page de
+retour (`GET /api/credits/checkout-status`) passent tous deux par
+`recordPaidPurchase`. Raisons : Mollie refuse un webhook `localhost` (en
+local, seule la page de retour crédite) et, en production, le payeur voit
+ses crédits sans attendre le webhook. L'unicité de l'identifiant de paiement
+en base garantit un seul crédit et un seul e-mail, même s'ils arrivent
+ensemble (testé).
+
+**Lien de retour.** Mollie ne met pas l'id du paiement dans l'URL de retour
+(Stripe le faisait) : on le crée, puis on met à jour son `redirectUrl` avec
+`?payment_id=`. Si cette mise à jour échoue, l'achat fonctionne quand même
+(le webhook crédite), seule la page de retour ne peut pas suivre le paiement.
+
+**Page de retour : quatre états** (`credited`, `processing`, `unpaid`,
+`failed`). Trouvé en essai réel : après une tentative ratée, « Page
+précédente » chez Mollie renvoie sur la page de *succès* avec un paiement
+encore ouvert ; l'ancienne page affichait « Paiement reçu », faux. Un
+paiement ouvert affiche maintenant « Paiement non abouti, vous n'avez pas été
+débité ». Un autre utilisateur qui interroge un id n'apprend rien
+(`processing`).
+
+**Colonne non renommée.** Le champ Prisma s'appelle `externalPaymentId` mais
+pointe sur la colonne existante `stripeSessionId` (`@map`) : aucune
+migration sur Neon (diff Prisma vide, vérifié).
+
+**Non traité.** Remboursements et litiges (chargebacks) : faits à la main
+dans Mollie, les crédits ne sont pas retirés automatiquement, et aucun
+écran admin ne permet aujourd'hui d'en retirer : à prévoir si des
+remboursements arrivent. Moyens de paiement : ceux activés dans le tableau de bord Mollie
+(aujourd'hui carte, PayPal, iDEAL) ; la page `/forfaits` dit « par carte
+bancaire ».
+
 ## 2026-11-10 — Clôture des rencontres par le senior et automatique ; validation des élèves par leur professeur
 
 **Contexte.** En préparant la présentation aux professeurs, deux écarts sont

@@ -79,9 +79,12 @@ const envSchema = z.object({
     })
     .optional(),
 
-  STRIPE_SECRET_KEY: z.string().startsWith("sk_", "STRIPE_SECRET_KEY doit commencer par sk_").optional(),
-  STRIPE_WEBHOOK_SECRET: z.string().startsWith("whsec_", "STRIPE_WEBHOOK_SECRET doit commencer par whsec_").optional(),
-  STRIPE_PUBLISHABLE_KEY: z.string().startsWith("pk_", "STRIPE_PUBLISHABLE_KEY doit commencer par pk_").optional(),
+  // Clé API Mollie (paiement en ligne des ateliers). test_... en dev, live_...
+  // en production. Absente : le bouton « Acheter » répond 503.
+  MOLLIE_API_KEY: z
+    .string()
+    .regex(/^(test|live)_[A-Za-z0-9]+$/, "MOLLIE_API_KEY doit commencer par test_ ou live_")
+    .optional(),
 });
 
 export type Env = z.infer<typeof envSchema>;
@@ -109,12 +112,6 @@ function loadEnv(): Env {
       "Notifications push (VAPID)"
     )
   );
-  errors.push(
-    ...allOrNothing(
-      ["STRIPE_SECRET_KEY", "STRIPE_WEBHOOK_SECRET", "STRIPE_PUBLISHABLE_KEY"],
-      "Paiement en ligne (Stripe)"
-    )
-  );
 
   if (errors.length > 0) {
     console.error(
@@ -139,8 +136,10 @@ function loadEnv(): Env {
     if (!env.VAPID_PUBLIC_KEY) {
       console.warn("[ENV] VAPID non configuré : les notifications push sont désactivées.");
     }
-    if (!env.STRIPE_SECRET_KEY) {
-      console.warn("[ENV] Stripe non configuré : l'achat de crédits en ligne est désactivé.");
+    if (!env.MOLLIE_API_KEY) {
+      console.warn("[ENV] Mollie non configuré : l'achat de crédits en ligne est désactivé.");
+    } else if (env.MOLLIE_API_KEY.startsWith("test_")) {
+      console.warn("[ENV] Clé Mollie de TEST en production : aucun paiement réel ne sera encaissé.");
     }
   }
 

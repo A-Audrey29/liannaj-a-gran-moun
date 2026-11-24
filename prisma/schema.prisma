@@ -306,10 +306,12 @@ model PaymentRecord {
   date      DateTime @default(now())
   createdAt DateTime @default(now())
 
-  // Rempli uniquement pour un achat en ligne (Stripe Checkout). Unique :
-  // garantit qu'un webhook rejoue ne credite jamais deux fois le meme achat.
-  // Null pour les paiements manuels admin.
-  stripeSessionId String? @unique
+  // Identifiant du paiement chez le prestataire (Mollie : "tr_..."), rempli
+  // uniquement pour un achat en ligne. Unique : un webhook rejoue ou un retour
+  // simultane sur la page de succes ne credite jamais deux fois le meme achat.
+  // Null pour les paiements manuels admin. La colonne garde son nom d'origine
+  // (Stripe) : la renommer imposerait une migration sur la base de prod.
+  externalPaymentId String? @unique @map("stripeSessionId")
 
   creditLedgerEntries CreditLedger[]
 
