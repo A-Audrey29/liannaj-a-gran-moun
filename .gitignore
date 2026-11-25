@@ -22,10 +22,9 @@ vite.config.ts.*
 .claude/settings.local.json
 *.code-workspace
 
-# Screenshots and mockups: never committed (public repo).
-# attached_assets also holds real site images (imported via @assets): only
-# PNG files are ignored there, except the logo used by the landing page.
-attached_assets/*.png
-!attached_assets/logo_CGRR_*.png
+# Scratch folder (screenshots, mockups, pasted notes from the Replit era):
+# never committed, the repo is public. Real site images live in
+# client/src/assets/ (alias @assets).
+attached_assets/
 Capture*.png
 Screenshot*.png

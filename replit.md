@@ -192,7 +192,7 @@ client/
 - **Cartes** : fond blanc, rounded-2xl, ombres douces
 - **Boutons** : #dc4256 rouge, rounded-full
 - **Badges** : #e8d7fe violet clair
-- **Images assets** : seniorF, jeuneF, mainsConfiance, seniorJeuneHRire (import @assets/...)
+- **Images assets** : seniorF, jeuneF, mainsConfiance, seniorJeuneHRire (import @assets/..., dossier client/src/assets)
 
 ## Sprints Prévus
 1. ✅ **Sprint 1**: Fondations (Prisma, Auth, Seed, Thème, Brevo)
