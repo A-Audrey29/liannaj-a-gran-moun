@@ -426,6 +426,21 @@ Enregistre un paiement (et, si `credits` est fourni, crédite le senior concern�
 - **Body** : `{ userId: string, amount: number, label: string, date?: string, credits?: number }`
 - **Réponse 201** : `PaymentRecord`
 
+## Admin — Crédits
+
+### `GET /api/admin/credits/ledger?seniorId=`
+Historique complet des crédits d'un senior, avec l'auteur, la référence et la note des ajustements.
+- **Auth** : Admin
+- **Réponse 200** : `AdminCreditLedgerEntry[]` (`shared/credits.ts`), du plus récent au plus ancien
+- **404** : `seniorId` absent, inconnu ou pas un senior
+
+### `POST /api/admin/credits/adjustments`
+Ajoute ou retire des crédits à la main (nouvelle ligne `ADJUSTMENT`, rien n'est modifié ni supprimé).
+- **Auth** : Admin
+- **Body** : `{ seniorId: string, amount: number (entier, -10..10, ≠ 0), afterRefund: boolean, externalReference?: string, adminNote: string (10-500) }` — `afterRefund: true` impose un retrait et une référence
+- **Réponse 201** : `{ id }`
+- **400** : données invalides · **404** : pas un senior · **409** : retrait supérieur aux crédits disponibles, ou référence de remboursement déjà utilisée
+
 ---
 
 ## Admin — Notifications

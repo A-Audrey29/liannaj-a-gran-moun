@@ -301,6 +301,23 @@ export interface IStorage {
   getPaymentByExternalId(externalPaymentId: string): Promise<PaymentRecord | null>;
   getCreditBalance(seniorId: string): Promise<number>;
   getCreditLedger(seniorId: string): Promise<CreditLedger[]>;
+  /** Ledger with who triggered each line: admin view only (adjustment audit). */
+  getCreditLedgerWithAuthor(seniorId: string): Promise<(CreditLedger & { triggeredBy: { firstName: string; lastName: string } | null })[]>;
+  /**
+   * Admin adds (amount > 0) or removes (amount < 0) credits by hand. Under the
+   * same per-senior lock as booking: a removal can never take credits already
+   * set aside for planned meetings, nor make the balance negative. A refund
+   * reference is used for one removal only.
+   */
+  adjustCredits(data: {
+    seniorId: string;
+    amount: number;
+    reason: string;
+    adminId: string;
+    externalReference: string | null;
+    adminNote: string;
+    afterRefund: boolean;
+  }): Promise<{ entry: CreditLedger } | { insufficient: number } | { referenceUsed: true }>;
   getAllInterventions(): Promise<(Intervention & { relation: Relation & { senior: User; junior: User } })[]>;
 
   addFavorite(seniorId: string, juniorId: string): Promise<Favorite>;
@@ -1074,6 +1091,55 @@ class DatabaseStorage implements IStorage {
     return prisma.creditLedger.findMany({
       where: { seniorId },
       orderBy: { createdAt: "desc" },
+    });
+  }
+
+  async getCreditLedgerWithAuthor(seniorId: string) {
+    return prisma.creditLedger.findMany({
+      where: { seniorId },
+      orderBy: { createdAt: "desc" },
+      include: { triggeredBy: { select: { firstName: true, lastName: true } } },
+    });
+  }
+
+  async adjustCredits(data: {
+    seniorId: string;
+    amount: number;
+    reason: string;
+    adminId: string;
+    externalReference: string | null;
+    adminNote: string;
+    afterRefund: boolean;
+  }): Promise<{ entry: CreditLedger } | { insufficient: number } | { referenceUsed: true }> {
+    return prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`credits:${data.seniorId}`}))`;
+      if (data.afterRefund && data.externalReference) {
+        // Same refund recorded twice (double click, two admins) = credits
+        // removed twice. Locked on the reference too: it could be typed on
+        // another senior's profile at the same time.
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`credit-ref:${data.externalReference}`}))`;
+        const used = await tx.creditLedger.findFirst({
+          where: { externalReference: data.externalReference, type: "ADJUSTMENT", amount: { lt: 0 } },
+          select: { id: true },
+        });
+        if (used) return { referenceUsed: true as const };
+      }
+      if (data.amount < 0) {
+        const { available } = await computeCredits(tx, data.seniorId);
+        if (available + data.amount < 0) return { insufficient: Math.max(available, 0) };
+      }
+      const entry = await tx.creditLedger.create({
+        data: {
+          seniorId: data.seniorId,
+          type: "ADJUSTMENT",
+          amount: data.amount,
+          reason: data.reason,
+          triggeredById: data.adminId,
+          externalReference: data.externalReference,
+          adminNote: data.adminNote,
+        },
+      });
+      return { entry };
     });
   }
 

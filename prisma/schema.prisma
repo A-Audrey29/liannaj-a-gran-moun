@@ -331,6 +331,14 @@ model CreditLedger {
   intervention    Intervention?      @relation(fields: [interventionId], references: [id], onDelete: SetNull)
   paymentRecordId String?
   paymentRecord   PaymentRecord?     @relation(fields: [paymentRecordId], references: [id], onDelete: SetNull)
+
+  // Ajustement manuel par un admin seulement (null pour achats et ateliers).
+  // externalReference : identifiant de l'operation chez le prestataire
+  // (Mollie "tr_/re_/chb_...", virement Qonto) pour retrouver l'argent.
+  // adminNote : pourquoi l'admin a ajuste. Les deux restent cote admin : ils
+  // ne sont jamais renvoyes au senior (qui ne voit que `reason`).
+  externalReference String?
+  adminNote         String?
   createdAt       DateTime           @default(now())
 
   @@index([seniorId])

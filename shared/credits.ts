@@ -56,6 +56,23 @@ export interface CreditHistoryEntry {
 }
 
 /**
+ * A ledger line as shown to admins: adds who made it and, for a manual
+ * adjustment, the provider reference and the admin's note. Never sent to
+ * seniors or referents (see CreditHistoryEntry).
+ */
+export interface AdminCreditLedgerEntry extends CreditHistoryEntry {
+  externalReference: string | null;
+  adminNote: string | null;
+  triggeredByName: string | null;
+}
+
+/** What the senior reads in their history for a manual adjustment. */
+export function creditAdjustmentReason(amount: number, afterRefund: boolean): string {
+  if (afterRefund) return "Achat remboursé — crédits retirés";
+  return amount > 0 ? "Crédits ajoutés par l'équipe" : "Crédits retirés par l'équipe";
+}
+
+/**
  * - credited: paid and credits added.
  * - processing: being confirmed (or unknown to this user): wait.
  * - unpaid: the payer left the payment page without paying. Not charged.

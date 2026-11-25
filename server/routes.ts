@@ -26,9 +26,9 @@ import {
   getPasswordResetEmailHtml,
   escapeHtml,
 } from "./lib/email-templates";
-import { accountDeletionRequestSchema, insertUserSchema, createRelationSchema, insertInterventionSchema, feedbackSchema, createPaymentSchema, checkoutSchema, changePasswordSchema, forgotPasswordSchema, resetPasswordSchema, createAdminSchema, insertReportSchema, createAvailabilitySchema, createRecurringAvailabilitiesSchema, extendAvailabilitiesSchema, createDateExceptionSchema, updateUserCategoriesSchema, meetingHistoryQuerySchema, npsSchema, npsQuerySchema, creditsQuerySchema, checkoutStatusQuerySchema, validateRegistrationSchema, refuseRegistrationSchema, COMPLETED_STATUSES } from "../shared/schema";
-import { creditOwnerId } from "../shared/credits";
-import type { CreditBalanceResponse, CreditHistoryEntry, CheckoutStatusResponse } from "../shared/credits";
+import { accountDeletionRequestSchema, insertUserSchema, createRelationSchema, insertInterventionSchema, feedbackSchema, createPaymentSchema, checkoutSchema, changePasswordSchema, forgotPasswordSchema, resetPasswordSchema, createAdminSchema, insertReportSchema, createAvailabilitySchema, createRecurringAvailabilitiesSchema, extendAvailabilitiesSchema, createDateExceptionSchema, updateUserCategoriesSchema, meetingHistoryQuerySchema, npsSchema, npsQuerySchema, creditsQuerySchema, creditAdjustmentSchema, checkoutStatusQuerySchema, validateRegistrationSchema, refuseRegistrationSchema, COMPLETED_STATUSES } from "../shared/schema";
+import { creditOwnerId, creditAdjustmentReason } from "../shared/credits";
+import type { AdminCreditLedgerEntry, CreditBalanceResponse, CreditHistoryEntry, CheckoutStatusResponse } from "../shared/credits";
 import type { MeetingHistoryEntry, MeetingHistoryResponse, MeetingHistorySummary, Role } from "../shared/schema";
 import { buildNpsReport, npsCategory } from "../shared/nps";
 import type { NpsEligibilityResponse, NpsReport, NpsResponseEntry, NpsSegment } from "../shared/nps";
@@ -3333,6 +3333,72 @@ export async function registerRoutes(
       res.json(history);
     } catch (err) {
       console.error("[CREDITS_HISTORY] Error:", err);
+      res.status(500).json({ message: "Erreur" });
+    }
+  });
+
+  // ==================== ADMIN: CREDIT ADJUSTMENTS ====================
+
+  /** Full ledger of a senior for the admin: who, reference, internal note. */
+  app.get("/api/admin/credits/ledger", requireAdmin, async (req, res) => {
+    try {
+      const seniorId = await resolveCreditSenior(req, res);
+      if (!seniorId) return;
+      const ledger = await storage.getCreditLedgerWithAuthor(seniorId);
+      const entries: AdminCreditLedgerEntry[] = ledger.map((entry) => ({
+        id: entry.id,
+        type: entry.type,
+        amount: entry.amount,
+        reason: entry.reason,
+        createdAt: entry.createdAt.toISOString(),
+        externalReference: entry.externalReference,
+        adminNote: entry.adminNote,
+        triggeredByName: entry.triggeredBy ? `${entry.triggeredBy.firstName} ${entry.triggeredBy.lastName}` : null,
+      }));
+      res.json(entries);
+    } catch (err) {
+      console.error("[ADMIN_CREDIT_LEDGER] Error:", err);
+      res.status(500).json({ message: "Erreur" });
+    }
+  });
+
+  /**
+   * Admin adds or removes credits by hand (refund done in Mollie, gesture,
+   * correction). Never edits or deletes a ledger line: always a new
+   * ADJUSTMENT line, with who, why and the provider reference.
+   */
+  app.post("/api/admin/credits/adjustments", requireAdmin, async (req, res) => {
+    try {
+      const parsed = creditAdjustmentSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: "Données invalides", errors: parsed.error.flatten().fieldErrors });
+      }
+      const { seniorId, amount, afterRefund, externalReference, adminNote } = parsed.data;
+      const senior = await storage.getUser(seniorId);
+      if (!senior || senior.role !== "SENIOR") {
+        return res.status(404).json({ message: "Sénior introuvable" });
+      }
+      const result = await storage.adjustCredits({
+        seniorId,
+        amount,
+        reason: creditAdjustmentReason(amount, afterRefund),
+        adminId: req.user!.id,
+        externalReference: externalReference ?? null,
+        adminNote,
+        afterRefund,
+      });
+      if ("referenceUsed" in result) {
+        return res.status(409).json({ message: "Ce remboursement a déjà été retiré des crédits (référence déjà utilisée)" });
+      }
+      if ("insufficient" in result) {
+        return res.status(409).json({
+          message: `Retrait impossible : ${result.insufficient} crédit(s) disponible(s). Les ateliers déjà prévus gardent leur crédit : annulez-les d'abord si besoin.`,
+        });
+      }
+      console.log(`[CREDITS] Ajustement admin ${amount > 0 ? "+" : ""}${amount} (senior ${seniorId}, admin ${req.user!.id})`);
+      res.status(201).json({ id: result.entry.id });
+    } catch (err) {
+      console.error("[ADMIN_CREDIT_ADJUST] Error:", err);
       res.status(500).json({ message: "Erreur" });
     }
   });

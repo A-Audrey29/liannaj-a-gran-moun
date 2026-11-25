@@ -81,6 +81,7 @@ import { CREDIT_OFFERS } from "@shared/credit-offers";
 import MessagerieAdminTab from "@/components/admin-messages-tab";
 import SatisfactionTab from "@/components/admin-satisfaction-tab";
 import InactivityTab, { INACTIVE_ACCOUNTS_KEY } from "@/components/admin-inactivity-tab";
+import CreditAdjustmentPanel from "@/components/admin-credit-adjustment";
 import type { InactiveAccount } from "@shared/inactivity";
 import { fmtTime, fmtDayLongMonthYear, gpParts } from "@/lib/availability-format";
 
@@ -863,6 +864,10 @@ function ProfileDialog({ user, open, onOpenChange }: { user: SafeUser | null; op
           <p className="text-sm text-red-700 bg-red-50 rounded-lg px-3 py-2 mt-4" data-testid="alert-negative-credit-balance">
             Solde de crédits négatif — un rattrapage est nécessaire.
           </p>
+        )}
+        {/* Credits are adjusted on the senior's own profile (an aidant acts on the senior's balance). */}
+        {user.role === "SENIOR" && open && (
+          <CreditAdjustmentPanel seniorId={user.id} seniorName={`${user.firstName} ${user.lastName}`} />
         )}
         {isTeacher && open && <TeacherPanel teacher={user} />}
       </DialogContent>

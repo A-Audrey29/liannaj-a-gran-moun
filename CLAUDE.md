@@ -96,7 +96,11 @@ npm run db:push    # prisma db push — NE PAS utiliser sur la base Neon avec do
 - **Crédits**: 1 crédit = 1 atelier, décompté à la complétion
   (`CONFIRMED` → `COMPLETED_PENDING_FEEDBACK`), pas à la création. Solde
   dérivé de `CreditLedger` (historique), jamais d'un compteur brut. Détail
-  complet dans `docs/decisions.md`.
+  complet dans `docs/decisions.md`. Correction manuelle (ex. après un
+  remboursement Mollie) : uniquement par une nouvelle ligne `ADJUSTMENT` via
+  `POST /api/admin/credits/adjustments` (raison obligatoire, référence
+  obligatoire après remboursement, jamais en dessous des crédits disponibles) ;
+  `adminNote` et `externalReference` ne sont jamais renvoyés au senior.
 - **Clôture des rencontres** (2026-11-10) : le senior ou son aidant déclare
   « La rencontre a eu lieu » ; sinon clôture automatique 48h après la fin
   (`CONFIRMED` seulement). Toute clôture passe par `closeMeeting`
