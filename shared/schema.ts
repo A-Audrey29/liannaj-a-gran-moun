@@ -565,6 +565,56 @@ export const checkoutStatusQuerySchema = z.object({
   paymentId: z.string().regex(/^tr_[A-Za-z0-9]+$/, "Identifiant de paiement invalide").max(255),
 });
 
+/** Largest number of credits an admin can add or remove in one adjustment. */
+export const CREDIT_ADJUSTMENT_MAX = 10;
+
+/**
+ * Reference of the operation at the payment provider or the bank: a Mollie
+ * payment / refund / chargeback ("tr_", "re_", "chb_") or a Qonto transfer
+ * reference (no fixed format). Mollie-looking ids must be well-formed, so a
+ * typo does not go unnoticed.
+ */
+const externalReference = z
+  .string()
+  .trim()
+  .min(3, "Référence trop courte")
+  .max(100, "Référence trop longue")
+  .regex(/^[A-Za-z0-9_\-./]+$/, "Lettres, chiffres et - _ . / uniquement")
+  .refine((ref) => !/^(tr|re|chb)_/.test(ref) || /^(tr|re|chb)_[A-Za-z0-9]+$/.test(ref), {
+    message: "Référence Mollie mal formée (ex. re_AbC123)",
+  });
+
+/**
+ * Admin adds or removes credits by hand. The note says why (kept for the
+ * admins, never shown to the senior). After a refund, the reference of the
+ * refund is required so the money can always be traced.
+ */
+export const creditAdjustmentSchema = z
+  .object({
+    seniorId: z.string().min(1).max(64),
+    amount: z
+      .number()
+      .int("Nombre entier de crédits")
+      .min(-CREDIT_ADJUSTMENT_MAX, `${CREDIT_ADJUSTMENT_MAX} crédits maximum par ajustement`)
+      .max(CREDIT_ADJUSTMENT_MAX, `${CREDIT_ADJUSTMENT_MAX} crédits maximum par ajustement`)
+      .refine((n) => n !== 0, "Le nombre de crédits ne peut pas être 0"),
+    afterRefund: z.boolean(),
+    externalReference: externalReference.optional(),
+    adminNote: z
+      .string()
+      .trim()
+      .min(10, "Expliquez la raison (10 caractères minimum)")
+      .max(500, "500 caractères maximum"),
+  })
+  .refine((d) => !d.afterRefund || d.amount < 0, {
+    message: "Après un remboursement, on retire des crédits",
+    path: ["amount"],
+  })
+  .refine((d) => !d.afterRefund || !!d.externalReference, {
+    message: "Référence du remboursement obligatoire (Mollie re_… ou virement Qonto)",
+    path: ["externalReference"],
+  });
+
 export const npsQuerySchema = z
   .object({
     from: isoDate.optional(),

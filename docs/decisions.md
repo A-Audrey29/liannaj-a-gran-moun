@@ -3,6 +3,49 @@
 Journal des choix d'architecture et de leurs raisons. Une entrée par décision,
 la plus récente en haut.
 
+## 2026-11-25 — Ajustement manuel des crédits par l'admin
+
+**Contexte.** Un remboursement se fait dans Mollie (ou par virement Qonto),
+mais les crédits restaient au senior : aucun écran ne permettait d'en
+retirer. Le solde devenait faux.
+
+**Décision.** Fiche d'un senior (admin) → « Ajuster les crédits » :
+ajouter ou retirer 1 à 10 crédits (`POST /api/admin/credits/adjustments`).
+Chaque ajustement est une **nouvelle ligne** `ADJUSTMENT` de `CreditLedger` :
+on ne modifie ni ne supprime jamais une ligne existante, le solde reste la
+somme de l'historique.
+
+**Garde-fous (tous côté serveur, testés par sabotage).**
+- Raison obligatoire (10 à 500 caractères).
+- « Suite à un remboursement » : c'est un retrait, et la référence est
+  obligatoire. Une référence de remboursement ne sert qu'à **un** retrait, même
+  sur un autre senior (verrou sur la référence : pas de double retrait par
+  double clic ou par deux admins).
+- Format de la référence : une référence Mollie (`tr_`, `re_`, `chb_`) doit être
+  bien formée ; une référence de virement Qonto est libre (lettres, chiffres,
+  `- _ . /`, 3 à 100 caractères).
+- Un retrait ne prend jamais plus que les crédits **disponibles** : le solde ne
+  devient jamais négatif, et les ateliers déjà prévus gardent leur crédit
+  (il faut d'abord les annuler). Même verrou par senior que la réservation.
+- Cible : un senior seulement (l'aidant agit sur le solde de son senior).
+- Confirmation à l'écran avant l'envoi.
+
+**Noms des colonnes (migration `20261125120000_credit_adjustment_audit`, 2 colonnes
+nullables, `down.sql` fourni).**
+- `externalReference` plutôt que `reference` : dans un historique, « reference »
+  seul pourrait désigner un identifiant interne. `external` dit que c'est
+  l'identifiant **chez le prestataire** (Mollie, Qonto), comme
+  `PaymentRecord.externalPaymentId`.
+- `adminNote` (la raison) plutôt que de l'écrire dans `reason` : le senior lit
+  `reason` dans « Mes ateliers ». La note et la référence restent côté admin
+  (`GET /api/admin/credits/ledger`) ; le senior voit un libellé fixe
+  (« Achat remboursé — crédits retirés », « Crédits ajoutés/retirés par
+  l'équipe »).
+
+**Écarté.** Lancer le remboursement Mollie depuis Lyannaj : plus risqué (un
+bug rembourse de l'argent), et le volume ne le justifie pas. On rembourse dans
+Mollie, puis on ajuste dans Lyannaj.
+
 ## 2026-11-24 — Paiement en ligne par Mollie (remplace Stripe)
 
 **Décision.** L'association encaisse via Qonto, relié à Mollie (choix de
@@ -61,9 +104,8 @@ pointe sur la colonne existante `stripeSessionId` (`@map`) : aucune
 migration sur Neon (diff Prisma vide, vérifié).
 
 **Non traité.** Remboursements et litiges (chargebacks) : faits à la main
-dans Mollie, les crédits ne sont pas retirés automatiquement, et aucun
-écran admin ne permet aujourd'hui d'en retirer : à prévoir si des
-remboursements arrivent. Moyens de paiement : ceux activés dans le tableau de bord Mollie
+dans Mollie, les crédits ne sont pas retirés automatiquement : l'admin les
+retire ensuite à la main (voir l'entrée 2026-11-25). Moyens de paiement : ceux activés dans le tableau de bord Mollie
 (aujourd'hui carte, PayPal, iDEAL) ; la page `/forfaits` dit « par carte
 bancaire ».
 

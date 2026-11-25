@@ -95,6 +95,7 @@ npx tsx prisma/seed.ts
 | `20261008120000_add_nps_response` | Table `NpsResponse` (NPS 0-10 + motif) avec deux `CHECK` (note 0-10, rôle SENIOR/REFERENT_SENIOR) que Prisma ne sait pas exprimer. Additive. Rollback : `DROP TABLE "NpsResponse"` (en commentaire de fin). |
 | `20261012120000_add_intervention_is_free` | Colonne `Intervention.isFree` (rencontre gratuite décidée à la création, voir `docs/decisions.md` 2026-10-12) + rattrapage des rencontres encore prévues. Additive, rollback dans `down.sql`. |
 | `20261020120000_intervention_default_duration_60` | Valeur par défaut de `Intervention.durationMinutes` : 120 → 60 (décision du 2026-10-20). Seul le défaut de colonne change, les rencontres existantes gardent leur durée. Rollback dans `down.sql`. |
+| `20261125120000_credit_adjustment_audit` | Colonnes `CreditLedger.externalReference` et `CreditLedger.adminNote` (ajustement manuel des crédits par l'admin, voir `docs/decisions.md` 2026-11-25). Additive, nullable, rollback dans `down.sql`. |
 
 > **Note sur la table `session`** : elle est créée par `connect-pg-simple` et
 > n'existe pas dans `schema.prisma` (aucun accès via le client Prisma). Une
@@ -288,6 +289,8 @@ ajustements). Le solde d'un Senior est toujours dérivé de la somme des
 | `triggeredById` | String? | Admin ayant déclenché le mouvement |
 | `interventionId` | String? | Intervention concernée (pour une CONSUMPTION) |
 | `paymentRecordId` | String? | Paiement à l'origine du mouvement (pour un PURCHASE) |
+| `externalReference` | String? | Ajustement admin : référence chez Mollie (`tr_`/`re_`/`chb_`) ou du virement Qonto. Jamais renvoyé au senior |
+| `adminNote` | String? | Ajustement admin : raison saisie par l'admin (obligatoire). Jamais renvoyé au senior |
 
 > La première rencontre d'une relation (`PENDING_FIRST_MEETING`) est gratuite
 > par défaut et ne génère pas de CONSUMPTION, sauf si sa durée prévue dépasse
