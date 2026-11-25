@@ -21,3 +21,10 @@ vite.config.ts.*
 .playwright-mcp/
 .claude/settings.local.json
 *.code-workspace
+
+# Scratch folder (screenshots, mockups, pasted notes from the Replit era):
+# never committed, the repo is public. Real site images live in
+# client/src/assets/ (alias @assets).
+attached_assets/
+Capture*.png
+Screenshot*.png

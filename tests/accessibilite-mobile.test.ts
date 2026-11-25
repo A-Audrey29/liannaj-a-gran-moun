@@ -8,6 +8,7 @@
  */
 import { describe, it, expect } from "vitest";
 import fs from "fs";
+import { execSync } from "child_process";
 import path from "path";
 
 const ROOT = path.resolve(import.meta.dirname, "..");
@@ -113,11 +114,21 @@ describe("tailles de texte et images", () => {
     expect(offenders).toEqual([]);
   });
 
+  it("chaque image importee via @assets est suivie par git (sinon absente du deploiement)", () => {
+    const tracked = new Set(execSync("git ls-files client/src/assets", { cwd: ROOT, encoding: "utf8" }).split("\n"));
+    const missing = tsxFiles.flatMap((f) =>
+      [...read(f).matchAll(/from "@assets\/([^"]+)"/g)]
+        .map((m) => `client/src/assets/${m[1]}`)
+        .filter((file) => !tracked.has(file)),
+    );
+    expect(missing).toEqual([]);
+  });
+
   it("la landing n'embarque plus de PNG de plusieurs centaines de Ko", () => {
     const landing = read("client/src/pages/landing.tsx");
     const imports = [...landing.matchAll(/from "@assets\/([^"]+)"/g)].map((m) => m[1]);
     for (const file of imports) {
-      const size = fs.statSync(path.join(ROOT, "attached_assets", file)).size;
+      const size = fs.statSync(path.join(ROOT, "client/src/assets", file)).size;
       expect(size, `${file} pese ${Math.round(size / 1024)} Ko`).toBeLessThan(150 * 1024);
     }
   });
