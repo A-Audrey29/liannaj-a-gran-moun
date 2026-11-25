@@ -21,3 +21,11 @@ vite.config.ts.*
 .playwright-mcp/
 .claude/settings.local.json
 *.code-workspace
+
+# Screenshots and mockups: never committed (public repo).
+# attached_assets also holds real site images (imported via @assets): only
+# PNG files are ignored there, except the logo used by the landing page.
+attached_assets/*.png
+!attached_assets/logo_CGRR_*.png
+Capture*.png
+Screenshot*.png
