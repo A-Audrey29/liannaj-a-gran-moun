@@ -6,8 +6,7 @@
  * - Le solde expose aussi les credits disponibles (solde - ateliers payants
  *   deja prevus).
  * - L'historique ne renvoie aucun identifiant interne.
- * - checkout-status : la page de succes attend que le webhook ait credite,
- *   et seul l'acheteur voit l'etat de sa session.
+ * - checkout-status : voir tests/credits-checkout.test.ts (faux Mollie).
  */
 import { describe, it, expect, beforeEach, afterAll } from "vitest";
 import { resetDatabase, createUser, loginAs, createRelation, crediterSenior, anonymousAgent } from "./helpers";
@@ -79,42 +78,6 @@ describe("GET /api/credits/history", () => {
 
     expect(res.status).toBe(200);
     expect(Object.keys(res.body[0]).sort()).toEqual(["amount", "createdAt", "id", "reason", "type"]);
-  });
-});
-
-describe("GET /api/credits/checkout-status", () => {
-  async function paiement(userId: string, sessionId: string) {
-    return prisma.paymentRecord.create({
-      data: { userId, amount: 15, label: "Pack 1", stripeSessionId: sessionId },
-    });
-  }
-
-  it("credited=true une fois le paiement enregistre pour l'acheteur", async () => {
-    const senior = await createUser("SENIOR");
-    const agent = await loginAs(senior);
-
-    const avant = await agent.get("/api/credits/checkout-status?sessionId=cs_test_abc");
-    await paiement(senior.id, "cs_test_abc");
-    const apres = await agent.get("/api/credits/checkout-status?sessionId=cs_test_abc");
-
-    expect(avant.body).toEqual({ credited: false });
-    expect(apres.body).toEqual({ credited: true });
-  });
-
-  it("un autre utilisateur ne voit pas l'etat de la session", async () => {
-    const acheteur = await createUser("SENIOR");
-    const autre = await createUser("SENIOR");
-    await paiement(acheteur.id, "cs_test_xyz");
-
-    const res = await (await loginAs(autre)).get("/api/credits/checkout-status?sessionId=cs_test_xyz");
-
-    expect(res.body).toEqual({ credited: false });
-  });
-
-  it("refuse un identifiant de session mal forme", async () => {
-    const senior = await createUser("SENIOR");
-    const res = await (await loginAs(senior)).get("/api/credits/checkout-status?sessionId=../../etc");
-    expect(res.status).toBe(400);
   });
 });
 

@@ -38,7 +38,7 @@ import { addSSEClient, sendSSEEvent, isUserConnected } from "./lib/sse";
 import { fmtDayNumeric, fmtTime, gpDateTimeToUtc, addDaysISO } from "../shared/dates";
 import { PLATFORM_NAME, CONTACT_EMAIL } from "../shared/branding";
 import { sendPushNotification, getVapidPublicKey } from "./lib/push";
-import { paymentProvider } from "./lib/payment-provider";
+import { paymentProvider, type ProviderPayment } from "./lib/payment-provider";
 import { findCreditOffer } from "../shared/credit-offers";
 import { env, getBaseUrl as getPublicBaseUrl } from "./env";
 import { createPasswordResetToken, resetPasswordWithToken } from "./lib/password-reset";
@@ -263,6 +263,7 @@ const isDev = process.env.NODE_ENV !== "production";
 
 /** `Report.reason` of an account-deletion request (shown in the admin "Signalements" tab). */
 const ACCOUNT_DELETION_REASON = "ACCOUNT_DELETION";
+const PAYMENT_NOT_CREDITED_REASON = "PAYMENT_NOT_CREDITED";
 
 // Durée de validité du lien de validation d'inscription (7 jours).
 const VALIDATION_TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000;
@@ -306,6 +307,26 @@ const inactivityRunLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   limit: isDev ? 1000 : 5,
   message: { message: "Vérification déjà lancée plusieurs fois. Réessayez dans 15 minutes." },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+// Public and unsigned: each call costs a Mollie API call. Wide enough for
+// Mollie's own calls (one per status change), low enough to stop a flood
+// that would get our API key throttled.
+const paymentWebhookLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  limit: isDev ? 1000 : 120,
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+// The success page polls every 2 s for 40 s, each call may reach Mollie.
+const checkoutStatusLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  limit: isDev ? 1000 : 60,
+  keyGenerator: (req) => req.user!.id,
+  message: { message: "Trop de vérifications. Patientez une minute." },
   standardHeaders: true,
   legacyHeaders: false,
 });
@@ -461,6 +482,118 @@ async function deleteUserAccount(user: { id: string; profilePhoto: string | null
   await storage.deleteUser(user.id);
   // Its open sessions go too (deserializeUser would refuse them anyway).
   await destroyUserSessions(user.id);
+}
+
+/**
+ * Credits a purchase read from the payment provider, once. Called by the
+ * webhook and by the success page, possibly at the same time: the unique
+ * payment id in base makes the second one a no-op ("already"), and only the
+ * one that credits sends the confirmation e-mails.
+ *
+ * Throws only on a passing error (database down): the caller answers 500.
+ */
+async function recordPaidPurchase(
+  payment: ProviderPayment,
+): Promise<"credited" | "already" | "not_paid" | "ignored"> {
+  if (payment.status !== "paid") return "not_paid";
+  if (!payment.metadata) {
+    // Not created by our checkout (e.g. a payment made by hand in Mollie).
+    console.error(`[PAYMENT] Paiement ${payment.externalId} sans métadonnées Lyannaj : ignoré.`);
+    return "ignored";
+  }
+  if (await storage.getPaymentByExternalId(payment.externalId)) return "already";
+  if (payment.refunded) {
+    // Refunded before we could credit it (e.g. webhook failed, then refund).
+    console.error(`[PAYMENT] Paiement ${payment.externalId} remboursé avant crédit : non crédité.`);
+    return "ignored";
+  }
+
+  const { seniorId, offerId, purchasedByUserId } = payment.metadata;
+  const offer = findCreditOffer(offerId);
+  if (!offer) {
+    await alertPaymentNotCredited(payment, `offre inconnue « ${offerId} »`);
+    return "ignored";
+  }
+  // The amount is set by our server at checkout; a mismatch means the offer
+  // price changed in between or something is wrong: a human checks.
+  if (Math.abs(payment.amountPaidEuros - offer.priceEuros) > 0.001) {
+    await alertPaymentNotCredited(
+      payment,
+      `montant inattendu : ${payment.amountPaidEuros} € payés, ${offer.priceEuros} € attendus pour « ${offer.label} »`,
+    );
+    return "ignored";
+  }
+
+  try {
+    await storage.createPayment({
+      userId: purchasedByUserId,
+      amount: payment.amountPaidEuros,
+      label: `Achat en ligne — ${offer.label}`,
+      credits: offer.credits,
+      creditSeniorId: seniorId,
+      triggeredById: purchasedByUserId,
+      externalPaymentId: payment.externalId,
+    });
+  } catch (err: any) {
+    // The webhook and the success page arrived together: the other one credited.
+    if (err?.code === "P2002") return "already";
+    // Payer or senior deleted between payment and crediting: retrying will not
+    // help, an admin must refund by hand.
+    if (err?.code === "P2003" || err?.code === "P2025") {
+      await alertPaymentNotCredited(payment, "compte du senior ou du payeur supprimé entre-temps");
+      return "ignored";
+    }
+    throw err;
+  }
+
+  try {
+    const balance = await storage.getCreditBalance(seniorId);
+    const recipients = purchasedByUserId === seniorId ? [seniorId] : [seniorId, purchasedByUserId];
+    for (const id of recipients) {
+      const person = await storage.getUser(id);
+      if (!person) continue;
+      await sendEmail({
+        to: person.email,
+        subject: `Confirmation de votre achat — ${PLATFORM_NAME}`,
+        htmlContent: getCreditPurchaseConfirmedEmailHtml(`${person.firstName} ${person.lastName}`, offer.label, balance),
+      });
+    }
+  } catch (emailErr) {
+    console.error("[PAYMENT] Échec envoi email:", emailErr);
+  }
+  return "credited";
+}
+
+/**
+ * Money received but no credits given: tell the team (Signalements tab), once
+ * per payment, so someone credits or refunds by hand. A log alone would go
+ * unnoticed, and the provider will not call again (we answered 200).
+ */
+async function alertPaymentNotCredited(payment: ProviderPayment, why: string): Promise<void> {
+  const message =
+    `Paiement ${payment.externalId} encaissé (${payment.amountPaidEuros} €) mais non crédité : ${why}. ` +
+    `Remboursement manuel nécessaire (ou crédit manuel si c'est justifié). ` +
+    `Senior ${payment.metadata?.seniorId ?? "?"}, payeur ${payment.metadata?.purchasedByUserId ?? "?"}.`;
+  console.error(`[PAYMENT] ${message}`);
+  try {
+    // A report needs an existing author: the payer, or an admin if the payer is gone.
+    const payer = payment.metadata ? await storage.getUser(payment.metadata.purchasedByUserId) : undefined;
+    const reporterId = payer?.id ?? (await storage.getAdmins())[0]?.id;
+    if (!reporterId) return;
+    await storage.createReportOnceForKey(payment.externalId, {
+      reporterId,
+      reason: PAYMENT_NOT_CREDITED_REASON,
+      message,
+    });
+  } catch (err) {
+    console.error("[PAYMENT] Signalement à l'équipe impossible:", err);
+  }
+}
+
+/** False for a local address Mollie cannot call (localhost, 127.0.0.1, *.local). */
+function isPublicUrl(url: string): boolean {
+  const host = new URL(url).hostname;
+  return !/^(localhost|127\.0\.0\.1|\[::1\])$/.test(host) && !host.endsWith(".local");
 }
 
 export async function registerRoutes(
@@ -3165,9 +3298,9 @@ export async function registerRoutes(
     return ownerId;
   }
 
-  // Public: tells the client whether to show "Acheter" or "contact the team".
-  // While no payment provider is configured (HelloAsso pending), purchases go
-  // through the team and are recorded by an admin (Paiements tab).
+  // Public: is online payment available? Without a provider (dev/QA), the
+  // "Acheter" button gets a 503 and says so; an admin can still record an
+  // offline payment (Paiements tab).
   app.get("/api/credits/payment-status", (_req, res) => {
     res.json({ online: paymentProvider.isConfigured() });
   });
@@ -3205,19 +3338,36 @@ export async function registerRoutes(
   });
 
   /**
-   * Has the Stripe webhook credited this checkout yet? Polled by the success
-   * page: Stripe redirects the browser before (or while) the webhook runs.
-   * Only the purchaser can see their own session.
+   * Has this payment been credited yet? Polled by the success page (Mollie
+   * sends the browser back before, or while, its webhook arrives).
+   *
+   * If not credited yet, the payment is read from Mollie and credited here
+   * when paid: in local dev Mollie cannot reach the webhook, and in production
+   * the payer sees the credits without waiting for it. Same idempotent path as
+   * the webhook. Only the purchaser learns anything about their payment.
    */
-  app.get("/api/credits/checkout-status", requireAuth, async (req, res) => {
+  app.get("/api/credits/checkout-status", requireAuth, checkoutStatusLimiter, async (req, res) => {
     try {
       const parsed = checkoutStatusQuerySchema.safeParse(req.query);
       if (!parsed.success) {
         return res.status(400).json({ message: "Paramètres invalides", errors: parsed.error.flatten().fieldErrors });
       }
-      const payment = await storage.getPaymentByStripeSessionId(parsed.data.sessionId);
-      const response: CheckoutStatusResponse = { credited: !!payment && payment.userId === req.user!.id };
-      res.json(response);
+      const userId = req.user!.id;
+      const reply = (status: CheckoutStatusResponse["status"]) => res.json({ status } satisfies CheckoutStatusResponse);
+      // Someone else's (or an unknown) payment: say nothing about it.
+      const nothingToSay = () => reply("processing");
+
+      const recorded = await storage.getPaymentByExternalId(parsed.data.paymentId);
+      if (recorded) return recorded.userId === userId ? reply("credited") : nothingToSay();
+      if (!paymentProvider.isConfigured()) return nothingToSay();
+
+      const payment = await paymentProvider.getPayment(parsed.data.paymentId);
+      if (!payment || payment.metadata?.purchasedByUserId !== userId) return nothingToSay();
+      if (payment.status === "failed") return reply("failed");
+      if (payment.status === "open") return reply("unpaid");
+
+      const outcome = await recordPaidPurchase(payment);
+      reply(outcome === "credited" || outcome === "already" ? "credited" : "processing");
     } catch (err) {
       console.error("[CREDITS_CHECKOUT_STATUS] Error:", err);
       res.status(500).json({ message: "Erreur" });
@@ -3254,6 +3404,9 @@ export async function registerRoutes(
         purchasedByUserId: user.id,
         successUrl: `${baseUrl}/credits/success`,
         cancelUrl: `${baseUrl}/credits/cancel`,
+        // Mollie refuses a webhook it cannot reach (localhost): in local dev the
+        // success page credits the payment instead (checkout-status).
+        webhookUrl: isPublicUrl(baseUrl) ? `${baseUrl}/api/webhooks/payment` : null,
       });
 
       res.json({ url });
@@ -3263,88 +3416,26 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/webhooks/payment", async (req, res) => {
+  /**
+   * Mollie calls this on every status change, with only `id=tr_...` and no
+   * signature. The id is never trusted: the payment is re-read from Mollie.
+   * 200 for anything handled or that never will be (unknown id — Mollie's
+   * advice, so a prober learns nothing); 500 on a passing error (Mollie
+   * retries 10 times over 26 h) — otherwise the payer is charged without
+   * receiving credits. Replaying is safe: the payment id is unique in base.
+   */
+  app.post("/api/webhooks/payment", paymentWebhookLimiter, async (req, res) => {
     if (!paymentProvider.isConfigured()) return res.status(503).send();
 
-    const event = paymentProvider.verifyWebhookAndExtract(
-      req.rawBody as Buffer,
-      req.headers["stripe-signature"] as string | undefined
-    );
-    if (!event) {
-      return res.status(400).send("Webhook invalide");
-    }
+    const paymentId = paymentProvider.paymentIdFromWebhook(req.body);
+    if (!paymentId) return res.status(400).send("Webhook invalide");
 
-    // Événement valide à partir d'ici. 200 pour ce qui est déjà traité ou ne le
-    // sera jamais (doublon, offre inconnue, compte supprimé) ; 500 pour une
-    // erreur passagère (base injoignable, timeout) afin que Stripe réessaie —
-    // sinon le client est débité sans recevoir ses crédits. Rejouer est sans
-    // risque : stripeSessionId est unique.
     try {
-      const existing = await storage.getPaymentByStripeSessionId(event.externalSessionId);
-      if (existing) {
-        return res.status(200).send();
-      }
-
-      const offer = findCreditOffer(event.metadata.offerId);
-      if (!offer) {
-        console.error(`[PAYMENT_WEBHOOK] Offre inconnue "${event.metadata.offerId}" sur ${event.externalSessionId}`);
-        return res.status(200).send();
-      }
-
-      const { seniorId, purchasedByUserId } = event.metadata;
-
-      try {
-        await storage.createPayment({
-          userId: purchasedByUserId,
-          amount: event.amountPaidEuros,
-          label: `Achat en ligne — ${offer.label}`,
-          credits: offer.credits,
-          creditSeniorId: seniorId,
-          triggeredById: purchasedByUserId,
-          stripeSessionId: event.externalSessionId,
-        });
-      } catch (err: any) {
-        // Livraison concurrente du même événement : l'autre l'a enregistré.
-        if (err?.code === "P2002") return res.status(200).send();
-        // Payeur ou senior supprimé entre le paiement et le webhook : rejouer
-        // n'y changera rien, un admin doit rembourser à la main.
-        if (err?.code === "P2003" || err?.code === "P2025") {
-          console.error(
-            `[PAYMENT_WEBHOOK] Paiement ${event.externalSessionId} non crédité : compte introuvable ` +
-              `(senior ${seniorId}, payeur ${purchasedByUserId}). Remboursement manuel nécessaire.`
-          );
-          return res.status(200).send();
-        }
-        throw err;
-      }
-
-      try {
-        const senior = await storage.getUser(seniorId);
-        const balance = await storage.getCreditBalance(seniorId);
-        if (senior) {
-          await sendEmail({
-            to: senior.email,
-            subject: `Confirmation de votre achat — ${PLATFORM_NAME}`,
-            htmlContent: getCreditPurchaseConfirmedEmailHtml(`${senior.firstName} ${senior.lastName}`, offer.label, balance),
-          });
-        }
-        if (purchasedByUserId !== seniorId) {
-          const payeur = await storage.getUser(purchasedByUserId);
-          if (payeur) {
-            await sendEmail({
-              to: payeur.email,
-              subject: `Confirmation de votre achat — ${PLATFORM_NAME}`,
-              htmlContent: getCreditPurchaseConfirmedEmailHtml(`${payeur.firstName} ${payeur.lastName}`, offer.label, balance),
-            });
-          }
-        }
-      } catch (emailErr) {
-        console.error("[PAYMENT_WEBHOOK] Échec envoi email:", emailErr);
-      }
-
+      const payment = await paymentProvider.getPayment(paymentId);
+      if (payment) await recordPaidPurchase(payment);
       res.status(200).send();
     } catch (err) {
-      console.error("[PAYMENT_WEBHOOK] Erreur passagère, Stripe va réessayer:", err);
+      console.error("[PAYMENT_WEBHOOK] Erreur passagère, Mollie va réessayer:", err);
       res.status(500).send();
     }
   });

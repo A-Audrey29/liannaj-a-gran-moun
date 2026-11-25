@@ -11,7 +11,7 @@ export interface CreditOffer {
 // Découverte 18 €, Essentiel 85 € (17 €/atelier), Sérénité 160 € (16 €/atelier).
 //
 // Source de vérité unique pour les prix : lue par le serveur pour créer les
-// sessions Stripe Checkout, par la carte d'achat, la page /forfaits ET par
+// paiements Mollie, par la carte d'achat, la page /forfaits ET par
 // l'admin (client/src/pages/admin.tsx, onglet Paiements) pour un affichage en
 // lecture seule. Aucun écran CRUD — modifier un prix ou ajouter une offre se
 // fait ici, suivi d'un redéploiement.

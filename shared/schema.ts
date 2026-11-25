@@ -560,9 +560,9 @@ export const creditsQuerySchema = z.object({
   seniorId: z.string().min(1).max(64).optional(),
 });
 
-/** Stripe Checkout session id, appended by Stripe to the success URL. */
+/** Mollie payment id, added by the server to the success URL (?payment_id=). */
 export const checkoutStatusQuerySchema = z.object({
-  sessionId: z.string().regex(/^cs_[A-Za-z0-9_]+$/, "Identifiant de session invalide").max(255),
+  paymentId: z.string().regex(/^tr_[A-Za-z0-9]+$/, "Identifiant de paiement invalide").max(255),
 });
 
 export const npsQuerySchema = z

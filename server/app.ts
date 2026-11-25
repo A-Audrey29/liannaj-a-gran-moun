@@ -12,12 +12,6 @@ import type { Server } from "http";
 import { registerRoutes } from "./routes";
 import { setupAuth } from "./auth";
 
-declare module "http" {
-  interface IncomingMessage {
-    rawBody: unknown;
-  }
-}
-
 export function log(message: string, source = "express") {
   const formattedTime = new Date().toLocaleTimeString("en-US", {
     hour: "numeric",
@@ -48,13 +42,7 @@ export async function createApp(httpServer: Server): Promise<Express> {
   // ferait confiance à tout X-Forwarded-For, spoofable → contournement du rate limit.
   app.set("trust proxy", 1);
 
-  app.use(
-    express.json({
-      verify: (req, _res, buf) => {
-        req.rawBody = buf;
-      },
-    }),
-  );
+  app.use(express.json());
 
   app.use(express.urlencoded({ extended: false }));
 

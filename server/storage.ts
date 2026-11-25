@@ -296,9 +296,9 @@ export interface IStorage {
   getAllRelations(): Promise<(Relation & { senior: User; junior: User })[]>;
   getAllRelationsByStatus(status: string): Promise<(Relation & { senior: User; junior: User })[]>;
   getRelationsAwaitingFirstMeeting(): Promise<(Relation & { senior: User; junior: User })[]>;
-  createPayment(data: { userId: string; amount: number; label: string; date?: Date; credits?: number; creditSeniorId?: string | null; triggeredById: string; stripeSessionId?: string | null }): Promise<PaymentRecord>;
+  createPayment(data: { userId: string; amount: number; label: string; date?: Date; credits?: number; creditSeniorId?: string | null; triggeredById: string; externalPaymentId?: string | null }): Promise<PaymentRecord>;
   getPayments(): Promise<(PaymentRecord & { user: User })[]>;
-  getPaymentByStripeSessionId(stripeSessionId: string): Promise<PaymentRecord | null>;
+  getPaymentByExternalId(externalPaymentId: string): Promise<PaymentRecord | null>;
   getCreditBalance(seniorId: string): Promise<number>;
   getCreditLedger(seniorId: string): Promise<CreditLedger[]>;
   getAllInterventions(): Promise<(Intervention & { relation: Relation & { senior: User; junior: User } })[]>;
@@ -347,6 +347,11 @@ export interface IStorage {
    * two concurrent requests cannot both create one.
    */
   createReportOnce(data: { reporterId: string; reason: string; message: string }): Promise<{ report: Report; created: boolean }>;
+  /**
+   * One report per key (e.g. a payment id), whoever files it: the webhook and
+   * the success page may both hit the same problem, several times.
+   */
+  createReportOnceForKey(key: string, data: { reporterId: string; reason: string; message: string }): Promise<boolean>;
 
   getNpsIneligibility(user: NpsRespondent): Promise<NpsIneligibleReason | null>;
   /**
@@ -1027,7 +1032,7 @@ class DatabaseStorage implements IStorage {
     });
   }
 
-  async createPayment(data: { userId: string; amount: number; label: string; date?: Date; credits?: number; creditSeniorId?: string | null; triggeredById: string; stripeSessionId?: string | null }): Promise<PaymentRecord> {
+  async createPayment(data: { userId: string; amount: number; label: string; date?: Date; credits?: number; creditSeniorId?: string | null; triggeredById: string; externalPaymentId?: string | null }): Promise<PaymentRecord> {
     return prisma.$transaction(async (tx) => {
       const payment = await tx.paymentRecord.create({
         data: {
@@ -1035,7 +1040,7 @@ class DatabaseStorage implements IStorage {
           amount: data.amount,
           label: data.label,
           date: data.date || new Date(),
-          stripeSessionId: data.stripeSessionId ?? null,
+          externalPaymentId: data.externalPaymentId ?? null,
         },
       });
       // No subscription in Lyannaj (credits only): User.subscriptionActive is
@@ -1057,8 +1062,8 @@ class DatabaseStorage implements IStorage {
     });
   }
 
-  async getPaymentByStripeSessionId(stripeSessionId: string): Promise<PaymentRecord | null> {
-    return prisma.paymentRecord.findUnique({ where: { stripeSessionId } });
+  async getPaymentByExternalId(externalPaymentId: string): Promise<PaymentRecord | null> {
+    return prisma.paymentRecord.findUnique({ where: { externalPaymentId } });
   }
 
   async getCreditBalance(seniorId: string): Promise<number> {
@@ -1522,6 +1527,16 @@ class DatabaseStorage implements IStorage {
       const existing = await tx.report.findFirst({ where: { reporterId: data.reporterId, reason: data.reason, status: "OPEN" } });
       if (existing) return { report: existing, created: false };
       return { report: await tx.report.create({ data }), created: true };
+    });
+  }
+
+  async createReportOnceForKey(key: string, data: { reporterId: string; reason: string; message: string }): Promise<boolean> {
+    return prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`report-key:${key}`}))`;
+      const existing = await tx.report.findFirst({ where: { reason: data.reason, message: { contains: key } } });
+      if (existing) return false;
+      await tx.report.create({ data });
+      return true;
     });
   }
 

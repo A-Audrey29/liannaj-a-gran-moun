@@ -1920,6 +1920,7 @@ const REPORT_REASON_LABELS: Record<string, string> = {
   QUESTION: "Question sur l'application",
   OTHER: "Autre chose",
   ACCOUNT_DELETION: "Demande de suppression de compte",
+  PAYMENT_NOT_CREDITED: "Paiement encaissé non crédité",
 };
 
 function SignalementsTab() {

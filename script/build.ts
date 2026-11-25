@@ -24,7 +24,6 @@ const allowlist = [
   // "pg" volontairement absent : bundlé et minifié, le driver casse à la
   // connexion (ERR_INVALID_ARG_TYPE dans addCString au startup du protocole).
   // Il est chargé depuis node_modules, comme @prisma/client et son adaptateur.
-  "stripe",
   "uuid",
   "ws",
   "xlsx",

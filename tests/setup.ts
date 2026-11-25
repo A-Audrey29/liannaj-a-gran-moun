@@ -27,9 +27,7 @@ delete process.env.VAPID_PUBLIC_KEY;
 delete process.env.VAPID_PRIVATE_KEY;
 delete process.env.VAPID_SUBJECT;
 
-// Cle Stripe factice fixe : active paymentProvider.isConfigured() pour
-// pouvoir tester la vraie logique de verification de signature webhook
-// (via stripe.webhooks.generateTestHeaderString) sans reseau ni vrai compte.
-process.env.STRIPE_SECRET_KEY = "sk_test_00000000000000000000000000000000000000000000";
-process.env.STRIPE_WEBHOOK_SECRET = "whsec_test_secret_uniquement_pour_les_tests";
-process.env.STRIPE_PUBLISHABLE_KEY = "pk_test_00000000000000000000000000000000000000000000";
+// Cle Mollie factice fixe : active paymentProvider.isConfigured(). Les tests
+// de paiement remplacent fetch par un faux Mollie (tests/credits-checkout) :
+// aucun appel reseau, aucun vrai compte.
+process.env.MOLLIE_API_KEY = "test_00000000000000000000000000000000";
