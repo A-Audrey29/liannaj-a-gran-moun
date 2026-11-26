@@ -37,6 +37,7 @@ import { createRecurringAvailabilities, extendRecurringAvailabilities, parseAvai
 import { addSSEClient, sendSSEEvent, isUserConnected } from "./lib/sse";
 import { fmtDayNumeric, fmtTime, gpDateTimeToUtc, addDaysISO } from "../shared/dates";
 import { PLATFORM_NAME, CONTACT_EMAIL } from "../shared/branding";
+import { TEST_ACCOUNTS, TEST_ACCOUNT_PASSWORD } from "../shared/test-accounts";
 import { sendPushNotification, getVapidPublicKey } from "./lib/push";
 import { paymentProvider, type ProviderPayment } from "./lib/payment-provider";
 import { findCreditOffer } from "../shared/credit-offers";
@@ -618,6 +619,19 @@ export async function registerRoutes(
       console.error("[HEALTH] Base de données injoignable:", err);
       res.status(503).json({ status: "error", database: "down" });
     }
+  });
+
+  /**
+   * Comptes de démonstration pour la page d'accueil, tant que Mollie est en
+   * mode test. La condition est la clé "test_" : le jour où la clé live_ est
+   * posée sur Render, la liste devient vide sans rien d'autre à retirer.
+   * Liste fixe (jamais lue en base) et sans compte admin.
+   */
+  app.get("/api/test-accounts", (_req, res) => {
+    const testMode = !!env.MOLLIE_API_KEY?.startsWith("test_");
+    res.json(
+      testMode ? { password: TEST_ACCOUNT_PASSWORD, accounts: TEST_ACCOUNTS } : { password: null, accounts: [] },
+    );
   });
 
   app.post("/api/auth/register", registerLimiter, uploadSinglePhoto("photo"), async (req, res) => {
