@@ -1,6 +1,7 @@
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import { TEST_ROLE_LABELS, type TestAccount } from "@shared/test-accounts";
 import { useLocation, Link } from "wouter";
 import { loginSchema, type LoginInput } from "@shared/schema";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -22,6 +23,13 @@ import { LogIn, Mail, Lock } from "lucide-react";
 export default function LoginPage() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
+
+  // Demo logins: the server returns an empty list unless Mollie runs with a
+  // "test_" key, so nothing shows in production.
+  const { data: testAccounts } = useQuery<{ password: string | null; accounts: TestAccount[] }>({
+    queryKey: ["/api/test-accounts"],
+    staleTime: Infinity,
+  });
 
   const form = useForm<LoginInput>({
     resolver: zodResolver(loginSchema),
@@ -168,32 +176,32 @@ export default function LoginPage() {
           </div>
         </CardContent>
       </Card>
-      {import.meta.env.DEV && (
-        <div className="w-full max-w-md mt-4 rounded-2xl bg-muted/50 p-4">
-          <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3 text-center">Comptes de test</p>
-          <div className="flex flex-col gap-2">
-            {[
-              { label: "Admin", email: "admin@feves.fr" },
-              { label: "Senior", email: "senior@test.fr" },
-              { label: "Jeune", email: "junior@test.fr" },
-              { label: "Aidant", email: "referent@test.fr" },
-              { label: "Professeur", email: "professeur@test.fr" },
-            ].map((account) => (
-              <button
-                key={account.email}
-                type="button"
-                className="flex items-center justify-between px-3 py-2 rounded-lg bg-white hover:bg-[#f3eaff] border border-border/50 text-sm transition-colors"
-                onClick={() => {
-                  form.setValue("email", account.email);
-                  form.setValue("password", "password");
-                }}
-                data-testid={`button-test-${account.label.toLowerCase()}`}
-              >
-                <span className="font-medium">{account.label}</span>
-                <span className="text-muted-foreground text-xs">{account.email}</span>
-              </button>
+      {testAccounts && testAccounts.accounts.length > 0 && (
+        <div className="w-full max-w-md mt-4 rounded-2xl bg-amber-50 border border-amber-200 p-4" data-testid="section-test-accounts">
+          <h2 className="text-base font-semibold text-gray-900 mb-1 text-center">Mode test : comptes de démonstration</h2>
+          <p className="text-sm text-gray-700 mb-3 text-center">
+            Paiements en mode test (aucun argent réel). Touchez un compte pour remplir le formulaire.
+          </p>
+          <ul className="flex flex-col gap-2">
+            {testAccounts.accounts.map((account) => (
+              <li key={account.email}>
+                <button
+                  type="button"
+                  className="w-full min-h-11 flex items-center justify-between gap-3 px-3 py-2 rounded-lg bg-white hover:bg-[#f3eaff] border border-border/50 text-sm transition-colors"
+                  onClick={() => {
+                    form.setValue("email", account.email);
+                    form.setValue("password", testAccounts.password ?? "");
+                  }}
+                  data-testid={`button-test-${account.email}`}
+                >
+                  <span className="font-medium">
+                    {account.firstName} <span className="font-normal text-gray-600">({TEST_ROLE_LABELS[account.role]})</span>
+                  </span>
+                  <span className="text-gray-700 text-sm break-all text-right">{account.email}</span>
+                </button>
+              </li>
             ))}
-          </div>
+          </ul>
         </div>
       )}
     </div>
