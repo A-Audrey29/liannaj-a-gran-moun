@@ -1,4 +1,4 @@
-const CACHE_NAME = 'feves-v1';
+const CACHE_NAME = 'feves-v2';
 const STATIC_ASSETS = [
   '/',
   '/favicon.png',
