@@ -14,7 +14,6 @@ Ce guide explique comment déployer FEVES sur [Render](https://render.com/).
 
 ## À vérifier juste avant la mise en production
 
-- [ ] **Adresse e-mail de contact** : `CONTACT_EMAIL` dans `shared/branding.ts` vaut encore `contact@baicoco.fr`, une valeur de gabarit qui appartient à un tiers. Elle s'affiche sur la page d'accueil, `/forfaits`, le pied de page, la page d'attente d'inscription (quand l'e-mail de validation n'est pas parti) et la page de validation. À remplacer par l'adresse réelle de l'association.
 - [ ] Base de données de production : ménage ou clone des données de test (voir décision du 2026-10-13).
 - [ ] Pages légales (mentions, confidentialité, CGU, CGV) : textes fournis par l'association, à intégrer.
 - [ ] Paiement (Mollie) : sur Render, `MOLLIE_API_KEY` = la clé **live_** du profil FEVES (my.mollie.com > Développeurs > Clés API), et `BASE_URL` = l'adresse publique https du site (Mollie appelle `BASE_URL/api/webhooks/payment`). Le profil Mollie doit être activé (vérification de l'association terminée). Faire un vrai achat de 18 € puis le rembourser depuis Mollie pour valider. Sans clé, « Acheter » affiche une erreur 503 ; l'admin peut toujours enregistrer un paiement hors ligne (onglet Paiements).
@@ -85,7 +84,7 @@ Dans **Environment → Environment Variables** du service Render, ajouter :
 | `BREVO_SENDER_NAME` | `FEVES` (ou autre nom) | Pour les emails |
 | `VAPID_PUBLIC_KEY` | Clé publique VAPID | Pour les notifications push |
 | `VAPID_PRIVATE_KEY` | Clé privée VAPID | Pour les notifications push |
-| `VAPID_SUBJECT` | `mailto:contact@feves.fr` | Pour les notifications push |
+| `VAPID_SUBJECT` | `mailto:contact@lyannaj971.fr` | Pour les notifications push |
 
 > **Comment générer `SESSION_SECRET`** :
 > ```bash

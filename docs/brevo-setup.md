@@ -30,7 +30,7 @@ Ajouter ces variables dans votre environnement (Replit Secrets ou Render Environ
 | Variable | Obligatoire | Valeur par défaut | Description |
 |---|---|---|---|
 | `BREVO_API_KEY` | **Oui** | — | Clé API v3 récupérée à l'étape 2 |
-| `BREVO_SENDER_EMAIL` | Non | `noreply@feves.fr` | Adresse email d'expédition (doit être sur un domaine vérifié) |
+| `BREVO_SENDER_EMAIL` | Non | `noreply@lyannaj971.fr` | Adresse email d'expédition (doit être sur un domaine vérifié) |
 | `BREVO_SENDER_NAME` | Non | `FEVES` | Nom affiché dans l'email |
 
 ### Sur Render
