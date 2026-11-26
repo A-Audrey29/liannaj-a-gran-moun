@@ -30,7 +30,6 @@ export const PLATFORM_ATTRIBUTION = `${PLATFORM_NAME} est une plateforme de l'as
 
 /**
  * Adresse de contact affichée au public (pied de page, page d'accueil).
- * TODO: valeur provisoire héritée d'un gabarit — remplacer par l'adresse réelle
- * de l'association avant la mise en ligne.
+ * Adresse réelle de l'association (domaine lyannaj971.fr).
  */
-export const CONTACT_EMAIL = "contact@baicoco.fr";
+export const CONTACT_EMAIL = "contact@lyannaj971.fr";

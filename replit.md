@@ -117,7 +117,7 @@ client/
 - DATABASE_URL (Replit Managed)
 - SESSION_SECRET (Replit Secret)
 - BREVO_API_KEY (à configurer)
-- BREVO_SENDER_EMAIL (à configurer, default: noreply@feves.fr)
+- BREVO_SENDER_EMAIL (à configurer, default: noreply@lyannaj971.fr)
 - BREVO_SENDER_NAME (à configurer, default: FEVES)
 
 ## Routes API (Sprint 3)
@@ -208,4 +208,4 @@ client/
 ## Variables d'Environnement Supplémentaires (Sprint 9)
 - VAPID_PUBLIC_KEY (clé publique VAPID pour Web Push, optionnel)
 - VAPID_PRIVATE_KEY (clé privée VAPID pour Web Push, optionnel)
-- VAPID_SUBJECT (identifiant contact push, default: mailto:contact@feves.fr)
+- VAPID_SUBJECT (identifiant contact push, default: mailto:contact@lyannaj971.fr)
